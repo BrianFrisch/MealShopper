@@ -69,23 +69,21 @@ graph TB
     ShopperDomain --> StoreDealFinder
     StoreDealFinder --> DealsStore
     StoreDealFinder --> DealFinderCache
-
+    DealFinderCache --> DealEvalLLM
+    
     %% Planning Flows
-    Orchestrator --> MealPlanning
     Orchestrator --> PlanningDomain
-        
+    PlanningDomain --> DietaryValidation
+    PlanningDomain --> MealPlanning
+    DietaryValidation -- "Retrieve User's Dietary Info" --> UserService
     MealPlanning --> PlannerCache
     MealPlanning --> MealPlanLLM
-    
-    PlanningDomain --> DealEvalLLM
     %%DealEvalLLM -- "Assesses & identifies best deals" --> StoreDealFinder
     
-    DietaryValidation --> PlanningDomain
 
     %% Utility Flows
     Orchestrator --> UserService
     UserService --> UsersDB
-    UserService -- "Retrieve User's Dietary Info" --> DietaryValidation
     
     UserService --> SecurityService
     SecurityService --> PIIEncryption
