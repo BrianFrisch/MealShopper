@@ -11,9 +11,9 @@ graph TB
     User((User)):::external
     
     subgraph Boundary_System [MealShopper System]
-        UI["MealShopper UI<br/>(Web/Mobile)"]:::container
+        UI["MealShopper UI<br>(Web/Mobile)"]:::container
         APIGateway["API Gateway"]:::container
-        Orchestrator["Orchestrator Service<br/>(State Machine/Workflow Manager)"]:::container
+        Orchestrator["Orchestrator Service<br>(State Machine/Workflow Manager)"]:::container
 
         %% Shopping Subgraph
         subgraph Boundary_Shopping [Shopping]
@@ -32,8 +32,8 @@ graph TB
             
             FlyersStore[("Flyers Document Store")]:::database
             DealsStore[("Deals Document Store")]:::database
-            PlannerCache[("Planner Cache<br/>Redis")]:::database
-            DealFinderCache[("Deal Finder Cache<br/>Pinecone")]:::database
+            PlannerCache[("Planner Cache<br>Redis")]:::database
+            DealFinderCache[("Deal Finder Cache<br>Pinecone")]:::database
             
             MealPlanLLM[["Meal Plan Generation LLM"]]:::llm
             DealEvalLLM[["Deal Evaluation LLM"]]:::llm
@@ -49,9 +49,9 @@ graph TB
     end
 
     %% External Services
-    MappingService["Mapping Service<br/>(Google Maps)"]:::external
-    KMS["KMS<br/>(OAuth2)"]:::external
-    IdentityProvider["Identity Provider<br/>(OAuth2)"]:::external
+    MappingService["Mapping Service<br>(Google Maps)"]:::external
+    KMS["KMS<br>(OAuth2)"]:::external
+    IdentityProvider["Identity Provider<br>(OAuth2)"]:::external
 
     %% Relationships and Flows
     User --> UI
@@ -59,21 +59,23 @@ graph TB
     APIGateway --> Orchestrator
 
     %% Shopping Flows
-    Orchestrator --> StoreDiscovery
+    %%Orchestrator --> StoreDiscovery
     Orchestrator --> ShopperDomain
+    ShopperDomain --> StoreDiscovery
     StoreDiscovery --> LocationsDB
     StoreDiscovery -- "If empty areas need searching" --> MappingService
     MappingService -- "Finds stores & stores them" --> LocationsDB
+    ShopperDomain --> StoreAdIngestion
+    StoreAdIngestion -- "Stores flyers locally & parses" --> FlyersStore
+    StoreAdIngestion -- "Writes deals" --> StoreDealFinder
+    ShoperDomain --> StoreDealFinder
+    StoreDealFinder --> DealsStore
+    StoreDealFinder --> DealFinderCache
 
     %% Planning Flows
     Orchestrator --> MealPlanning
     Orchestrator --> PlanningDomain
-    
-    StoreAdIngestion -- "Stores flyers locally & parses" --> FlyersStore
-    StoreAdIngestion -- "Writes deals" --> StoreDealFinder
-    StoreDealFinder --> DealsStore
-    StoreDealFinder --> DealFinderCache
-    
+        
     MealPlanning --> PlannerCache
     MealPlanning --> MealPlanLLM
     
