@@ -62,11 +62,11 @@ graph TB
     ShopperDomain --> StoreDiscovery
     StoreDiscovery --> LocationsDB
     StoreDiscovery -- "If empty areas need searching" --> MappingService
-    MappingService -- "Finds stores & stores them" --> LocationsDB
+    %%MappingService -- "Finds stores & stores them" --> LocationsDB
     ShopperDomain --> StoreAdIngestion
     StoreAdIngestion -- "Stores flyers locally & parses" --> FlyersStore
-    StoreAdIngestion -- "Writes deals" --> StoreDealFinder
-    ShoperDomain --> StoreDealFinder
+    %%StoreAdIngestion -- "Writes deals" --> StoreDealFinder
+    ShopperDomain --> StoreDealFinder
     StoreDealFinder --> DealsStore
     StoreDealFinder --> DealFinderCache
 
