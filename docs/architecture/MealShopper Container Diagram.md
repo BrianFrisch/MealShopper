@@ -25,6 +25,7 @@ graph TB
             FlyersStore[("Flyers Document Store")]:::database
             DealsStore[("Deals Document Store")]:::database
             DealFinderCache[("Deal Finder Cache<br>Pinecone")]:::database
+            DealEvalLLM[["Deal Evaluation LLM"]]:::llm
         end
 
         %% Planning Subgraph
@@ -34,7 +35,6 @@ graph TB
             DietaryValidation["Dietary Validation Service"]:::container
             PlannerCache[("Planner Cache<br>Redis")]:::database
             MealPlanLLM[["Meal Plan Generation LLM"]]:::llm
-            DealEvalLLM[["Deal Evaluation LLM"]]:::llm
         end
 
         %% Utility Subgraph
@@ -69,7 +69,7 @@ graph TB
     ShopperDomain --> StoreDealFinder
     StoreDealFinder --> DealsStore
     StoreDealFinder --> DealFinderCache
-    DealFinderCache --> DealEvalLLM
+    StoreDealFinder --> DealEvalLLM
     
     %% Planning Flows
     Orchestrator --> PlanningDomain
