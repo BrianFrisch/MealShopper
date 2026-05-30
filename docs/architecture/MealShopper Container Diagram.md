@@ -24,6 +24,7 @@ graph TB
             StoreDealFinder["Store Deal Finder Service"]:::container
             FlyersStore[("Flyers Document Store")]:::database
             DealsStore[("Deals Document Store")]:::database
+            DealFinderCache[("Deal Finder Cache<br>Pinecone")]:::database
         end
 
         %% Planning Subgraph
@@ -31,10 +32,7 @@ graph TB
             MealPlanning["Meal Planning Service"]:::container
             PlanningDomain["Planning Domain Service"]:::container
             DietaryValidation["Dietary Validation Service"]:::container
-            
             PlannerCache[("Planner Cache<br>Redis")]:::database
-            DealFinderCache[("Deal Finder Cache<br>Pinecone")]:::database
-            
             MealPlanLLM[["Meal Plan Generation LLM"]]:::llm
             DealEvalLLM[["Deal Evaluation LLM"]]:::llm
         end
@@ -45,13 +43,13 @@ graph TB
             SecurityService["Security Service"]:::container
             PIIEncryption["PII Encryption Service"]:::container
             UsersDB[("Users RDBMS")]:::database
+            KMS["KMS<br>(OAuth2)"]:::external
+            IdentityProvider["Identity Provider<br>(OAuth2)"]:::external
         end
     end
 
     %% External Services
     MappingService["Mapping Service<br>(Google Maps)"]:::external
-    KMS["KMS<br>(OAuth2)"]:::external
-    IdentityProvider["Identity Provider<br>(OAuth2)"]:::external
 
     %% Relationships and Flows
     User --> UI
