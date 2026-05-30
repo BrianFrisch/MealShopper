@@ -88,8 +88,9 @@ graph TB
     %% Utility Flows
     Orchestrator --> UserService
     UserService --> UsersDB
+    UserService --> PIIEncryption
     
-    UserService --> SecurityService
-    SecurityService --> PIIEncryption
+    %% Utility Flows
+    %%SecurityService --> PIIEncryption
     PIIEncryption --> KMS
     SecurityService --> IdentityProvider
