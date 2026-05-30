@@ -20,12 +20,12 @@ graph TB
             StoreDiscovery["Store Discovery Service"]:::container
             ShopperDomain["Shopper Domain Service"]:::container
             LocationsDB[("Locations RDBMS")]:::database
+            StoreAdIngestion["Store Ad Ingestion Service"]:::container
+            StoreDealFinder["Store Deal Finder Service"]:::container
         end
 
         %% Planning Subgraph
         subgraph Boundary_Planning [Planning]
-            StoreAdIngestion["Store Ad Ingestion Service"]:::container
-            StoreDealFinder["Store Deal Finder Service"]:::container
             MealPlanning["Meal Planning Service"]:::container
             PlanningDomain["Planning Domain Service"]:::container
             DietaryValidation["Dietary Validation Service"]:::container
@@ -80,7 +80,7 @@ graph TB
     MealPlanning --> MealPlanLLM
     
     PlanningDomain --> DealEvalLLM
-    DealEvalLLM -- "Assesses & identifies best deals" --> StoreDealFinder
+    %%DealEvalLLM -- "Assesses & identifies best deals" --> StoreDealFinder
     
     DietaryValidation --> PlanningDomain
 
