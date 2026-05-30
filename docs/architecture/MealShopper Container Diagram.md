@@ -37,12 +37,16 @@ graph TB
             MealPlanLLM[["Meal Plan Generation LLM"]]:::llm
         end
 
+        %% User Subgraph
+        subgraph Boundary_User [User]
+            UserService["User Service"]:::container
+            UsersDB[("Users RDBMS")]:::database
+        end
+
         %% Utility Subgraph
         subgraph Boundary_Utility [Utility]
-            UserService["User Service"]:::container
             SecurityService["Security Service"]:::container
             PIIEncryption["PII Encryption Service"]:::container
-            UsersDB[("Users RDBMS")]:::database
             KMS["KMS<br>(OAuth2)"]:::external
             IdentityProvider["Identity Provider<br>(OAuth2)"]:::external
         end
@@ -75,7 +79,7 @@ graph TB
     Orchestrator --> PlanningDomain
     PlanningDomain --> DietaryValidation
     PlanningDomain --> MealPlanning
-    DietaryValidation -- "Retrieve User's Dietary Info" --> UserService
+    %%DietaryValidation -- "Retrieve User's Dietary Info" --> UserService
     MealPlanning --> PlannerCache
     MealPlanning --> MealPlanLLM
     %%DealEvalLLM -- "Assesses & identifies best deals" --> StoreDealFinder
