@@ -22,6 +22,8 @@ graph TB
             LocationsDB[("Locations RDBMS")]:::database
             StoreAdIngestion["Store Ad Ingestion Service"]:::container
             StoreDealFinder["Store Deal Finder Service"]:::container
+            FlyersStore[("Flyers Document Store")]:::database
+            DealsStore[("Deals Document Store")]:::database
         end
 
         %% Planning Subgraph
@@ -30,8 +32,6 @@ graph TB
             PlanningDomain["Planning Domain Service"]:::container
             DietaryValidation["Dietary Validation Service"]:::container
             
-            FlyersStore[("Flyers Document Store")]:::database
-            DealsStore[("Deals Document Store")]:::database
             PlannerCache[("Planner Cache<br>Redis")]:::database
             DealFinderCache[("Deal Finder Cache<br>Pinecone")]:::database
             
