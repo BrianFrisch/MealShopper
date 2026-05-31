@@ -1,3 +1,4 @@
+```mermaid
 sequence diagram
     autonumber
     actor User as MealShopper Client (Mobile/Web)
