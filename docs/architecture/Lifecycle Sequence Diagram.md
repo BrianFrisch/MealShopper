@@ -1,5 +1,5 @@
 ```mermaid
-sequence diagram
+sequenceDiagram
     autonumber
     actor User as MealShopper Client (Mobile/Web)
     participant GW as API Gateway (Nginx/Envoy)
