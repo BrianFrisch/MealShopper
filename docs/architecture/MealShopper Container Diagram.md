@@ -29,6 +29,7 @@ graph TB
             StoreDealFinder@{shape: subproc, label:"Store Deal Finder Service"}
             style StoreDealFinder fill: #438DD5, color: #fff, stroke: #000
             DealsStore@{shape: database, label: "Deals<br>RDBMS"}
+            style DealsStore fill: #fdd208, stroke: #000, color: #000
             %%style DealsStore fill: #fdd208, stroke: #000, color: #000;
             DealFinderCache[("Deal Finder Cache<br>Pinecone")]:::cache
             DealEvalLLM@{shape: lin-rect, label: "Deal Evaluation LLM"}
@@ -73,8 +74,10 @@ graph TB
 
     %% External Services
     MappingService@{ shape: cloud, label: "Google Maps" }
+    style MappingService fill: #fff, stroke: #000, color: #000
     %%style MappingService fill: #fff, stroke: #000, color: #000;
     StoreWebsites@{ shape: cloud, label: "Store Websites" }
+    style StoreWebsites fill: #fff, stroke: #000, color: #000
     %%style StoreWebsites fill: #fff, stroke: #000, color: #000;
 
     %% Relationships and Flows
