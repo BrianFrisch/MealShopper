@@ -74,6 +74,8 @@ graph TB
     %% External Services
     MappingService@{ shape: cloud, label: "Google Maps" }
     style MappingService fill:#fff, stroke:#000, color:#000;
+    StoreWebsites@{ shape: cloud, label: "Store Websites" }
+    style StoreWebsites fill:#fff, stroke:#000, color:#000;
 
     %% Relationships and Flows
     User --> UI
@@ -81,13 +83,12 @@ graph TB
     APIGateway --> Orchestrator
 
     %% Shopping Flows
-    %%Orchestrator --> StoreDiscovery
     Orchestrator --> ShopperDomain
     ShopperDomain --> StoreDiscovery
     StoreDiscovery --> LocationsDB
     StoreDiscovery -- "If empty areas need searching" --> MappingService
-    %%MappingService -- "Finds stores & stores them" --> LocationsDB
     ShopperDomain --> StoreAdIngestion
+    StoreAdIngestion --> StoreWebsites
     StoreAdIngestion -- "Stores flyers locally & parses" --> FlyersStore
     StoreAdIngestion -- "Writes deals" --> DealsStore
     ShopperDomain --> StoreDealFinder
@@ -101,9 +102,7 @@ graph TB
     PlanningDomain --> MealPlanning
     MealPlanning --> PlannerCache
     MealPlanning --> MealPlanLLM
-    %%DealEvalLLM -- "Assesses & identifies best deals" --> StoreDealFinder
     
-
     %% Utility Flows
     Orchestrator --> UserService
     UserService --> UsersDB
