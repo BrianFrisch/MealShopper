@@ -9,7 +9,7 @@ graph TB
     
     %% Elements
     User@{shape: circle, label:"User"};
-    style User fill:#fff
+    style User fill: #fff, color: #000, stroke: #000
     
     subgraph Boundary_System [MealShopper System]
         UI["MealShopper UI<br>(Web/Mobile)"]:::container
@@ -20,41 +20,41 @@ graph TB
         subgraph Boundary_Shopping [Shopping]
             ShopperDomain["Shopper Domain Service"]:::container
             StoreDiscovery@{shape: subproc, label:"Store Discovery Service"}
-            style StoreDiscovery fill:#438DD5, color:#fff, stroke:#000
+            style StoreDiscovery fill: #438DD5, color: #fff, stroke: #000
             LocationsDB[("Locations<br>RDBMS")]:::database
             StoreAdIngestion@{shape: subproc, label:"Store Ad Ingestion Service"}
-            style StoreAdIngestion fill:#438DD5, color:#fff, stroke:#000
+            style StoreAdIngestion fill: #438DD5, color: #fff, stroke: #000
             FlyersStore@{shape: docs, label:"Flyers<br>Document Store"}
-            style FlyersStore fill:#FFBF00, color:#000, stroke:#000
+            style FlyersStore fill: #FFBF00, color: #000, stroke: #000
             StoreDealFinder@{shape: subproc, label:"Store Deal Finder Service"}
-            style StoreDealFinder fill:#438DD5, color:#fff, stroke:#000
+            style StoreDealFinder fill: #438DD5, color: #fff, stroke: #000
             DealsStore@{shape: database, label: "Deals<br>RDBMS"}
-            style DealsStore fill:#fdd208,stroke:#000000,color:#000;
+            style DealsStore fill: #fdd208,stroke: #000000,color: #000;
             DealFinderCache[("Deal Finder Cache<br>Pinecone")]:::cache
             DealEvalLLM@{shape: lin-rect, label: "Deal Evaluation LLM"}
-            style DealEvalLLM fill:#E6E6FA, stroke:#000, color:#000
+            style DealEvalLLM fill: #E6E6FA, stroke: #000, color: #000
         end
-        style Boundary_Shopping fill:#fff, stroke:#000
+        style Boundary_Shopping fill: #fff, stroke: #000
 
         %% Planning Subgraph
         subgraph Boundary_Planning [Planning]
             PlanningDomain["Planning Domain Service"]:::container
             MealPlanning@{shape: subproc, label: "Meal Planning Service"}
-            style MealPlanning fill:#438DD5, color:#fff, stroke:#000
-            DietaryValidation@{shape: subproc, label:"Dietary Validation Service"}
-            style DietaryValidation fill:#438DD5, color:#fff, stroke:#000
+            style MealPlanning fill: #438DD5, color: #fff, stroke: #000
+            DietaryValidation@{shape: subproc, label: "Dietary Validation Service"}
+            style DietaryValidation fill: #438DD5, color: #fff, stroke: #000
             PlannerCache[("Planner Cache<br>Redis")]:::cache
-            MealPlanLLM@{shape: lin-rect, label:"Meal Plan Generation LLM"};
-            style MealPlanLLM fill:#E6E6FA, stroke:#000, color:#000
+            MealPlanLLM@{shape: lin-rect, label: "Meal Plan Generation LLM"};
+            style MealPlanLLM fill: #E6E6FA, stroke: #000, color: #000
         end
-        style Boundary_Planning fill:#fff, stroke:#000
+        style Boundary_Planning fill: #fff, stroke: #000
 
         %% User Subgraph
         subgraph Boundary_User [User]
             UserService["User Service"]:::container
             UsersDB[("Users Data<br>(RDBMS")]:::database
         end
-        style Boundary_User fill:#fff, stroke:#000
+        style Boundary_User fill: #fff, stroke: #000
 
 
         %% Utility Subgraph
@@ -62,20 +62,20 @@ graph TB
             SecurityService["Security Service"]:::container
             PIIEncryption["PII Encryption Service"]:::container
             KMS@{shape: lin-rect, label: "KMS"};
-            style KMS fill:#999, color:#fff, stroke:#000
+            style KMS fill: #999, color: #fff, stroke: #000
             IdentityProvider@{shape: lin-rect, label: "Identity Provider<br>(OAuth2)"}
-            style IdentityProvider fill:#999, color:#fff, stroke:#000
+            style IdentityProvider fill: #999, color: #fff, stroke: #000
         end
-        style Boundary_Utility fill:#fff, stroke:#000
+        style Boundary_Utility fill: #fff, stroke: #000
 
     end
-    style Boundary_System fill:#fff
+    style Boundary_System fill: #fff
 
     %% External Services
     MappingService@{ shape: cloud, label: "Google Maps" }
-    style MappingService fill:#fff, stroke:#000, color:#000;
+    style MappingService fill: #fff, stroke: #000, color: #000;
     StoreWebsites@{ shape: cloud, label: "Store Websites" }
-    style StoreWebsites fill:#fff, stroke:#000, color:#000;
+    style StoreWebsites fill: #fff, stroke: #000, color: #000;
 
     %% Relationships and Flows
     User --> UI
