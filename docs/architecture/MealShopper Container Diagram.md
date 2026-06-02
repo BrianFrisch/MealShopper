@@ -73,9 +73,9 @@ graph TB
 
     %% External Services
     MappingService@{ shape: cloud, label: "Google Maps" }
-    style MappingService fill: #fff, stroke: #000, color: #000;
+    %%style MappingService fill: #fff, stroke: #000, color: #000;
     StoreWebsites@{ shape: cloud, label: "Store Websites" }
-    style StoreWebsites fill: #fff, stroke: #000, color: #000;
+    %%style StoreWebsites fill: #fff, stroke: #000, color: #000;
 
     %% Relationships and Flows
     User --> UI
