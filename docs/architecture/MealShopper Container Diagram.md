@@ -4,11 +4,12 @@ graph TB
     classDef boundary fill:none,stroke:#777,stroke-width:2px,stroke-dasharray: 5 5;
     classDef external fill:#999,stroke:#666,color:#fff,font-weight:bold;
     classDef container fill:#438dd5,stroke:#3b7aa3,color:#fff;
-    classDef database fill:#1168bd,stroke:#0b4e8f,color:#fff;
-    classDef llm fill:#7b42bc,stroke:#5c2d91,color:#fff;
-
+    classDef database fill:#fdd208,stroke:#000000,color:#000;
+    classDef cache fill:#d93327,stroke:#000,color:#fff;
+    
     %% Elements
-    User((User)):::external
+    User@{shape: circle, label:"User"};
+    style User fill:#fff
     
     subgraph Boundary_System [MealShopper System]
         UI["MealShopper UI<br>(Web/Mobile)"]:::container
@@ -17,43 +18,62 @@ graph TB
 
         %% Shopping Subgraph
         subgraph Boundary_Shopping [Shopping]
-            StoreDiscovery["Store Discovery Service"]:::container
             ShopperDomain["Shopper Domain Service"]:::container
-            LocationsDB[("Locations RDBMS")]:::database
-            StoreAdIngestion["Store Ad Ingestion Service"]:::container
-            StoreDealFinder["Store Deal Finder Service"]:::container
-            FlyersStore[("Flyers Document Store")]:::database
-            DealsStore[("Deals Document Store")]:::database
-            DealFinderCache[("Deal Finder Cache<br>Pinecone")]:::database
-            DealEvalLLM[["Deal Evaluation LLM"]]:::llm
+            StoreDiscovery@{shape: subproc, label:"Store Discovery Service"}
+            style StoreDiscovery fill:#438DD5, color:#fff, stroke:#000
+            LocationsDB[("Locations<br>RDBMS")]:::database
+            StoreAdIngestion@{shape: subproc, label:"Store Ad Ingestion Service"}
+            style StoreAdIngestion fill:#438DD5, color:#fff, stroke:#000
+            FlyersStore@{shape: docs, label:"Flyers<br>Document Store"}
+            style FlyersStore fill:#FFBF00, color:#000, stroke:#000
+            StoreDealFinder@{shape: subproc, label:"Store Deal Finder Service"}
+            style StoreDealFinder fill:#438DD5, color:#fff, stroke:#000
+            DealsStore@{shape: docs, label"Deals<br>Document Store"}
+            style DealsStore fill:#FFBF00, color:#000, stroke:#000
+            DealFinderCache[("Deal Finder Cache<br>Pinecone")]:::cache
+            DealEvalLLM@{shape: lin-rect, label: "Deal Evaluation LLM"}
+            style DealEvalLLM fill:#E6E6FA, stroke:#000, color:#000
         end
+        style Boundary_Shopping fill:#fff, stroke:#000
 
         %% Planning Subgraph
         subgraph Boundary_Planning [Planning]
-            MealPlanning["Meal Planning Service"]:::container
             PlanningDomain["Planning Domain Service"]:::container
-            DietaryValidation["Dietary Validation Service"]:::container
-            PlannerCache[("Planner Cache<br>Redis")]:::database
-            MealPlanLLM[["Meal Plan Generation LLM"]]:::llm
+            MealPlanning@{shape: subproc, label: "Meal Planning Service"}
+            style MealPlanning fill:#438DD5, color:#fff, stroke:#000
+            DietaryValidation@{shape:subproc, label:"Dietary Validation Service"}
+            style DietaryValidation fill:#438DD5, color:#fff, stroke:#000
+            PlannerCache[("Planner Cache<br>Redis")]:::cache
+            MealPlanLLM@{shape: lin-rect, label:"Meal Plan Generation LLM"};
+            style MealPlanLLM fill:#E6E6FA, stroke:#000, color:#000
         end
+        style Boundary_Planning fill:#fff, stroke:#000
 
         %% User Subgraph
         subgraph Boundary_User [User]
             UserService["User Service"]:::container
-            UsersDB[("Users RDBMS")]:::database
+            UsersDB[("Users Data<br>(RDBMS")]:::database
         end
+        style Boundary_User fill:#fff, stroke:#000
+
 
         %% Utility Subgraph
         subgraph Boundary_Utility [Utility]
             SecurityService["Security Service"]:::container
             PIIEncryption["PII Encryption Service"]:::container
-            KMS["KMS<br>(OAuth2)"]:::external
-            IdentityProvider["Identity Provider<br>(OAuth2)"]:::external
+            KMS@{shape:lin-rect, label: "KMS"};
+            style KMS fill:#999, color:#fff, stroke:#000
+            IdentityProvider@{shape:lin-rect, label: "Identity Provider<br>(OAuth2)"}
+            style IdentityProvider fill:#999, color:#fff, stroke:#000
         end
+        style Boundary_Utility fill:#fff, stroke:#000
+
     end
+    style Boundary_System fill:#fff
 
     %% External Services
-    MappingService["Mapping Service<br>(Google Maps)"]:::external
+    MappingService@{ shape: cloud, label: "Google Maps" }
+    style MappingService fill:#fff, stroke:#000, color:#000;
 
     %% Relationships and Flows
     User --> UI
@@ -69,9 +89,9 @@ graph TB
     %%MappingService -- "Finds stores & stores them" --> LocationsDB
     ShopperDomain --> StoreAdIngestion
     StoreAdIngestion -- "Stores flyers locally & parses" --> FlyersStore
-    %%StoreAdIngestion -- "Writes deals" --> StoreDealFinder
+    StoreDealFinder -- "Writes deals" --> DealsStore
     ShopperDomain --> StoreDealFinder
-    StoreDealFinder --> DealsStore
+    StoreDealFinder -- "Read-only interface" --> DealsStore
     StoreDealFinder --> DealFinderCache
     StoreDealFinder --> DealEvalLLM
     
@@ -79,7 +99,6 @@ graph TB
     Orchestrator --> PlanningDomain
     PlanningDomain --> DietaryValidation
     PlanningDomain --> MealPlanning
-    %%DietaryValidation -- "Retrieve User's Dietary Info" --> UserService
     MealPlanning --> PlannerCache
     MealPlanning --> MealPlanLLM
     %%DealEvalLLM -- "Assesses & identifies best deals" --> StoreDealFinder
@@ -91,6 +110,5 @@ graph TB
     UserService --> PIIEncryption
     
     %% Utility Flows
-    %%SecurityService --> PIIEncryption
     PIIEncryption --> KMS
     SecurityService --> IdentityProvider
