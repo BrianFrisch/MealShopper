@@ -22,14 +22,14 @@ graph TB
             StoreDiscovery@{shape: subproc, label:"Store Discovery Service"}
             style StoreDiscovery fill: #438DD5, color: #fff, stroke: #000
             LocationsDB[("Locations<br>RDBMS")]:::database
-            StoreAdIngestion@{shape: subproc, label:"Store Ad Ingestion Service"}
+            StoreAdIngestion@{shape: subproc, label: "Store Ad Ingestion Service"}
             style StoreAdIngestion fill: #438DD5, color: #fff, stroke: #000
             FlyersStore@{shape: docs, label:"Flyers<br>Document Store"}
             style FlyersStore fill: #FFBF00, color: #000, stroke: #000
             StoreDealFinder@{shape: subproc, label:"Store Deal Finder Service"}
             style StoreDealFinder fill: #438DD5, color: #fff, stroke: #000
             DealsStore@{shape: database, label: "Deals<br>RDBMS"}
-            style DealsStore fill: #fdd208, stroke: #000000, color: #000;
+            style DealsStore fill: #fdd208, stroke: #000, color: #000;
             DealFinderCache[("Deal Finder Cache<br>Pinecone")]:::cache
             DealEvalLLM@{shape: lin-rect, label: "Deal Evaluation LLM"}
             style DealEvalLLM fill: #E6E6FA, stroke: #000, color: #000
