@@ -41,7 +41,7 @@ graph TB
             PlanningDomain["Planning Domain Service"]:::container
             MealPlanning@{shape: subproc, label: "Meal Planning Service"}
             style MealPlanning fill:#438DD5, color:#fff, stroke:#000
-            DietaryValidation@{shape:subproc, label:"Dietary Validation Service"}
+            DietaryValidation@{shape: subproc, label:"Dietary Validation Service"}
             style DietaryValidation fill:#438DD5, color:#fff, stroke:#000
             PlannerCache[("Planner Cache<br>Redis")]:::cache
             MealPlanLLM@{shape: lin-rect, label:"Meal Plan Generation LLM"};
@@ -61,9 +61,9 @@ graph TB
         subgraph Boundary_Utility [Utility]
             SecurityService["Security Service"]:::container
             PIIEncryption["PII Encryption Service"]:::container
-            KMS@{shape:lin-rect, label: "KMS"};
+            KMS@{shape: lin-rect, label: "KMS"};
             style KMS fill:#999, color:#fff, stroke:#000
-            IdentityProvider@{shape:lin-rect, label: "Identity Provider<br>(OAuth2)"}
+            IdentityProvider@{shape: lin-rect, label: "Identity Provider<br>(OAuth2)"}
             style IdentityProvider fill:#999, color:#fff, stroke:#000
         end
         style Boundary_Utility fill:#fff, stroke:#000
@@ -89,7 +89,7 @@ graph TB
     %%MappingService -- "Finds stores & stores them" --> LocationsDB
     ShopperDomain --> StoreAdIngestion
     StoreAdIngestion -- "Stores flyers locally & parses" --> FlyersStore
-    StoreDealFinder -- "Writes deals" --> DealsStore
+    StoreAdIngestion -- "Writes deals" --> DealsStore
     ShopperDomain --> StoreDealFinder
     StoreDealFinder -- "Read-only interface" --> DealsStore
     StoreDealFinder --> DealFinderCache
