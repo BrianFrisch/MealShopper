@@ -1,0 +1,6 @@
+@MealShopper.Orchestrator_HostAddress = http://localhost:5277
+
+GET {{MealShopper.Orchestrator_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,8 +1,13 @@
 ```mermaid
 graph TB
     %% Styling and Definitions
-    classDef boundary fill:none,stroke:#777,stroke-width:2px,stroke-dasharray: 5 5;
-    classDef external fill:#999,stroke:#666,color:#fff,font-weight:bold;
-    classDef container fill:#438dd5,stroke:#3b7aa3,color:#fff;
-    classDef database fill:#1168bd,stroke:#0b4e8f,color:#fff;
-    classDef llm fill:#7b42bc,stroke:#5c2d91,color:#fff;
+    classDef filestore fill:#999,stroke:#000,color:#fff;
+    PlannerFileStoreClass(["Planner Data<br>Data"]):::filestore;
+    PlannerFileStore@{ shape: lin-cyl, label: "Datastore" };
+    style PlannerFileStore fill:#fff,stroke:#000,color:#000;
+
+    PlannerRdbms[("Planner Cache<br>RDBMS")]:::database
+    PlannerCache[("Planner Cache<br>Redis")]:::cache
+    PlannerCache --> PlannerFileStore
+    classDef database fill:#fdd208,stroke:#000000,color:#000;
+    classDef cache fill:#d93327,stroke:#000,color:#fff;

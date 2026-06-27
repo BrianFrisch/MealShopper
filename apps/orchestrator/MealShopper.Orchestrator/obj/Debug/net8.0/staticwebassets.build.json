@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "OBAgpnOFyG+yMMjdJkyXq41oGbnUgn0zTBpg9P41GSQ=",
+  "Source": "MealShopper.Orchestrator",
+  "BasePath": "_content/MealShopper.Orchestrator",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}
