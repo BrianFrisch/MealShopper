@@ -28,4 +28,14 @@ public class AddressDto
     [Required(ErrorMessage = "ZipCode is required.")]
     [RegularExpression(@"^\d{5}(-\d{4})?$", ErrorMessage = "ZipCode must be a valid 5-digit or 9-digit (ZIP+4) US zip code.")]
     public string ZipCode { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Latitude in decimal degrees (optional).
+    /// </summary>
+    public double? Latitude { get; set; }
+
+    /// <summary>
+    /// Longitude in decimal degrees (optional).
+    /// </summary>
+    public double? Longitude { get; set; }
 }

@@ -1,9 +1,26 @@
+using MealShopper.Orchestrator.Clients;
+using MealShopper.Orchestrator.Services;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// Register typed HTTP clients
+builder.Services.AddHttpClient<IShopperClient, ShopperClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:ShopperDomainUrl"] ?? "http://localhost:8001/");
+});
+
+// Register job state tracking services
+builder.Services.AddSingleton<InMemoryJobTracker>();
+builder.Services.AddSingleton<IJobStateStore>(sp => sp.GetRequiredService<InMemoryJobTracker>());
+builder.Services.AddSingleton<IJobTracker>(sp => sp.GetRequiredService<InMemoryJobTracker>());
+
+// Register workflow orchestrator
+builder.Services.AddTransient<IMealPlanOrchestrator, MealPlanOrchestrator>();
 
 var app = builder.Build();
 
@@ -16,29 +33,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+app.UseAuthorization();
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast")
-.WithOpenApi();
+app.MapControllers();
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
