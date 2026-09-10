@@ -2,7 +2,7 @@
   "version": 3,
   "targets": {
     "net8.0": {
-      "Microsoft.AspNetCore.OpenApi/8.0.28": {
+      "Microsoft.AspNetCore.OpenApi/8.0.30": {
         "type": "package",
         "dependencies": {
           "Microsoft.OpenApi": "1.4.3"
@@ -111,10 +111,10 @@
     }
   },
   "libraries": {
-    "Microsoft.AspNetCore.OpenApi/8.0.28": {
-      "sha512": "+cEj0SuUWCJygZa21fNDJOEVu8aOBnxqJkzg0dLJBzWzkT/NA6OEPpzTmok2KfaOwS+ZO3xI2fTftmxCAtlplA==",
+    "Microsoft.AspNetCore.OpenApi/8.0.30": {
+      "sha512": "SkplhD18TzruiyyQ6JdI2+letDOhQ/1Zo4dGlsx2qp7o7lO44jPg2Yw/U4U3vZZFe3ae3JJav3Fm8lc1EFXqIg==",
       "type": "package",
-      "path": "microsoft.aspnetcore.openapi/8.0.28",
+      "path": "microsoft.aspnetcore.openapi/8.0.30",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
@@ -122,7 +122,7 @@
         "THIRD-PARTY-NOTICES.TXT",
         "lib/net8.0/Microsoft.AspNetCore.OpenApi.dll",
         "lib/net8.0/Microsoft.AspNetCore.OpenApi.xml",
-        "microsoft.aspnetcore.openapi.8.0.28.nupkg.sha512",
+        "microsoft.aspnetcore.openapi.8.0.30.nupkg.sha512",
         "microsoft.aspnetcore.openapi.nuspec"
       ]
     },
@@ -482,19 +482,19 @@
     ]
   },
   "packageFolders": {
-    "/home/brianjfrisch/.nuget/packages/": {}
+    "C:\\Users\\admin\\.nuget\\packages\\": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/home/brianjfrisch/Projects/MealShopper/apps/orchestrator/MealShopper.Orchestrator/MealShopper.Orchestrator.csproj",
+      "projectUniqueName": "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj",
       "projectName": "MealShopper.Orchestrator",
-      "projectPath": "/home/brianjfrisch/Projects/MealShopper/apps/orchestrator/MealShopper.Orchestrator/MealShopper.Orchestrator.csproj",
-      "packagesPath": "/home/brianjfrisch/.nuget/packages/",
-      "outputPath": "/home/brianjfrisch/Projects/MealShopper/apps/orchestrator/MealShopper.Orchestrator/obj/",
+      "projectPath": "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj",
+      "packagesPath": "C:\\Users\\admin\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "/home/brianjfrisch/.nuget/NuGet/NuGet.Config"
+        "C:\\Users\\admin\\AppData\\Roaming\\NuGet\\NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net8.0"
@@ -551,7 +551,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "/home/brianjfrisch/.dotnet/sdk/8.0.422/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.415/PortableRuntimeIdentifierGraph.json"
       }
     }
   }

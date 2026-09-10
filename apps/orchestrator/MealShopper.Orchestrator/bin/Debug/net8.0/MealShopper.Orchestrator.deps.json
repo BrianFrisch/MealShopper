@@ -8,21 +8,21 @@
     ".NETCoreApp,Version=v8.0": {
       "MealShopper.Orchestrator/1.0.0": {
         "dependencies": {
-          "Microsoft.AspNetCore.OpenApi": "8.0.28",
+          "Microsoft.AspNetCore.OpenApi": "8.0.30",
           "Swashbuckle.AspNetCore": "6.6.2"
         },
         "runtime": {
           "MealShopper.Orchestrator.dll": {}
         }
       },
-      "Microsoft.AspNetCore.OpenApi/8.0.28": {
+      "Microsoft.AspNetCore.OpenApi/8.0.30": {
         "dependencies": {
           "Microsoft.OpenApi": "1.6.14"
         },
         "runtime": {
           "lib/net8.0/Microsoft.AspNetCore.OpenApi.dll": {
-            "assemblyVersion": "8.0.28.0",
-            "fileVersion": "8.0.2826.26913"
+            "assemblyVersion": "8.0.30.0",
+            "fileVersion": "8.0.3026.37304"
           }
         }
       },
@@ -81,12 +81,12 @@
       "serviceable": false,
       "sha512": ""
     },
-    "Microsoft.AspNetCore.OpenApi/8.0.28": {
+    "Microsoft.AspNetCore.OpenApi/8.0.30": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-+cEj0SuUWCJygZa21fNDJOEVu8aOBnxqJkzg0dLJBzWzkT/NA6OEPpzTmok2KfaOwS+ZO3xI2fTftmxCAtlplA==",
-      "path": "microsoft.aspnetcore.openapi/8.0.28",
-      "hashPath": "microsoft.aspnetcore.openapi.8.0.28.nupkg.sha512"
+      "sha512": "sha512-SkplhD18TzruiyyQ6JdI2+letDOhQ/1Zo4dGlsx2qp7o7lO44jPg2Yw/U4U3vZZFe3ae3JJav3Fm8lc1EFXqIg==",
+      "path": "microsoft.aspnetcore.openapi/8.0.30",
+      "hashPath": "microsoft.aspnetcore.openapi.8.0.30.nupkg.sha512"
     },
     "Microsoft.Extensions.ApiDescription.Server/6.0.5": {
       "type": "package",

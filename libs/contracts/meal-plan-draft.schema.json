@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mealshopper.com/schemas/meal-plan-draft.schema.json",
+  "title": "MealPlanDraftPayload",
+  "description": "Schema definition for a generated meal plan draft optimized around regional deals",
+  "type": "object",
+  "required": [
+    "meal_plan_id",
+    "days",
+    "missing_primary_ingredients"
+  ],
+  "properties": {
+    "meal_plan_id": {
+      "type": "string",
+      "description": "Unique identifier for the generated meal plan draft"
+    },
+    "days": {
+      "type": "array",
+      "description": "Daily breakdown of meals planned for the schedule",
+      "items": {
+        "type": "object",
+        "required": [
+          "day_number",
+          "meals"
+        ],
+        "properties": {
+          "day_number": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Sequential day number in the meal plan schedule"
+          },
+          "meals": {
+            "type": "array",
+            "description": "Meals scheduled for the day",
+            "items": {
+              "type": "object",
+              "required": [
+                "meal_type",
+                "recipe_title",
+                "description",
+                "ingredients",
+                "instructions"
+              ],
+              "properties": {
+                "meal_type": {
+                  "type": "string",
+                  "enum": [
+                    "Breakfast",
+                    "Lunch",
+                    "Dinner",
+                    "Snack",
+                    "Dessert"
+                  ],
+                  "description": "Type of meal category"
+                },
+                "recipe_title": {
+                  "type": "string",
+                  "description": "Title or display name of the meal / recipe"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Short summary of the dish"
+                },
+                "ingredients": {
+                  "type": "array",
+                  "description": "Complete list of ingredients required for this meal",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "name",
+                      "quantity",
+                      "unit"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "Ingredient name"
+                      },
+                      "quantity": {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Numeric quantity needed"
+                      },
+                      "unit": {
+                        "type": "string",
+                        "description": "Measurement unit (e.g. lbs, oz, cup, tbsp, count)"
+                      },
+                      "deal_id": {
+                        "type": "string",
+                        "description": "Associated deal ID if this ingredient is backed by a promotion"
+                      },
+                      "store_name": {
+                        "type": "string",
+                        "description": "Name of the store providing the deal price"
+                      },
+                      "deal_price": {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Promotional price for the ingredient if sourced from a deal"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "instructions": {
+                  "type": "array",
+                  "description": "Ordered list of step-by-step cooking preparation instructions",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "missing_primary_ingredients": {
+      "type": "array",
+      "description": "Primary ingredients required by recipes that were not covered by available promotional deals",
+      "items": {
+        "type": "object",
+        "required": [
+          "ingredient_name",
+          "quantity",
+          "unit"
+        ],
+        "properties": {
+          "ingredient_name": {
+            "type": "string",
+            "description": "Name of the missing primary ingredient"
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Estimated quantity needed"
+          },
+          "unit": {
+            "type": "string",
+            "description": "Measurement unit (e.g. lb, oz, count)"
+          },
+          "associated_recipe_titles": {
+            "type": "array",
+            "description": "Titles of recipes in this plan requiring this ingredient",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

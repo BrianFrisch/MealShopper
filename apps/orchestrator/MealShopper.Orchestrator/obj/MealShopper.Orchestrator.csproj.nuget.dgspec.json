@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "/home/brianjfrisch/Projects/MealShopper/apps/orchestrator/MealShopper.Orchestrator/MealShopper.Orchestrator.csproj": {}
+    "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj": {}
   },
   "projects": {
-    "/home/brianjfrisch/Projects/MealShopper/apps/orchestrator/MealShopper.Orchestrator/MealShopper.Orchestrator.csproj": {
+    "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/home/brianjfrisch/Projects/MealShopper/apps/orchestrator/MealShopper.Orchestrator/MealShopper.Orchestrator.csproj",
+        "projectUniqueName": "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj",
         "projectName": "MealShopper.Orchestrator",
-        "projectPath": "/home/brianjfrisch/Projects/MealShopper/apps/orchestrator/MealShopper.Orchestrator/MealShopper.Orchestrator.csproj",
-        "packagesPath": "/home/brianjfrisch/.nuget/packages/",
-        "outputPath": "/home/brianjfrisch/Projects/MealShopper/apps/orchestrator/MealShopper.Orchestrator/obj/",
+        "projectPath": "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj",
+        "packagesPath": "C:\\Users\\admin\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "/home/brianjfrisch/.nuget/NuGet/NuGet.Config"
+          "C:\\Users\\admin\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
@@ -71,7 +71,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/home/brianjfrisch/.dotnet/sdk/8.0.422/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.415/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

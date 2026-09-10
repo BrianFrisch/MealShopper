@@ -1,0 +1,44 @@
+{
+  "timestamp": "2026-09-08T10:00:00Z",
+  "region_context": {
+    "coordinates": {
+      "latitude": 33.8958,
+      "longitude": -118.3531
+    },
+    "store_ids": [
+      "store-ralphs-101",
+      "store-traderjoes-204"
+    ]
+  },
+  "deals": [
+    {
+      "deal_id": "deal-invalid-score-001",
+      "store_id": "store-ralphs-101",
+      "store_name": "Ralphs",
+      "item_name": "Boneless Ribeye Steak",
+      "normalized_category": "Meat",
+      "deal_price": 8.99,
+      "unit": "lb",
+      "value_score": 15
+    },
+    {
+      "deal_id": "deal-invalid-category-002",
+      "store_id": "store-ralphs-101",
+      "store_name": "Ralphs",
+      "item_name": "Sparkling Water 12-Pack",
+      "normalized_category": "Beverages",
+      "deal_price": 4.50,
+      "unit": "count",
+      "value_score": 7.0
+    },
+    {
+      "deal_id": "deal-missing-storename-003",
+      "store_id": "store-traderjoes-204",
+      "item_name": "Organic Avocados",
+      "normalized_category": "Produce",
+      "deal_price": 2.99,
+      "unit": "each",
+      "value_score": 8.0
+    }
+  ]
+}

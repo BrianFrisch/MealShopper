@@ -1,0 +1,104 @@
+{
+  "meal_plan_id": "plan-draft-20260908-001",
+  "days": [
+    {
+      "day_number": 1,
+      "meals": [
+        {
+          "meal_type": "Dinner",
+          "recipe_title": "Lemon Pepper Chicken",
+          "description": "Crispy pan-seared lemon pepper chicken breasts served with roasted asparagus and garlic butter.",
+          "instructions": [
+            "Pat chicken breasts dry and season generously with lemon pepper seasoning and salt.",
+            "Heat olive oil in a skillet over medium-high heat and sear chicken for 6-7 minutes per side until cooked through.",
+            "Deglaze pan with fresh lemon juice and toss with steamed vegetables before serving."
+          ],
+          "ingredients": [
+            {
+              "name": "Boneless Skinless Chicken Breast",
+              "quantity": 1.5,
+              "unit": "lbs",
+              "deal_id": "deal-chicken-breast-001",
+              "store_name": "Ralphs",
+              "deal_price": 2.99
+            },
+            {
+              "name": "Fresh Lemons",
+              "quantity": 2,
+              "unit": "count",
+              "deal_id": "deal-lemon-004",
+              "store_name": "Ralphs",
+              "deal_price": 0.50
+            },
+            {
+              "name": "Lemon Pepper Seasoning",
+              "quantity": 1,
+              "unit": "tbsp"
+            },
+            {
+              "name": "Olive Oil",
+              "quantity": 2,
+              "unit": "tbsp"
+            }
+          ]
+        },
+        {
+          "meal_type": "Lunch",
+          "recipe_title": "Street Tacos",
+          "description": "Savory seasoned meat street tacos on warm corn tortillas topped with diced onions and fresh cilantro.",
+          "instructions": [
+            "Season and sauté filling in a hot skillet until lightly browned and fragrant.",
+            "Warm corn tortillas on a dry griddle or skillet for 30 seconds on each side.",
+            "Assemble tacos by layering meat, diced onions, chopped cilantro, and a squeeze of lime juice."
+          ],
+          "ingredients": [
+            {
+              "name": "Corn Tortillas (12 count)",
+              "quantity": 1,
+              "unit": "count",
+              "deal_id": "deal-tortillas-003",
+              "store_name": "Trader Joe's",
+              "deal_price": 1.49
+            },
+            {
+              "name": "Organic Red Bell Peppers",
+              "quantity": 2,
+              "unit": "count",
+              "deal_id": "deal-bell-peppers-002",
+              "store_name": "Sprouts Farmers Market",
+              "deal_price": 0.99
+            },
+            {
+              "name": "Ground Beef (85/15)",
+              "quantity": 1.0,
+              "unit": "lbs"
+            },
+            {
+              "name": "Taco Seasoning",
+              "quantity": 1,
+              "unit": "packet"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "missing_primary_ingredients": [
+    {
+      "ingredient_name": "Ground Beef (85/15)",
+      "quantity": 1.0,
+      "unit": "lbs",
+      "associated_recipe_titles": [
+        "Street Tacos"
+      ]
+    },
+    {
+      "ingredient_name": "Olive Oil",
+      "quantity": 2,
+      "unit": "tbsp",
+      "associated_recipe_titles": [
+        "Lemon Pepper Chicken"
+      ]
+    }
+  ]
+}

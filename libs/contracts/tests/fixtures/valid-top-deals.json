@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-09-08T10:00:00Z",
+  "region_context": {
+    "coordinates": {
+      "latitude": 33.8958,
+      "longitude": -118.3531
+    },
+    "store_ids": [
+      "store-ralphs-101",
+      "store-traderjoes-204",
+      "store-sprouts-305"
+    ]
+  },
+  "deals": [
+    {
+      "deal_id": "deal-chicken-breast-001",
+      "store_id": "store-ralphs-101",
+      "store_name": "Ralphs",
+      "item_name": "Boneless Skinless Chicken Breast",
+      "normalized_category": "Meat",
+      "deal_price": 2.99,
+      "original_price": 4.99,
+      "currency": "USD",
+      "unit": "lb",
+      "value_score": 9.2
+    },
+    {
+      "deal_id": "deal-bell-peppers-002",
+      "store_id": "store-sprouts-305",
+      "store_name": "Sprouts Farmers Market",
+      "item_name": "Organic Red Bell Peppers",
+      "normalized_category": "Produce",
+      "deal_price": 0.99,
+      "original_price": 1.99,
+      "currency": "USD",
+      "unit": "each",
+      "value_score": 8.5
+    },
+    {
+      "deal_id": "deal-tortillas-003",
+      "store_id": "store-traderjoes-204",
+      "store_name": "Trader Joe's",
+      "item_name": "Corn Tortillas (12 count)",
+      "normalized_category": "Bakery",
+      "deal_price": 1.49,
+      "original_price": 2.29,
+      "currency": "USD",
+      "unit": "count",
+      "value_score": 7.8
+    }
+  ]
+}
