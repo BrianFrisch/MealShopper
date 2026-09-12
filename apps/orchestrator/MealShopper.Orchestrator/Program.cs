@@ -14,6 +14,11 @@ builder.Services.AddHttpClient<IShopperClient, ShopperClient>(client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:ShopperDomainUrl"] ?? "http://localhost:8001/");
 });
 
+builder.Services.AddHttpClient<IPlanningClient, PlanningClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:PlanningDomainUrl"] ?? "http://localhost:8002/");
+});
+
 // Register job state tracking services
 builder.Services.AddSingleton<InMemoryJobTracker>();
 builder.Services.AddSingleton<IJobStateStore>(sp => sp.GetRequiredService<InMemoryJobTracker>());

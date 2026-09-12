@@ -6,7 +6,7 @@
   "type": "object",
   "required": [
     "meal_plan_id",
-    "days",
+    "meals",
     "missing_primary_ingredients"
   ],
   "properties": {
@@ -14,103 +14,84 @@
       "type": "string",
       "description": "Unique identifier for the generated meal plan draft"
     },
-    "days": {
+    "meals": {
       "type": "array",
-      "description": "Daily breakdown of meals planned for the schedule",
+      "description": "Meals scheduled in the meal plan",
       "items": {
         "type": "object",
         "required": [
-          "day_number",
-          "meals"
+          "meal_type",
+          "recipe_title",
+          "description",
+          "ingredients",
+          "instructions"
         ],
         "properties": {
-          "day_number": {
-            "type": "integer",
-            "minimum": 1,
-            "description": "Sequential day number in the meal plan schedule"
+          "meal_type": {
+            "type": "string",
+            "enum": [
+              "Breakfast",
+              "Lunch",
+              "Dinner",
+              "Snack",
+              "Dessert"
+            ],
+            "description": "Type of meal category"
           },
-          "meals": {
+          "recipe_title": {
+            "type": "string",
+            "description": "Title or display name of the meal / recipe"
+          },
+          "description": {
+            "type": "string",
+            "description": "Short summary of the dish"
+          },
+          "ingredients": {
             "type": "array",
-            "description": "Meals scheduled for the day",
+            "description": "Complete list of ingredients required for this meal",
             "items": {
               "type": "object",
               "required": [
-                "meal_type",
-                "recipe_title",
-                "description",
-                "ingredients",
-                "instructions"
+                "name",
+                "quantity",
+                "unit"
               ],
               "properties": {
-                "meal_type": {
+                "name": {
                   "type": "string",
-                  "enum": [
-                    "Breakfast",
-                    "Lunch",
-                    "Dinner",
-                    "Snack",
-                    "Dessert"
-                  ],
-                  "description": "Type of meal category"
+                  "description": "Ingredient name"
                 },
-                "recipe_title": {
+                "quantity": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Numeric quantity needed"
+                },
+                "unit": {
                   "type": "string",
-                  "description": "Title or display name of the meal / recipe"
+                  "description": "Measurement unit (e.g. lbs, oz, cup, tbsp, count)"
                 },
-                "description": {
+                "deal_id": {
                   "type": "string",
-                  "description": "Short summary of the dish"
+                  "description": "Associated deal ID if this ingredient is backed by a promotion"
                 },
-                "ingredients": {
-                  "type": "array",
-                  "description": "Complete list of ingredients required for this meal",
-                  "items": {
-                    "type": "object",
-                    "required": [
-                      "name",
-                      "quantity",
-                      "unit"
-                    ],
-                    "properties": {
-                      "name": {
-                        "type": "string",
-                        "description": "Ingredient name"
-                      },
-                      "quantity": {
-                        "type": "number",
-                        "minimum": 0,
-                        "description": "Numeric quantity needed"
-                      },
-                      "unit": {
-                        "type": "string",
-                        "description": "Measurement unit (e.g. lbs, oz, cup, tbsp, count)"
-                      },
-                      "deal_id": {
-                        "type": "string",
-                        "description": "Associated deal ID if this ingredient is backed by a promotion"
-                      },
-                      "store_name": {
-                        "type": "string",
-                        "description": "Name of the store providing the deal price"
-                      },
-                      "deal_price": {
-                        "type": "number",
-                        "minimum": 0,
-                        "description": "Promotional price for the ingredient if sourced from a deal"
-                      }
-                    },
-                    "additionalProperties": false
-                  }
+                "store_name": {
+                  "type": "string",
+                  "description": "Name of the store providing the deal price"
                 },
-                "instructions": {
-                  "type": "array",
-                  "description": "Ordered list of step-by-step cooking preparation instructions",
-                  "items": {
-                    "type": "string"
-                  }
+                "deal_price": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Promotional price for the ingredient if sourced from a deal"
                 }
               },
               "additionalProperties": false
+            }
+          },
+          "instructions": {
+            "type": "array",
+            "description": "Ordered list of step-by-step cooking preparation instructions",
+            "items": {
+              "type": "string"
             }
           }
         },

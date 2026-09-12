@@ -1,6 +1,10 @@
 {
     "chat.tools.terminal.autoApprove": {
         "dotnet build": true,
-        "dotnet test": true
+        "dotnet test": true,
+        "/^& \"C:\\\\Program Files\\\\dotnet\\\\dotnet\\.exe\" test apps/orchestrator/MealShopper\\.Orchestrator\\.Tests/MealShopper\\.Orchestrator\\.Tests\\.csproj$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
     }
 }

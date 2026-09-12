@@ -175,7 +175,7 @@ public class MockHttpMessageHandler : HttpMessageHandler
         if (url.Contains("v1/shopper/deals", StringComparison.OrdinalIgnoreCase))
         {
             string dealsJson;
-            var fixturePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../../libs/contracts/tests/fixtures/valid-top-deals.json"));
+            var fixturePath = ResolveFixturePath("valid-top-deals.json");
 
             if (File.Exists(fixturePath))
             {
@@ -193,9 +193,73 @@ public class MockHttpMessageHandler : HttpMessageHandler
             return Task.FromResult(response);
         }
 
+        if (url.Contains("v1/planner/generate", StringComparison.OrdinalIgnoreCase))
+        {
+            string mealPlanJson;
+            var fixturePath = ResolveFixturePath("valid-meal-plan.json");
+
+            if (File.Exists(fixturePath))
+            {
+                mealPlanJson = File.ReadAllText(fixturePath);
+            }
+            else
+            {
+                mealPlanJson = """
+                {
+                  "meal_plan_id": "plan-draft-20260908-001",
+                  "meals": [
+                    {
+                      "meal_type": "Dinner",
+                      "recipe_title": "Lemon Pepper Chicken",
+                      "description": "Crispy pan-seared lemon pepper chicken.",
+                      "instructions": ["Sear chicken", "Add lemon"],
+                      "ingredients": [
+                        {
+                          "name": "Chicken Breast",
+                          "quantity": 1.5,
+                          "unit": "lbs",
+                          "deal_id": "deal-1",
+                          "store_name": "Ralphs",
+                          "deal_price": 2.99
+                        }
+                      ]
+                    }
+                  ],
+                  "missing_primary_ingredients": []
+                }
+                """;
+            }
+
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(mealPlanJson, Encoding.UTF8, "application/json")
+            };
+            return Task.FromResult(response);
+        }
+
         return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
         {
             Content = new StringContent("Not Found", Encoding.UTF8, "text/plain")
         });
+    }
+
+    private static string ResolveFixturePath(string fixtureFileName)
+    {
+        var currentDir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (currentDir != null && !Directory.Exists(Path.Combine(currentDir.FullName, "libs")))
+        {
+            currentDir = currentDir.Parent;
+        }
+
+        if (currentDir != null)
+        {
+            var resolved = Path.Combine(currentDir.FullName, "libs", "contracts", "tests", "fixtures", fixtureFileName);
+            if (File.Exists(resolved))
+            {
+                return resolved;
+            }
+        }
+
+        return Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "libs", "contracts", "tests", "fixtures", fixtureFileName));
     }
 }

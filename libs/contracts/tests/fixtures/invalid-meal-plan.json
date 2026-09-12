@@ -1,25 +1,20 @@
 {
   "meal_plan_id": "plan-draft-invalid-002",
-  "days": [
+  "meals": [
     {
-      "day_number": 1,
-      "meals": [
+      "meal_type": "MidnightSnack",
+      "recipe_title": "Late Night Nachos",
+      "description": "Quick tortilla chips melted with cheese and salsa.",
+      "ingredients": [
         {
-          "meal_type": "MidnightSnack",
-          "recipe_title": "Late Night Nachos",
-          "description": "Quick tortilla chips melted with cheese and salsa.",
-          "ingredients": [
-            {
-              "name": "Tortilla Chips",
-              "quantity": 1,
-              "unit": "bag"
-            },
-            {
-              "name": "Cheddar Cheese",
-              "quantity": -2,
-              "unit": "cups"
-            }
-          ]
+          "name": "Tortilla Chips",
+          "quantity": 1,
+          "unit": "bag"
+        },
+        {
+          "name": "Cheddar Cheese",
+          "quantity": -2,
+          "unit": "cups"
         }
       ]
     }
