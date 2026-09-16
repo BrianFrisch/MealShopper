@@ -12,8 +12,26 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<IKeyMaterialService, RsaKeyMaterialService>();
 
 // Register user storage and password hashing services
+var redisConnection = builder.Configuration.GetConnectionString("Redis");
+
+if (!string.IsNullOrEmpty(redisConnection))
+{
+    // Distributed cluster mode: AWS ElastiCache, Azure Cache for Redis, GCP Memorystore
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = redisConnection;
+        options.InstanceName = "MealShopperIdentity:";
+    });
+}
+else
+{
+    // Fallback: Local in-memory implementation of IDistributedCache for fast unit runs
+    builder.Services.AddDistributedMemoryCache();
+}
+
+builder.Services.AddSingleton<IUserStore, DistributedCacheUserStore>();
 builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
-builder.Services.AddSingleton<IUserStore, InMemoryUserStore>();
+//builder.Services.AddSingleton<IUserStore, InMemoryUserStore>();
 builder.Services.AddSingleton<IClientStore, InMemoryClientStore>();
 
 // Register refresh token store

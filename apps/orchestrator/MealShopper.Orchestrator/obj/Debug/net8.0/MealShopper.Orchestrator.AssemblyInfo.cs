@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("MealShopper.Orchestrator")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+30571280a0651dc8260b008eea23c9a05017e841")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+be6a8a0701b093982cf777b8a851a4a8876e2cb7")]
 [assembly: System.Reflection.AssemblyProductAttribute("MealShopper.Orchestrator")]
 [assembly: System.Reflection.AssemblyTitleAttribute("MealShopper.Orchestrator")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
