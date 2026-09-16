@@ -1,0 +1,6 @@
+@MealShopper.Identity_HostAddress = http://localhost:5119
+
+GET {{MealShopper.Identity_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

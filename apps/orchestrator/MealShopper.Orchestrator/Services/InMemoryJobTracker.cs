@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using MealShopper.Orchestrator.Models;
+using MealShopper.Orchestrator.Models.DTOs;
 
 namespace MealShopper.Orchestrator.Services;
 
@@ -42,6 +43,32 @@ public class InMemoryJobTracker : IJobTracker, IJobStateStore
                 StageDescription = stageDescription ?? job.StageDescription,
                 UpdatedAt = DateTimeOffset.UtcNow,
                 ErrorMessage = errorMessage
+            };
+
+            _jobs[jobId] = updatedJob;
+            return Task.FromResult<JobRecord?>(updatedJob);
+        }
+
+        return Task.FromResult<JobRecord?>(null);
+    }
+
+    /// <inheritdoc />
+    public Task<JobRecord?> CompleteJobAsync(
+        Guid jobId,
+        MealPlanResultDto result,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        if (_jobs.TryGetValue(jobId, out var job))
+        {
+            var updatedJob = job with
+            {
+                Status = JobStatus.Completed,
+                StageDescription = "Meal plan generated successfully.",
+                UpdatedAt = DateTimeOffset.UtcNow,
+                Result = result,
+                ErrorMessage = null
             };
 
             _jobs[jobId] = updatedJob;

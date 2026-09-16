@@ -1,5 +1,6 @@
 using MealShopper.Orchestrator.Clients;
 using MealShopper.Orchestrator.Models;
+using MealShopper.Orchestrator.Models.DTOs;
 using MealShopper.Orchestrator.Models.Planner;
 using Microsoft.Extensions.Logging;
 
@@ -92,6 +93,128 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                 draft.Meals.Count,
                 draft.MissingPrimaryIngredients.Count,
                 jobId);
+
+            // 4. Phase 6 Loop-Back: Resolve missing primary ingredients
+            if (draft.MissingPrimaryIngredients is { Count: > 0 })
+            {
+                await _jobStateStore.UpdateJobStatusAsync(
+                    jobId,
+                    JobStatus.GeneratingMealPlan,
+                    stageDescription: "Searching stores for secondary ingredients...",
+                    cancellationToken: ct);
+
+                var matchedDeals = await _shopperClient.LookupIngredientsAsync(storeIds, draft.MissingPrimaryIngredients, ct);
+
+                if (matchedDeals is { Count: > 0 })
+                {
+                    var matchMap = matchedDeals
+                        .GroupBy(m => m.IngredientName, StringComparer.OrdinalIgnoreCase)
+                        .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var meal in draft.Meals)
+                    {
+                        foreach (var ingredient in meal.Ingredients)
+                        {
+                            if (string.IsNullOrWhiteSpace(ingredient.DealId) &&
+                                matchMap.TryGetValue(ingredient.Name, out var match))
+                            {
+                                ingredient.DealId = match.DealId;
+                                ingredient.StoreName = match.StoreName;
+                                ingredient.DealPrice = match.DealPrice;
+                                if (!string.IsNullOrWhiteSpace(match.Unit) && string.IsNullOrWhiteSpace(ingredient.Unit))
+                                {
+                                    ingredient.Unit = match.Unit;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 5. Assemble Final Result (MealPlanResultDto)
+            var recipeCards = new List<RecipeCardDto>();
+
+            foreach (var meal in draft.Meals)
+            {
+                var ingredientsWithDeals = new List<DisplayIngredientDto>();
+                var pantryIngredients = new List<DisplayIngredientDto>();
+
+                foreach (var ingredient in meal.Ingredients)
+                {
+                    var hasDeal = !string.IsNullOrWhiteSpace(ingredient.StoreName) && ingredient.DealPrice.HasValue;
+                    var amountDesc = string.IsNullOrWhiteSpace(ingredient.Unit)
+                        ? $"{ingredient.Quantity}"
+                        : $"{ingredient.Quantity} {ingredient.Unit}".Trim();
+
+                    if (hasDeal)
+                    {
+                        var dealPriceDesc = string.IsNullOrWhiteSpace(ingredient.Unit)
+                            ? $"${ingredient.DealPrice!.Value:F2}"
+                            : $"${ingredient.DealPrice!.Value:F2} / {ingredient.Unit}";
+
+                        ingredientsWithDeals.Add(new DisplayIngredientDto
+                        {
+                            Name = ingredient.Name,
+                            AmountDescription = amountDesc,
+                            StoreName = ingredient.StoreName,
+                            DealPriceDescription = dealPriceDesc
+                        });
+                    }
+                    else
+                    {
+                        pantryIngredients.Add(new DisplayIngredientDto
+                        {
+                            Name = ingredient.Name,
+                            AmountDescription = amountDesc,
+                            StoreName = null,
+                            DealPriceDescription = null
+                        });
+                    }
+                }
+
+                recipeCards.Add(new RecipeCardDto
+                {
+                    RecipeTitle = meal.RecipeTitle,
+                    Description = meal.Description,
+                    ThumbnailUrl = null,
+                    IngredientsWithDeals = ingredientsWithDeals,
+                    PantryIngredients = pantryIngredients,
+                    Instructions = meal.Instructions ?? []
+                });
+            }
+
+            var requiredStores = draft.Meals
+                .SelectMany(m => m.Ingredients)
+                .Where(i => !string.IsNullOrWhiteSpace(i.StoreName) && i.DealPrice.HasValue)
+                .Select(i => i.StoreName!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var estimatedTotalTripCost = draft.Meals
+                .SelectMany(m => m.Ingredients)
+                .Where(i => !string.IsNullOrWhiteSpace(i.StoreName) && i.DealPrice.HasValue)
+                .Sum(i => i.DealPrice!.Value * i.Quantity);
+
+            var totalTravelTimeMinutes = 10 + (requiredStores.Count * 15);
+
+            var finalResultDto = new MealPlanResultDto
+            {
+                MealPlanId = draft.MealPlanId,
+                EstimatedTotalTripCost = estimatedTotalTripCost,
+                TotalTravelTimeMinutes = totalTravelTimeMinutes,
+                RequiredStores = requiredStores,
+                Recipes = recipeCards
+            };
+
+            // 6. Transition Job to Completed
+            await _jobStateStore.CompleteJobAsync(jobId, finalResultDto, ct);
+
+            _logger.LogInformation(
+                "Completed meal plan generation for Job {JobId}. Total Cost: {TotalCost:C}, Recipes Count: {RecipeCount}, Required Stores: {StoreCount}.",
+                jobId,
+                finalResultDto.EstimatedTotalTripCost,
+                finalResultDto.Recipes.Count,
+                finalResultDto.RequiredStores.Count);
         }
         catch (Exception ex)
         {

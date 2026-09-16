@@ -193,6 +193,62 @@ public class MockHttpMessageHandler : HttpMessageHandler
             return Task.FromResult(response);
         }
 
+        if (url.Contains("v1/shopper/lookup-ingredients", StringComparison.OrdinalIgnoreCase))
+        {
+            var lookupResponse = """
+            {
+              "matches": [
+                {
+                  "ingredient_name": "Garlic",
+                  "deal_id": "deal-garlic-101",
+                  "store_id": "store_vons_1",
+                  "store_name": "Vons",
+                  "deal_price": 0.50,
+                  "unit": "each"
+                },
+                {
+                  "ingredient_name": "Olive Oil",
+                  "deal_id": "deal-oil-202",
+                  "store_id": "store_grocoutlet_1",
+                  "store_name": "Grocery Outlet",
+                  "deal_price": 5.99,
+                  "unit": "bottle"
+                },
+                {
+                  "ingredient_name": "Ground Beef (85/15)",
+                  "deal_id": "deal-beef-303",
+                  "store_id": "store_vons_1",
+                  "store_name": "Vons",
+                  "deal_price": 4.99,
+                  "unit": "lbs"
+                },
+                {
+                  "ingredient_name": "Asparagus",
+                  "deal_id": "deal-asparagus-404",
+                  "store_id": "store_vons_1",
+                  "store_name": "Vons",
+                  "deal_price": 3.99,
+                  "unit": "lb"
+                },
+                {
+                  "ingredient_name": "Brussels sprouts",
+                  "deal_id": "deal-brussels-505",
+                  "store_id": "store_vons_1",
+                  "store_name": "Vons",
+                  "deal_price": 3.99,
+                  "unit": "lb"
+                }
+              ]
+            }
+            """;
+
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(lookupResponse, Encoding.UTF8, "application/json")
+            };
+            return Task.FromResult(response);
+        }
+
         if (url.Contains("v1/planner/generate", StringComparison.OrdinalIgnoreCase))
         {
             string mealPlanJson;

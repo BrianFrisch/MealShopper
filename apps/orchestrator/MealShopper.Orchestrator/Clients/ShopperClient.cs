@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using MealShopper.Orchestrator.Exceptions;
+using MealShopper.Orchestrator.Models.Planner;
 using MealShopper.Orchestrator.Models.Shopper;
 using Microsoft.Extensions.Logging;
 
@@ -106,6 +107,59 @@ public class ShopperClient : IShopperClient
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "HTTP request error occurred while communicating with Shopper Domain deals endpoint.");
+            throw new ShopperDomainException("Failed to communicate with Shopper Domain service.", ex);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<List<MatchedIngredientDealDto>> LookupIngredientsAsync(
+        List<string> storeIds,
+        List<MissingIngredientDto> missingIngredients,
+        CancellationToken ct = default)
+    {
+        if (missingIngredients is null || missingIngredients.Count == 0)
+        {
+            return [];
+        }
+
+        var request = new IngredientLookupRequest
+        {
+            StoreIds = storeIds ?? [],
+            Items = missingIngredients.Select(m => new LookupItemDto
+            {
+                Name = m.IngredientName,
+                Quantity = m.Quantity,
+                Unit = m.Unit
+            }).ToList()
+        };
+
+        _logger.LogInformation(
+            "Looking up deals for {ItemCount} missing ingredients across {StoreCount} stores in Shopper Domain.",
+            request.Items.Count, request.StoreIds.Count);
+
+        try
+        {
+            using var response = await _httpClient.PostAsJsonAsync("v1/shopper/lookup-ingredients", request, ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(ct);
+                _logger.LogError(
+                    "Shopper Domain ingredient lookup failed with status {StatusCode}. Response: {ResponseBody}",
+                    response.StatusCode, errorBody);
+
+                throw new ShopperDomainException(
+                    $"Shopper Domain returned status code {(int)response.StatusCode} ({response.StatusCode}): {errorBody}",
+                    response.StatusCode,
+                    errorBody);
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<IngredientLookupResponse>(cancellationToken: ct);
+            return result?.Matches ?? [];
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HTTP request error occurred while communicating with Shopper Domain lookup-ingredients endpoint.");
             throw new ShopperDomainException("Failed to communicate with Shopper Domain service.", ex);
         }
     }

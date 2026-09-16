@@ -1,6 +1,7 @@
 using FluentAssertions;
 using MealShopper.Orchestrator.Clients;
 using MealShopper.Orchestrator.Exceptions;
+using MealShopper.Orchestrator.Models.Planner;
 using MealShopper.Orchestrator.Tests.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -117,5 +118,75 @@ public class ShopperClientTests
         var exception = await act.Should().ThrowAsync<ShopperDomainException>();
         exception.Which.StatusCode.Should().Be(System.Net.HttpStatusCode.InternalServerError);
         exception.Which.ResponseBody.Should().Contain("Deals engine scoring crashed");
+    }
+
+    [Fact]
+    public async Task LookupIngredientsAsync_ReturnsEmptyList_WhenMissingIngredientsIsEmpty()
+    {
+        // Act
+        var result = await _client.LookupIngredientsAsync(new List<string> { "store_vons_1" }, new List<MissingIngredientDto>());
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Should().BeEmpty();
+        _mockHandler.CapturedRequests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task LookupIngredientsAsync_CorrectlyDeserializesMatches_FromMockHandler()
+    {
+        // Arrange
+        var missingIngredients = new List<MissingIngredientDto>
+        {
+            new() { IngredientName = "Garlic", Quantity = 2, Unit = "each" },
+            new() { IngredientName = "Olive Oil", Quantity = 1, Unit = "bottle" }
+        };
+
+        // Act
+        var matches = await _client.LookupIngredientsAsync(new List<string> { "store_vons_1", "store_grocoutlet_1" }, missingIngredients);
+
+        // Assert
+        matches.Should().NotBeNull();
+        matches.Should().NotBeEmpty();
+
+        var garlicMatch = matches.FirstOrDefault(m => m.IngredientName == "Garlic");
+        garlicMatch.Should().NotBeNull();
+        garlicMatch!.DealId.Should().Be("deal-garlic-101");
+        garlicMatch.StoreId.Should().Be("store_vons_1");
+        garlicMatch.StoreName.Should().Be("Vons");
+        garlicMatch.DealPrice.Should().Be(0.50m);
+        garlicMatch.Unit.Should().Be("each");
+
+        var oilMatch = matches.FirstOrDefault(m => m.IngredientName == "Olive Oil");
+        oilMatch.Should().NotBeNull();
+        oilMatch!.DealId.Should().Be("deal-oil-202");
+        oilMatch.StoreId.Should().Be("store_grocoutlet_1");
+        oilMatch.StoreName.Should().Be("Grocery Outlet");
+        oilMatch.DealPrice.Should().Be(5.99m);
+        oilMatch.Unit.Should().Be("bottle");
+
+        var asparagusMatch = matches.FirstOrDefault(m => m.IngredientName == "Asparagus");
+        asparagusMatch.Should().NotBeNull();
+        asparagusMatch!.StoreName.Should().Be("Vons");
+        asparagusMatch.DealPrice.Should().Be(3.99m);
+    }
+
+    [Fact]
+    public async Task LookupIngredientsAsync_ThrowsShopperDomainException_On500ServerError()
+    {
+        // Arrange
+        _mockHandler.SetServerError("Ingredient lookup service error");
+        var missingIngredients = new List<MissingIngredientDto>
+        {
+            new() { IngredientName = "Garlic", Quantity = 2, Unit = "each" }
+        };
+
+        // Act
+        var act = () => _client.LookupIngredientsAsync(new List<string> { "store_vons_1" }, missingIngredients);
+
+        // Assert
+        var exception = await act.Should().ThrowAsync<ShopperDomainException>();
+        exception.Which.StatusCode.Should().Be(System.Net.HttpStatusCode.InternalServerError);
+        exception.Which.ResponseBody.Should().Contain("Ingredient lookup service error");
     }
 }

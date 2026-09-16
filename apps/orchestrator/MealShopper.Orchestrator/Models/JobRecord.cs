@@ -54,4 +54,9 @@ public record JobRecord
     /// Error message describing why the job failed, if applicable.
     /// </summary>
     public string? ErrorMessage { get; init; }
+
+    /// <summary>
+    /// Final generated meal plan result when the job status is Completed.
+    /// </summary>
+    public MealPlanResultDto? Result { get; init; }
 }

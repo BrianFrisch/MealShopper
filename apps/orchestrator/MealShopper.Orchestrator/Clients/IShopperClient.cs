@@ -1,3 +1,4 @@
+using MealShopper.Orchestrator.Models.Planner;
 using MealShopper.Orchestrator.Models.Shopper;
 
 namespace MealShopper.Orchestrator.Clients;
@@ -16,4 +17,9 @@ public interface IShopperClient
     /// Fetches top evaluated deals for the specified stores and ingredient exclusions.
     /// </summary>
     Task<TopDealsResponse> GetTopDealsAsync(List<string> storeIds, List<string> avoidIngredients, CancellationToken ct = default);
+
+    /// <summary>
+    /// Looks up deal matches for missing ingredients across the specified stores (Phase 6 loop-back).
+    /// </summary>
+    Task<List<MatchedIngredientDealDto>> LookupIngredientsAsync(List<string> storeIds, List<MissingIngredientDto> missingIngredients, CancellationToken ct = default);
 }

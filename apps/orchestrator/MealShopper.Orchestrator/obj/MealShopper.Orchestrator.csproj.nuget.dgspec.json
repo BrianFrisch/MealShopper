@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj": {}
+    "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\Orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj": {}
   },
   "projects": {
-    "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj": {
+    "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\Orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj",
+        "projectUniqueName": "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\Orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj",
         "projectName": "MealShopper.Orchestrator",
-        "projectPath": "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj",
+        "projectPath": "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\Orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj",
         "packagesPath": "C:\\Users\\admin\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\obj\\",
+        "outputPath": "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\Orchestrator\\MealShopper.Orchestrator\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\admin\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -46,6 +46,10 @@
             "Microsoft.AspNetCore.OpenApi": {
               "target": "Package",
               "version": "[8.0.*, )"
+            },
+            "Microsoft.Extensions.Http.Resilience": {
+              "target": "Package",
+              "version": "[10.10.0, )"
             },
             "Swashbuckle.AspNetCore": {
               "target": "Package",

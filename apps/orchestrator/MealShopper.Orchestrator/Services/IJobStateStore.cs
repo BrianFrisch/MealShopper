@@ -1,4 +1,5 @@
 using MealShopper.Orchestrator.Models;
+using MealShopper.Orchestrator.Models.DTOs;
 
 namespace MealShopper.Orchestrator.Services;
 
@@ -33,4 +34,13 @@ public interface IJobStateStore
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The updated job record if found; otherwise, null.</returns>
     Task<JobRecord?> UpdateJobStatusAsync(Guid jobId, JobStatus status, string? errorMessage = null, string? stageDescription = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Transitions an existing job to the Completed status with the final compiled meal plan result.
+    /// </summary>
+    /// <param name="jobId">The unique job ID.</param>
+    /// <param name="result">The final compiled meal plan result.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The updated job record if found; otherwise, null.</returns>
+    Task<JobRecord?> CompleteJobAsync(Guid jobId, MealPlanResultDto result, CancellationToken cancellationToken = default);
 }
