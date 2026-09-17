@@ -7,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHttpClient();
 
 // Register RSA key material service for JWT signing and JWKS generation
 builder.Services.AddSingleton<IKeyMaterialService, RsaKeyMaterialService>();
@@ -29,13 +30,14 @@ else
     builder.Services.AddDistributedMemoryCache();
 }
 
-builder.Services.AddSingleton<IUserStore, DistributedCacheUserStore>();
+builder.Services.AddHttpClient<IUserStore, HttpUserStore>();
 builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
-//builder.Services.AddSingleton<IUserStore, InMemoryUserStore>();
+// builder.Services.AddSingleton<IUserStore, InMemoryUserStore>();
 builder.Services.AddSingleton<IClientStore, InMemoryClientStore>();
 
 // Register refresh token store
-builder.Services.AddSingleton<IRefreshTokenStore, InMemoryRefreshTokenStore>();
+//builder.Services.AddSingleton<IRefreshTokenStore, InMemoryRefreshTokenStore>();
+builder.Services.AddSingleton<IRefreshTokenStore, DistributedCacheRefreshTokenStore>();
 
 // Register JWT token generation service
 builder.Services.AddScoped<ITokenService, JwtTokenService>();

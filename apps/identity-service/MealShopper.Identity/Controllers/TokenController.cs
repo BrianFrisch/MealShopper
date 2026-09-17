@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text;
 using MealShopper.Identity.Models.DTOs;
 using MealShopper.Identity.Services;
@@ -10,27 +11,27 @@ namespace MealShopper.Identity.Controllers;
 [Route("v1/auth")]
 public class TokenController : ControllerBase
 {
-    private readonly IUserStore _userStore;
-    private readonly IPasswordHasher _passwordHasher;
     private readonly ITokenService _tokenService;
     private readonly IRefreshTokenStore _refreshTokenStore;
     private readonly IClientStore _clientStore;
+    private readonly HttpClient _httpClient;
     private readonly ILogger<TokenController> _logger;
 
+    private sealed record ValidateCredentialsResponse(bool IsValid, Guid UserId, string Email, List<string>? Roles);
+
     public TokenController(
-        IUserStore userStore,
-        IPasswordHasher passwordHasher,
         ITokenService tokenService,
         IRefreshTokenStore refreshTokenStore,
         IClientStore clientStore,
-        ILogger<TokenController> logger)
+        ILogger<TokenController> logger,
+        IHttpClientFactory? httpClientFactory = null,
+        HttpClient? httpClient = null)
     {
-        _userStore = userStore ?? throw new ArgumentNullException(nameof(userStore));
-        _passwordHasher = passwordHasher ?? throw new ArgumentNullException(nameof(passwordHasher));
         _tokenService = tokenService ?? throw new ArgumentNullException(nameof(tokenService));
         _refreshTokenStore = refreshTokenStore ?? throw new ArgumentNullException(nameof(refreshTokenStore));
         _clientStore = clientStore ?? throw new ArgumentNullException(nameof(clientStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _httpClient = httpClient ?? httpClientFactory?.CreateClient() ?? new HttpClient();
     }
 
     /// <summary>
@@ -167,8 +168,36 @@ public class TokenController : ControllerBase
                 return BadRequest(new { error = "invalid_grant", error_description = "Invalid email or password." });
             }
 
-            var user = await _userStore.FindByEmailAsync(request.Email, ct);
-            if (user == null || !_passwordHasher.VerifyPassword(request.Password, user.PasswordHash))
+            var validationPayload = new { email = request.Email, password = request.Password };
+            HttpResponseMessage validationResponse;
+
+            try
+            {
+                validationResponse = await _httpClient.PostAsJsonAsync(
+                    "http://localhost:5125/v1/internal/users/validate-credentials",
+                    validationPayload,
+                    ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to reach user validation endpoint for email: {Email}", request.Email);
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "temporarily_unavailable", error_description = "Authentication service unavailable." });
+            }
+
+            if ((int)validationResponse.StatusCode == StatusCodes.Status423Locked)
+            {
+                _logger.LogWarning("Account locked for email: {Email}", request.Email);
+                return StatusCode(StatusCodes.Status423Locked, new { error = "account_locked", error_description = "Account is locked." });
+            }
+
+            if (!validationResponse.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("User validation returned unsuccessful status code {StatusCode} for email: {Email}", validationResponse.StatusCode, request.Email);
+                return BadRequest(new { error = "invalid_grant", error_description = "Invalid email or password." });
+            }
+
+            var validationResult = await validationResponse.Content.ReadFromJsonAsync<ValidateCredentialsResponse>(cancellationToken: ct);
+            if (validationResult == null || !validationResult.IsValid)
             {
                 _logger.LogWarning("Failed authentication attempt for email: {Email}", request.Email);
                 return BadRequest(new { error = "invalid_grant", error_description = "Invalid email or password." });
@@ -176,15 +205,15 @@ public class TokenController : ControllerBase
 
             var scopes = new[] { "shopper.read", "planner.generate" };
             var tokenResult = await _tokenService.CreateAccessTokenAsync(
-                user.Id.ToString(),
-                user.Email,
-                user.Roles,
+                validationResult.UserId.ToString(),
+                validationResult.Email,
+                validationResult.Roles ?? ["User"],
                 scopes: scopes,
                 ct: ct);
 
-            var refreshToken = await _refreshTokenStore.CreateRefreshTokenAsync(user.Id, ct);
+            var refreshToken = await _refreshTokenStore.CreateRefreshTokenAsync(validationResult.UserId, ct);
 
-            _logger.LogInformation("Successfully issued tokens for user {UserId} via password grant.", user.Id);
+            _logger.LogInformation("Successfully issued tokens for user {UserId} via password grant.", validationResult.UserId);
 
             var response = new TokenResponse
             {
