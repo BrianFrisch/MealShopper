@@ -1,0 +1,42 @@
+[
+  {
+    "id": "store_grocery_outlet_01",
+    "name": "Grocery Outlet",
+    "street": "15625 Hawthorne Blvd",
+    "city": "Lawndale",
+    "state": "CA",
+    "zip_code": "90260",
+    "latitude": 33.8891,
+    "longitude": -118.3526
+  },
+  {
+    "id": "store_vons_01",
+    "name": "Vons",
+    "street": "4001 Inglewood Ave",
+    "city": "Redondo Beach",
+    "state": "CA",
+    "zip_code": "90278",
+    "latitude": 33.8897,
+    "longitude": -118.3712
+  },
+  {
+    "id": "store_trader_joes_01",
+    "name": "Trader Joe's",
+    "street": "1800 Rosecrans Ave",
+    "city": "Manhattan Beach",
+    "state": "CA",
+    "zip_code": "90266",
+    "latitude": 33.9015,
+    "longitude": -118.3842
+  },
+  {
+    "id": "store_ralphs_01",
+    "name": "Ralphs",
+    "street": "5000 W 190th St",
+    "city": "Torrance",
+    "state": "CA",
+    "zip_code": "90503",
+    "latitude": 33.8615,
+    "longitude": -118.3701
+  }
+]

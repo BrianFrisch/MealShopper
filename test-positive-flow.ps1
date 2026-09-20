@@ -76,7 +76,7 @@ Write-Host " 3. Polling Task Status via API Gateway" -ForegroundColor Cyan
 Write-Host "=========================================" -ForegroundColor Cyan
 
 $pollUrl = "http://localhost:5247/v1/tasks/$jobId"
-$maxAttempts = 10
+$maxAttempts = 30
 $attempt = 1
 
 while ($attempt -le $maxAttempts) {

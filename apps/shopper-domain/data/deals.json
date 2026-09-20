@@ -1,0 +1,68 @@
+[
+  {
+    "deal_id": "deal_go_01",
+    "store_id": "store_grocery_outlet_01",
+    "store_name": "Grocery Outlet",
+    "item_name": "Boneless Skinless Chicken Breast",
+    "category": "Meat & Poultry",
+    "price": 2.49,
+    "unit": "lbs",
+    "discount_percentage": 35.0,
+    "primary_ingredient": "Chicken Breast"
+  },
+  {
+    "deal_id": "deal_go_02",
+    "store_id": "store_grocery_outlet_01",
+    "store_name": "Grocery Outlet",
+    "item_name": "Fresh Atlantic Salmon Fillet",
+    "category": "Seafood",
+    "price": 7.99,
+    "unit": "lbs",
+    "discount_percentage": 25.0,
+    "primary_ingredient": "Salmon"
+  },
+  {
+    "deal_id": "deal_go_03",
+    "store_id": "store_grocery_outlet_01",
+    "store_name": "Grocery Outlet",
+    "item_name": "Organic Black Beans 15oz",
+    "category": "Pantry",
+    "price": 0.89,
+    "unit": "can",
+    "discount_percentage": 20.0,
+    "primary_ingredient": "Black Beans"
+  },
+  {
+    "deal_id": "deal_vons_01",
+    "store_id": "store_vons_01",
+    "store_name": "Vons",
+    "item_name": "Fresh Asparagus Bundles",
+    "category": "Produce",
+    "price": 1.99,
+    "unit": "bundle",
+    "discount_percentage": 40.0,
+    "primary_ingredient": "Asparagus"
+  },
+  {
+    "deal_id": "deal_vons_02",
+    "store_id": "store_vons_01",
+    "store_name": "Vons",
+    "item_name": "Choice Beef Chuck Roast",
+    "category": "Meat & Poultry",
+    "price": 5.99,
+    "unit": "lbs",
+    "discount_percentage": 30.0,
+    "primary_ingredient": "Beef Chuck Roast"
+  },
+  {
+    "deal_id": "deal_vons_03",
+    "store_id": "store_vons_01",
+    "store_name": "Vons",
+    "item_name": "Roasted Peanuts 16oz",
+    "category": "Snacks",
+    "price": 2.50,
+    "unit": "bag",
+    "discount_percentage": 15.0,
+    "primary_ingredient": "peanuts"
+  }
+]

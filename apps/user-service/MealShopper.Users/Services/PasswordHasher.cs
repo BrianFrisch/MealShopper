@@ -5,40 +5,60 @@ namespace MealShopper.Users.Services;
 
 public class PasswordHasher
 {
+    private const int SaltByteSize = 16;
+    private const int SubkeyByteSize = 32;
+    private const int IterationCount = 100000;
+    private const byte FormatMarker = 0x01;
+
     public string HashPassword(string password)
     {
-        byte[] salt = RandomNumberGenerator.GetBytes(128 / 8);
+        byte[] salt = RandomNumberGenerator.GetBytes(SaltByteSize);
         byte[] subkey = KeyDerivation.Pbkdf2(
             password,
             salt,
             KeyDerivationPrf.HMACSHA256,
-            iterationCount: 100000,
-            numBytesRequested: 256 / 8);
+            iterationCount: IterationCount,
+            numBytesRequested: SubkeyByteSize);
 
-        var output = new byte[13 + salt.Length + subkey.Length];
-        output[0] = 0x01; // Format marker
-        Buffer.BlockCopy(salt, 0, output, 1, salt.Length);
-        Buffer.BlockCopy(subkey, 0, output, 1 + salt.Length, subkey.Length);
+        var output = new byte[1 + SaltByteSize + SubkeyByteSize]; // 49 bytes
+        output[0] = FormatMarker;
+        Buffer.BlockCopy(salt, 0, output, 1, SaltByteSize);
+        Buffer.BlockCopy(subkey, 0, output, 1 + SaltByteSize, SubkeyByteSize);
+
         return Convert.ToBase64String(output);
     }
 
     public bool VerifyPassword(string password, string hashedPassword)
     {
-        var decoded = Convert.FromBase64String(hashedPassword);
-        if (decoded.Length != 49 || decoded[0] != 0x01) return false;
+        if (string.IsNullOrWhiteSpace(hashedPassword)) return false;
 
-        var salt = new byte[16];
-        Buffer.BlockCopy(decoded, 1, salt, 0, 16);
+        byte[] decoded;
+        try
+        {
+            decoded = Convert.FromBase64String(hashedPassword);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
 
-        var expectedKey = new byte[32];
-        Buffer.BlockCopy(decoded, 17, expectedKey, 0, 32);
+        if (decoded.Length != 1 + SaltByteSize + SubkeyByteSize || decoded[0] != FormatMarker)
+        {
+            return false;
+        }
+
+        var salt = new byte[SaltByteSize];
+        Buffer.BlockCopy(decoded, 1, salt, 0, SaltByteSize);
+
+        var expectedKey = new byte[SubkeyByteSize];
+        Buffer.BlockCopy(decoded, 1 + SaltByteSize, expectedKey, 0, SubkeyByteSize);
 
         var actualKey = KeyDerivation.Pbkdf2(
             password,
             salt,
             KeyDerivationPrf.HMACSHA256,
-            iterationCount: 100000,
-            numBytesRequested: 32);
+            iterationCount: IterationCount,
+            numBytesRequested: SubkeyByteSize);
 
         return CryptographicOperations.FixedTimeEquals(actualKey, expectedKey);
     }

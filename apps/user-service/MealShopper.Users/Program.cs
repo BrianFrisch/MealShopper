@@ -1,8 +1,11 @@
 using MealShopper.Users.Data;
 using MealShopper.Users.Models;
 using MealShopper.Users.Services;
+using Dapper;
 
 var builder = WebApplication.CreateBuilder(args);
+
+DefaultTypeMap.MatchNamesWithUnderscores = true;
 
 builder.Services.AddSingleton<UserRepository>();
 builder.Services.AddSingleton<PasswordHasher>();
