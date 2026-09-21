@@ -10,7 +10,7 @@ public class MealPlanDraftResponse
     /// <summary>
     /// Unique identifier for the generated meal plan draft.
     /// </summary>
-    [JsonPropertyName("meal_plan_id")]
+    [JsonPropertyName("plan_id")]
     public string MealPlanId { get; set; } = string.Empty;
 
     /// <summary>

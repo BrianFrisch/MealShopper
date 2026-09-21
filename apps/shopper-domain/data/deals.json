@@ -64,5 +64,27 @@
     "unit": "bag",
     "discount_percentage": 15.0,
     "primary_ingredient": "peanuts"
+  },
+  {
+    "deal_id": "deal_vons_04",
+    "store_id": "store_vons_01",
+    "store_name": "Vons",
+    "item_name": "Organic Whole Garlic 3-Pack",
+    "category": "Produce",
+    "price": 1.29,
+    "unit": "pack",
+    "discount_percentage": 20.0,
+    "primary_ingredient": "Garlic"
+  },
+  {
+    "deal_id": "deal_go_04",
+    "store_id": "store_grocery_outlet_01",
+    "store_name": "Grocery Outlet",
+    "item_name": "Extra Virgin Olive Oil 500ml",
+    "category": "Pantry",
+    "price": 4.99,
+    "unit": "bottle",
+    "discount_percentage": 30.0,
+    "primary_ingredient": "Olive Oil"
   }
 ]

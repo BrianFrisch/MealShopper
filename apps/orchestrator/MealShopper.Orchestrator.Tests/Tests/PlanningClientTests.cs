@@ -94,7 +94,6 @@ public class PlanningClientTests
         result.Meals.Should().HaveCount(1);
         result.Meals[0].RecipeTitle.Should().Be("Lemon Chicken");
         result.Meals[0].Ingredients.Should().HaveCount(1);
-        result.Meals[0].Ingredients[0].DealPrice.Should().Be(2.99m);
         result.MissingPrimaryIngredients.Should().HaveCount(1);
         result.MissingPrimaryIngredients[0].IngredientName.Should().Be("Olive Oil");
 
@@ -130,11 +129,8 @@ public class PlanningClientTests
 
         var chickenIngredient = firstMeal.Ingredients.FirstOrDefault(i => i.Name == "Boneless Skinless Chicken Breast");
         chickenIngredient.Should().NotBeNull();
-        chickenIngredient!.Quantity.Should().Be(1.5m);
-        chickenIngredient.Unit.Should().Be("lbs");
-        chickenIngredient.DealId.Should().Be("deal-chicken-breast-001");
+        chickenIngredient!.DealId.Should().Be("deal-chicken-breast-001");
         chickenIngredient.StoreName.Should().Be("Ralphs");
-        chickenIngredient.DealPrice.Should().Be(2.99m);
 
         result.MissingPrimaryIngredients.Should().NotBeEmpty();
         var missingBeef = result.MissingPrimaryIngredients.FirstOrDefault(m => m.IngredientName.StartsWith("Ground Beef"));

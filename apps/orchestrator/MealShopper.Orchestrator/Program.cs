@@ -36,7 +36,10 @@ builder.Services.AddSingleton<ITokenAcquisitionService>(sp =>
 // Register typed HTTP clients with Polly resilience pipelines
 builder.Services.AddHttpClient<IShopperClient, ShopperClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:ShopperDomainUrl"] ?? "http://localhost:8001/");
+    var shopperUrl = builder.Configuration["Services:ShopperUrl"] 
+        ?? builder.Configuration["Services:ShopperDomainUrl"] 
+        ?? "http://localhost:8001";
+    client.BaseAddress = new Uri(shopperUrl.TrimEnd('/') + "/");
 })
 .AddHttpMessageHandler(sp =>
 {
@@ -90,7 +93,10 @@ builder.Services.AddHttpClient<IShopperClient, ShopperClient>(client =>
 
 builder.Services.AddHttpClient<IPlanningClient, PlanningClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:PlanningDomainUrl"] ?? "http://localhost:8002/");
+    var plannerUrl = builder.Configuration["Services:PlannerUrl"]
+        ?? builder.Configuration["Services:PlanningDomainUrl"]
+        ?? "http://localhost:8002";
+    client.BaseAddress = new Uri(plannerUrl.TrimEnd('/') + "/");
 })
 .AddHttpMessageHandler(sp =>
 {
@@ -140,13 +146,27 @@ builder.Services.AddHttpClient<IPlanningClient, PlanningClient>(client =>
     });
 });
 
+builder.Services.AddHttpClient<IPlannerClient, PlannerClient>(client =>
+{
+    var plannerUrl = builder.Configuration["Services:PlannerUrl"]
+        ?? builder.Configuration["Services:PlanningDomainUrl"]
+        ?? "http://localhost:8002";
+    client.BaseAddress = new Uri(plannerUrl.TrimEnd('/') + "/");
+})
+.AddHttpMessageHandler(sp =>
+{
+    var tokenService = sp.GetRequiredService<ITokenAcquisitionService>();
+    var logger = sp.GetRequiredService<ILogger<M2MAuthenticationHandler>>();
+    return new M2MAuthenticationHandler(tokenService, "planner.generate", logger);
+});
+
 // Register job state tracking services
 builder.Services.AddSingleton<InMemoryJobTracker>();
 builder.Services.AddSingleton<IJobStateStore>(sp => sp.GetRequiredService<InMemoryJobTracker>());
 builder.Services.AddSingleton<IJobTracker>(sp => sp.GetRequiredService<InMemoryJobTracker>());
 
 // Register workflow orchestrator
-builder.Services.AddTransient<IMealPlanOrchestrator, MealPlanOrchestrator>();
+builder.Services.AddScoped<IMealPlanOrchestrator, MealPlanOrchestrator>();
 
 var app = builder.Build();
 

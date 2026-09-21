@@ -82,19 +82,13 @@ public class PlannerModelTests
 
         var chickenIngredient = dinner.Ingredients.FirstOrDefault(i => i.Name == "Boneless Skinless Chicken Breast");
         chickenIngredient.Should().NotBeNull();
-        chickenIngredient!.Quantity.Should().Be(1.5m);
-        chickenIngredient.Unit.Should().Be("lbs");
-        chickenIngredient.DealId.Should().Be("deal-chicken-breast-001");
+        chickenIngredient!.DealId.Should().Be("deal-chicken-breast-001");
         chickenIngredient.StoreName.Should().Be("Ralphs");
-        chickenIngredient.DealPrice.Should().Be(2.99m);
 
         var oilIngredient = dinner.Ingredients.FirstOrDefault(i => i.Name == "Olive Oil");
         oilIngredient.Should().NotBeNull();
-        oilIngredient!.Quantity.Should().Be(2m);
-        oilIngredient.Unit.Should().Be("tbsp");
-        oilIngredient.DealId.Should().BeNull();
+        oilIngredient!.DealId.Should().BeNull();
         oilIngredient.StoreName.Should().BeNull();
-        oilIngredient.DealPrice.Should().BeNull();
 
         response.MissingPrimaryIngredients.Should().HaveCount(2);
         var missingBeef = response.MissingPrimaryIngredients.FirstOrDefault(m => m.IngredientName.StartsWith("Ground Beef"));

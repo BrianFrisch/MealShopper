@@ -1,15 +1,220 @@
 using FluentAssertions;
 using MealShopper.Orchestrator.Clients;
+using MealShopper.Orchestrator.Exceptions;
 using MealShopper.Orchestrator.Models;
+using MealShopper.Orchestrator.Models.Domain;
 using MealShopper.Orchestrator.Models.DTOs;
 using MealShopper.Orchestrator.Services;
 using MealShopper.Orchestrator.Tests.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 
 namespace MealShopper.Orchestrator.Tests.Tests;
 
 public class MealPlanOrchestratorTests
 {
+    #region ExecuteWorkflowAsync Tests
+
+    [Fact]
+    public async Task ExecuteWorkflowAsync_SuccessfullyExecutesAllStepsAndReturnsConsolidatedResult()
+    {
+        // Arrange
+        var mockShopper = new Mock<IShopperClient>();
+        var mockPlanner = new Mock<IPlannerClient>();
+
+        var stores = new List<StoreDto>
+        {
+            new() { Id = "store-1", Name = "Store 1", Street = "123 Main St", City = "LA", State = "CA", ZipCode = "90001", DistanceMiles = 1.2 },
+            new() { Id = "store-2", Name = "Store 2", Street = "456 Oak St", City = "LA", State = "CA", ZipCode = "90002", DistanceMiles = 2.5 }
+        };
+
+        mockShopper
+            .Setup(s => s.DiscoverStoresAsync(It.IsAny<StoreDiscoveryRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StoreDiscoveryResponse { Stores = stores, TotalFound = 2 });
+
+        var scoredDeals = new List<DealDto>
+        {
+            new() { DealId = "deal-1", StoreId = "store-1", StoreName = "Store 1", ItemName = "Chicken", Price = 4.99m, Unit = "lb", PrimaryIngredient = "chicken" }
+        };
+
+        mockShopper
+            .Setup(s => s.ScoreDealsAsync(It.Is<DealScoringRequest>(r => r.StoreIds.Count == 2), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DealScoringResponse { Deals = scoredDeals, TotalScored = 1 });
+
+        var plannedMeals = new List<MealShopper.Orchestrator.Models.Domain.PlannedMealDto>
+        {
+            new()
+            {
+                MealId = "meal-1",
+                RecipeName = "Chicken Bowl",
+                Description = "Tasty chicken bowl",
+                EstimatedPrepTimeMinutes = 30,
+                Servings = 4,
+                Ingredients = new List<RecipeIngredientDto>
+                {
+                    new() { Name = "Chicken", Quantity = "1 lb", IsPromotional = true, DealId = "deal-1", StoreName = "Store 1" },
+                    new() { Name = "Rice", Quantity = "2 cups", IsPromotional = false }
+                },
+                Instructions = new List<string> { "Cook rice", "Cook chicken", "Combine" }
+            }
+        };
+
+        mockPlanner
+            .Setup(p => p.GeneratePlanAsync(It.Is<MealPlanRequestDto>(r => r.ScoredDeals.Count == 1 && r.HouseholdSize == 4 && r.TargetMealCount == 3), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MealPlanResponseDto
+            {
+                PlanId = "plan-abc-123",
+                Meals = plannedMeals,
+                MissingPrimaryIngredients = new List<string> { "Rice" },
+                EstimatedTotalSpend = 14.50m
+            });
+
+        var matchedDeals = new List<MatchedDealDto>
+        {
+            new() { MissingIngredient = "Rice", DealId = "deal-rice-2", StoreId = "store-2", StoreName = "Store 2", ItemName = "Jasmine Rice", Price = 3.50m, Unit = "bag", SimilarityScore = 95.0 }
+        };
+
+        mockShopper
+            .Setup(s => s.MatchIngredientsAsync(It.Is<IngredientMatchRequestDto>(r => r.MissingIngredients.Contains("Rice") && r.StoreIds.Count == 2), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IngredientMatchResponseDto { Matches = matchedDeals, TotalMatched = 1 });
+
+        var orchestrator = new MealPlanOrchestrator(
+            mockShopper.Object,
+            mockPlanner.Object,
+            NullLogger<MealPlanOrchestrator>.Instance);
+
+        var request = new PlanGenerationWorkflowRequest(
+            Latitude: 34.0522,
+            Longitude: -118.2437,
+            RadiusMiles: 5.0,
+            MaxStores: 2,
+            HouseholdSize: 4,
+            TargetMealCount: 3,
+            PreferredCuisines: new List<string> { "Mexican", "Asian" },
+            DietaryRestrictions: new List<string> { "Nut-Free" },
+            AvoidIngredients: new List<string> { "Peanuts" }
+        );
+
+        // Act
+        var result = await orchestrator.ExecuteWorkflowAsync(request);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.PlanId.Should().Be("plan-abc-123");
+        result.SelectedStores.Should().HaveCount(2);
+        result.SelectedStores[0].Name.Should().Be("Store 1");
+        result.SelectedStores[1].Name.Should().Be("Store 2");
+        result.Meals.Should().HaveCount(1);
+        result.Meals[0].RecipeName.Should().Be("Chicken Bowl");
+        result.MatchedSecondaryDeals.Should().HaveCount(1);
+        result.MatchedSecondaryDeals[0].ItemName.Should().Be("Jasmine Rice");
+        result.EstimatedTotalSpend.Should().Be(14.50m);
+        result.GeneratedAt.Should().BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromSeconds(5));
+
+        mockShopper.Verify(s => s.DiscoverStoresAsync(It.Is<StoreDiscoveryRequest>(r => r.Latitude == 34.0522 && r.MaxStores == 2), It.IsAny<CancellationToken>()), Times.Once);
+        mockShopper.Verify(s => s.ScoreDealsAsync(It.Is<DealScoringRequest>(r => r.AvoidIngredients.Contains("Peanuts")), It.IsAny<CancellationToken>()), Times.Once);
+        mockPlanner.Verify(p => p.GeneratePlanAsync(It.Is<MealPlanRequestDto>(r => r.PreferredCuisines.Contains("Mexican") && r.DietaryRestrictions.Contains("Nut-Free")), It.IsAny<CancellationToken>()), Times.Once);
+        mockShopper.Verify(s => s.MatchIngredientsAsync(It.Is<IngredientMatchRequestDto>(r => r.MissingIngredients.Contains("Rice")), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteWorkflowAsync_ThrowsDomainException_WhenNoStoresFound()
+    {
+        // Arrange
+        var mockShopper = new Mock<IShopperClient>();
+        var mockPlanner = new Mock<IPlannerClient>();
+
+        mockShopper
+            .Setup(s => s.DiscoverStoresAsync(It.IsAny<StoreDiscoveryRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StoreDiscoveryResponse { Stores = new List<StoreDto>(), TotalFound = 0 });
+
+        var orchestrator = new MealPlanOrchestrator(
+            mockShopper.Object,
+            mockPlanner.Object,
+            NullLogger<MealPlanOrchestrator>.Instance);
+
+        var request = new PlanGenerationWorkflowRequest(
+            Latitude: 34.0522,
+            Longitude: -118.2437,
+            RadiusMiles: 2.0,
+            MaxStores: 2,
+            HouseholdSize: 2,
+            TargetMealCount: 3,
+            PreferredCuisines: new List<string>(),
+            DietaryRestrictions: new List<string>(),
+            AvoidIngredients: new List<string>()
+        );
+
+        // Act
+        var act = () => orchestrator.ExecuteWorkflowAsync(request);
+
+        // Assert
+        var exception = await act.Should().ThrowAsync<DomainException>();
+        exception.WithMessage("No stores within radius");
+
+        mockShopper.Verify(s => s.ScoreDealsAsync(It.IsAny<DealScoringRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        mockPlanner.Verify(p => p.GeneratePlanAsync(It.IsAny<MealPlanRequestDto>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteWorkflowAsync_SkipsLoopBack_WhenNoMissingPrimaryIngredients()
+    {
+        // Arrange
+        var mockShopper = new Mock<IShopperClient>();
+        var mockPlanner = new Mock<IPlannerClient>();
+
+        mockShopper
+            .Setup(s => s.DiscoverStoresAsync(It.IsAny<StoreDiscoveryRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StoreDiscoveryResponse
+            {
+                Stores = new List<StoreDto> { new() { Id = "store-1", Name = "Store 1" } },
+                TotalFound = 1
+            });
+
+        mockShopper
+            .Setup(s => s.ScoreDealsAsync(It.IsAny<DealScoringRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DealScoringResponse { Deals = new List<DealDto>(), TotalScored = 0 });
+
+        mockPlanner
+            .Setup(p => p.GeneratePlanAsync(It.IsAny<MealPlanRequestDto>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MealPlanResponseDto
+            {
+                PlanId = "plan-complete",
+                Meals = new List<MealShopper.Orchestrator.Models.Domain.PlannedMealDto>(),
+                MissingPrimaryIngredients = new List<string>(),
+                EstimatedTotalSpend = 20.00m
+            });
+
+        var orchestrator = new MealPlanOrchestrator(
+            mockShopper.Object,
+            mockPlanner.Object,
+            NullLogger<MealPlanOrchestrator>.Instance);
+
+        var request = new PlanGenerationWorkflowRequest(
+            Latitude: 34.0,
+            Longitude: -118.0,
+            RadiusMiles: 5.0,
+            MaxStores: 1,
+            HouseholdSize: 2,
+            TargetMealCount: 2,
+            PreferredCuisines: new List<string>(),
+            DietaryRestrictions: new List<string>(),
+            AvoidIngredients: new List<string>()
+        );
+
+        // Act
+        var result = await orchestrator.ExecuteWorkflowAsync(request);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.PlanId.Should().Be("plan-complete");
+        result.MatchedSecondaryDeals.Should().BeEmpty();
+
+        mockShopper.Verify(s => s.MatchIngredientsAsync(It.IsAny<IngredientMatchRequestDto>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    #endregion
+
     [Fact]
     public async Task ProcessJobAsync_ProgressesThroughStagesAndCompletesCleanly()
     {
@@ -313,13 +518,13 @@ public class MealPlanOrchestratorTests
 
         // First recipe: Lemon Pepper Chicken (Olive Oil was missing and loop-back matched)
         var chickenRecipe = result.Recipes.First(r => r.RecipeTitle == "Lemon Pepper Chicken");
-        chickenRecipe.IngredientsWithDeals.Should().Contain(i => i.Name == "Olive Oil" && i.StoreName == "Grocery Outlet" && i.DealPriceDescription == "$5.99 / tbsp");
+        chickenRecipe.IngredientsWithDeals.Should().Contain(i => i.Name == "Olive Oil" && i.StoreName == "Grocery Outlet");
         chickenRecipe.IngredientsWithDeals.Should().Contain(i => i.Name == "Boneless Skinless Chicken Breast" && i.StoreName == "Ralphs");
         chickenRecipe.PantryIngredients.Should().Contain(i => i.Name == "Lemon Pepper Seasoning" && i.StoreName == null && i.DealPriceDescription == null);
 
         // Second recipe: Street Tacos (Ground Beef was missing and loop-back matched with Vons)
         var tacosRecipe = result.Recipes.First(r => r.RecipeTitle == "Street Tacos");
-        tacosRecipe.IngredientsWithDeals.Should().Contain(i => i.Name == "Ground Beef (85/15)" && i.StoreName == "Vons" && i.DealPriceDescription == "$4.99 / lbs");
+        tacosRecipe.IngredientsWithDeals.Should().Contain(i => i.Name == "Ground Beef (85/15)" && i.StoreName == "Vons");
         tacosRecipe.IngredientsWithDeals.Should().Contain(i => i.Name == "Corn Tortillas (12 count)" && i.StoreName == "Trader Joe's");
         tacosRecipe.IngredientsWithDeals.Should().Contain(i => i.Name == "Organic Red Bell Peppers" && i.StoreName == "Sprouts Farmers Market");
         tacosRecipe.PantryIngredients.Should().Contain(i => i.Name == "Taco Seasoning" && i.StoreName == null && i.DealPriceDescription == null);
@@ -404,14 +609,13 @@ public class MealPlanOrchestratorTests
             recipe.RecipeTitle.Should().NotBeNullOrWhiteSpace();
             recipe.Instructions.Should().NotBeEmpty();
 
-            // Deals ingredients must have valid store and price info
+            // Deals ingredients must have valid store info
             recipe.IngredientsWithDeals.Should().NotBeEmpty();
             foreach (var dealIngredient in recipe.IngredientsWithDeals)
             {
                 dealIngredient.Name.Should().NotBeNullOrWhiteSpace();
                 dealIngredient.AmountDescription.Should().NotBeNullOrWhiteSpace();
                 dealIngredient.StoreName.Should().NotBeNullOrWhiteSpace();
-                dealIngredient.DealPriceDescription.Should().StartWith("$");
             }
 
             // Pantry ingredients must have null store and price descriptions

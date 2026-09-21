@@ -5,7 +5,7 @@ from typing import List
 from google import genai
 from google.genai import types
 
-from models import DealInput, MealPlanRequest, MealPlanResponse, PlannedMeal, RecipeIngredient
+from models import MealPlanRequest, MealPlanResponse, PlannedMeal, RecipeIngredient, MissingIngredient
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +156,26 @@ class MealPlannerService:
         ]
 
         # Standard missing primary ingredients for realistic mock output
-        missing_ingredients = ["Garlic", "Olive Oil", "Lemon"]
+        missing_primary_ingredients=[
+            MissingIngredient(
+                ingredient_name="Garlic",
+                quantity=3.0,
+                unit="cloves",
+                associated_recipe_titles=["Pan-Seared Herb Protein with Roasted Vegetables", "Savory Skillet Medley with Fresh Herbs"]
+            ),
+            MissingIngredient(
+                ingredient_name="Olive Oil",
+                quantity=4.0,
+                unit="tbsp",
+                associated_recipe_titles=["Pan-Seared Herb Protein with Roasted Vegetables", "Savory Skillet Medley with Fresh Herbs"]
+            ),
+            MissingIngredient(
+                ingredient_name="Lemon",
+                quantity=1.0,
+                unit="each",
+                associated_recipe_titles=["Pan-Seared Herb Protein with Roasted Vegetables"]
+            )
+        ]
 
         for i in range(target_count):
             template = recipe_templates[i % len(recipe_templates)]
@@ -220,6 +239,6 @@ class MealPlannerService:
         return MealPlanResponse(
             plan_id=f"plan_{uuid.uuid4().hex[:12]}",
             meals=meals,
-            missing_primary_ingredients=missing_ingredients,
+            missing_primary_ingredients=missing_primary_ingredients,
             estimated_total_spend=round(total_spend, 2),
         )

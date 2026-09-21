@@ -48,8 +48,8 @@ $intakePayload = @{
         state   = "CA"
         zipCode = "90260"
     }
-    searchRadiusMiles = 5
-    maxStores         = 2
+    searchRadiusMiles = 10
+    maxStores         = 3
 } | ConvertTo-Json
 
 try {
@@ -86,9 +86,68 @@ while ($attempt -le $maxAttempts) {
 
         if ($task.status -eq "Completed") {
             Write-Host "`n[COMPLETE] Meal Plan Successfully Assembled!" -ForegroundColor Green
-            Write-Host "Stores Visited : $($task.result.requiredStores -join ', ')" -ForegroundColor Cyan
-            Write-Host "Estimated Cost : $($task.result.estimatedTotalTripCost)" -ForegroundColor Cyan
-            Write-Host "Travel Time    : $($task.result.totalTravelTimeMinutes) mins" -ForegroundColor Cyan
+            Write-Host "`n========================================================" -ForegroundColor Cyan
+            Write-Host "                MEAL PLAN WORKFLOW RESULT               " -ForegroundColor Cyan
+            Write-Host "========================================================" -ForegroundColor Cyan
+            Write-Host "Plan ID               : $($task.result.mealPlanId)"
+            Write-Host "Total Travel Time     : $($task.result.totalTravelTimeMinutes) mins"
+            Write-Host "Estimated Total Cost  : $($task.result.estimatedTotalTripCost)"
+
+            Write-Host "`n--------------------------------------------------------" -ForegroundColor DarkGray
+            Write-Host "REQUIRED STORES" -ForegroundColor Yellow
+            Write-Host "--------------------------------------------------------" -ForegroundColor DarkGray
+            foreach ($store in $task.result.requiredStores) {
+                Write-Host "  * $store" -ForegroundColor White
+            }
+
+            Write-Host "`n--------------------------------------------------------" -ForegroundColor DarkGray
+            Write-Host "RECIPES & MEAL DETAILS" -ForegroundColor Yellow
+            Write-Host "--------------------------------------------------------" -ForegroundColor DarkGray
+
+
+            $mealIndex = 1
+            foreach ($recipe in $task.result.recipes) {
+                Write-Host "`n[$mealIndex] $($recipe.recipeTitle)" -ForegroundColor Green
+                Write-Host "    Description: $($recipe.description)" -ForegroundColor Gray
+
+                # Promotional / Deal Ingredients
+                Write-Host "    Ingredients with Deals:" -ForegroundColor Cyan
+                if ($recipe.ingredientsWithDeals -and $recipe.ingredientsWithDeals.Count -gt 0) {
+                    foreach ($dealIng in $recipe.ingredientsWithDeals) {
+                        $priceText = if ([string]::IsNullOrWhiteSpace($dealIng.dealPriceDescription)) { "" } else { " ($($dealIng.dealPriceDescription))" }
+                        $storeText = if ([string]::IsNullOrWhiteSpace($dealIng.storeName)) { "" } else { " @ $($dealIng.storeName)" }
+                        Write-Host "      + $($dealIng.amountDescription) $($dealIng.name)$priceText$storeText" -ForegroundColor White
+                    }
+                } else {
+                    Write-Host "      (None)" -ForegroundColor DarkGray
+                }
+
+                # Pantry Staples
+                Write-Host "    Pantry Ingredients:" -ForegroundColor DarkYellow
+                if ($recipe.pantryIngredients -and $recipe.pantryIngredients.Count -gt 0) {
+                    foreach ($pantryIng in $recipe.pantryIngredients) {
+                        Write-Host "      - $($pantryIng.amountDescription) $($pantryIng.name)" -ForegroundColor DarkGray
+                    }
+                } else {
+                    Write-Host "      (None)" -ForegroundColor DarkGray
+                }
+
+                # Preparation Instructions
+                Write-Host "    Instructions:" -ForegroundColor Magenta
+                if ($recipe.instructions -and $recipe.instructions.Count -gt 0) {
+                    $stepIndex = 1
+                    foreach ($step in $recipe.instructions) {
+                        Write-Host "      $stepIndex.$step" -ForegroundColor Gray
+                        $stepIndex++
+                    }
+                } else {
+                    Write-Host "      (No instructions provided)" -ForegroundColor DarkGray
+                }
+
+                $mealIndex++
+            }
+
+
             break
         }
 

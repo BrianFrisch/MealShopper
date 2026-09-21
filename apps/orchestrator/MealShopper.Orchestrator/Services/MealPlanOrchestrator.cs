@@ -1,20 +1,34 @@
 using MealShopper.Orchestrator.Clients;
+using MealShopper.Orchestrator.Exceptions;
 using MealShopper.Orchestrator.Models;
+using MealShopper.Orchestrator.Models.Domain;
 using MealShopper.Orchestrator.Models.DTOs;
 using MealShopper.Orchestrator.Models.Planner;
+using MealShopper.Orchestrator.Models.Shopper;
 using Microsoft.Extensions.Logging;
 
 namespace MealShopper.Orchestrator.Services;
 
 /// <summary>
-/// Orchestrates the asynchronous meal planning workflow across external domain services.
+/// Orchestrates the meal planning workflow across external domain services.
 /// </summary>
 public class MealPlanOrchestrator : IMealPlanOrchestrator
 {
-    private readonly IJobStateStore _jobStateStore;
     private readonly IShopperClient _shopperClient;
-    private readonly IPlanningClient _planningClient;
+    private readonly IPlannerClient _plannerClient;
     private readonly ILogger<MealPlanOrchestrator> _logger;
+    private readonly IJobStateStore? _jobStateStore;
+    private readonly IPlanningClient? _legacyPlanningClient;
+
+    // public MealPlanOrchestrator(
+    //     IShopperClient shopperClient,
+    //     IPlannerClient plannerClient,
+    //     ILogger<MealPlanOrchestrator> logger)
+    // {
+    //     _shopperClient = shopperClient ?? throw new ArgumentNullException(nameof(shopperClient));
+    //     _plannerClient = plannerClient ?? throw new ArgumentNullException(nameof(plannerClient));
+    //     _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    // }
 
     public MealPlanOrchestrator(
         IJobStateStore jobStateStore,
@@ -24,13 +38,121 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
     {
         _jobStateStore = jobStateStore ?? throw new ArgumentNullException(nameof(jobStateStore));
         _shopperClient = shopperClient ?? throw new ArgumentNullException(nameof(shopperClient));
-        _planningClient = planningClient ?? throw new ArgumentNullException(nameof(planningClient));
+        _legacyPlanningClient = planningClient ?? throw new ArgumentNullException(nameof(planningClient));
+        _plannerClient = planningClient as IPlannerClient ?? new PlannerClient(new HttpClient(), Microsoft.Extensions.Logging.Abstractions.NullLogger<PlannerClient>.Instance);
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+
+    /// <inheritdoc />
+    public async Task<ConsolidatedMealPlanResult> ExecuteWorkflowAsync(
+        PlanGenerationWorkflowRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        _logger.LogInformation(
+            "Executing meal plan workflow for coordinates ({Latitude}, {Longitude}) with radius {RadiusMiles} miles.",
+            request.Latitude, request.Longitude, request.RadiusMiles);
+
+        // Step 1: Discover stores
+        var discoveryReq = new StoreDiscoveryRequest
+        {
+            Latitude = request.Latitude,
+            Longitude = request.Longitude,
+            RadiusMiles = request.RadiusMiles,
+            MaxStores = request.MaxStores
+        };
+
+        var discoveryRes = await _shopperClient.DiscoverStoresAsync(discoveryReq, ct);
+        if (discoveryRes?.Stores == null || discoveryRes.Stores.Count == 0)
+        {
+            _logger.LogWarning("No stores found within radius of {RadiusMiles} miles.", request.RadiusMiles);
+            throw new DomainException("No stores within radius");
+        }
+
+        _logger.LogInformation("Step 1 complete: Discovered {StoreCount} stores.", discoveryRes.Stores.Count);
+
+        // Step 2: Extract store IDs and score deals
+        var storeIds = discoveryRes.Stores.Select(s => s.Id).ToList();
+        var scoringReq = new DealScoringRequest
+        {
+            StoreIds = storeIds,
+            AvoidIngredients = request.AvoidIngredients ?? new List<string>(),
+            TopN = 10
+        };
+
+        var scoringRes = await _shopperClient.ScoreDealsAsync(scoringReq, ct);
+        var scoredDeals = scoringRes?.Deals ?? new List<DealDto>();
+
+        _logger.LogInformation("Step 2 complete: Retrieved {DealCount} scored deals.", scoredDeals.Count);
+
+        // Step 3: Generate meal plan
+        var planReq = new MealPlanRequestDto
+        {
+            ScoredDeals = scoredDeals,
+            HouseholdSize = request.HouseholdSize,
+            TargetMealCount = request.TargetMealCount,
+            PreferredCuisines = request.PreferredCuisines ?? new List<string>(),
+            DietaryRestrictions = request.DietaryRestrictions ?? new List<string>(),
+            AvoidIngredients = request.AvoidIngredients ?? new List<string>()
+        };
+
+        var planRes = await _plannerClient.GeneratePlanAsync(planReq, ct);
+
+        _logger.LogInformation(
+            "Step 3 complete: Generated plan {PlanId} with {MealCount} meals and {MissingCount} missing primary ingredients.",
+            planRes?.PlanId, planRes?.Meals?.Count ?? 0, planRes?.MissingPrimaryIngredients?.Count ?? 0);
+
+        // Step 4 (Loop-back): Match missing primary ingredients
+        var matchedSecondaryDeals = new List<MatchedDealDto>();
+        if (planRes?.MissingPrimaryIngredients is { Count: > 0 })
+        {
+            _logger.LogInformation(
+                "Step 4 (Loop-back): Matching {MissingCount} missing primary ingredients across stores.",
+                planRes.MissingPrimaryIngredients.Count);
+
+            var matchReq = new IngredientMatchRequestDto
+            {
+                StoreIds = storeIds,
+                MissingIngredients = planRes.MissingPrimaryIngredients,
+                SimilarityThreshold = 65.0
+            };
+
+            var matchRes = await _shopperClient.MatchIngredientsAsync(matchReq, ct);
+            if (matchRes?.Matches is { Count: > 0 })
+            {
+                matchedSecondaryDeals = matchRes.Matches;
+            }
+
+            _logger.LogInformation("Step 4 complete: Matched {MatchCount} secondary deals.", matchedSecondaryDeals.Count);
+        }
+
+        // Step 5: Consolidate and return
+        var result = new ConsolidatedMealPlanResult(
+            PlanId: planRes?.PlanId ?? string.Empty,
+            SelectedStores: discoveryRes.Stores,
+            Meals: planRes?.Meals ?? new List<MealShopper.Orchestrator.Models.Domain.PlannedMealDto>(),
+            MatchedSecondaryDeals: matchedSecondaryDeals,
+            EstimatedTotalSpend: planRes?.EstimatedTotalSpend ?? 0m,
+            GeneratedAt: DateTimeOffset.UtcNow
+        );
+
+        _logger.LogInformation(
+            "Step 5 complete: Consolidated meal plan result {PlanId} created successfully.",
+            result.PlanId);
+
+        return result;
     }
 
     /// <inheritdoc />
     public async Task ProcessJobAsync(Guid jobId, CancellationToken ct = default)
     {
+        if (_jobStateStore == null)
+        {
+            throw new InvalidOperationException("Job state store is not configured for this orchestrator instance.");
+        }
+
         try
         {
             var job = await _jobStateStore.GetJobAsync(jobId, ct);
@@ -50,8 +172,8 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                 cancellationToken: ct);
 
             var address = job.RequestPayload.Address;
-            var lat = address.Latitude ?? 34.053625;
-            var lon = address.Longitude ?? -118.243007;
+            var lat = address.Latitude ?? 33.894893;
+            var lon = address.Longitude ?? -118.362658;
             var radiusMiles = job.RequestPayload.SearchRadiusMiles;
             var maxStores = job.RequestPayload.MaxStores;
 
@@ -65,7 +187,7 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                 stageDescription: "Fetching circulars and scoring top promotional deals...",
                 cancellationToken: ct);
 
-            var storeIds = stores.Select(s => s.StoreId).ToList();
+            var storeIds = stores.Select(s => (string)s.Id).ToList();
             var avoidIngredients = job.RequestPayload.AvoidIngredients;
 
             var topDeals = await _shopperClient.GetTopDealsAsync(storeIds, avoidIngredients, ct);
@@ -78,143 +200,168 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                 stageDescription: "Synthesizing customized recipes from curated deals...",
                 cancellationToken: ct);
 
-            var generateRequest = new GenerateMealPlanRequest
+            if (_legacyPlanningClient != null)
             {
-                Cuisines = job.RequestPayload.Cuisines ?? [],
-                AvoidIngredients = job.RequestPayload.AvoidIngredients ?? [],
-                TopDeals = topDeals.Deals ?? []
-            };
-
-            var draft = await _planningClient.GenerateMealPlanAsync(generateRequest, ct);
-
-            _logger.LogInformation(
-                "Generated meal plan {MealPlanId} with {MealCount} meals and {MissingCount} missing primary ingredients for Job {JobId}.",
-                draft.MealPlanId,
-                draft.Meals.Count,
-                draft.MissingPrimaryIngredients.Count,
-                jobId);
-
-            // 4. Phase 6 Loop-Back: Resolve missing primary ingredients
-            if (draft.MissingPrimaryIngredients is { Count: > 0 })
-            {
-                await _jobStateStore.UpdateJobStatusAsync(
-                    jobId,
-                    JobStatus.GeneratingMealPlan,
-                    stageDescription: "Searching stores for secondary ingredients...",
-                    cancellationToken: ct);
-
-                var matchedDeals = await _shopperClient.LookupIngredientsAsync(storeIds, draft.MissingPrimaryIngredients, ct);
-
-                if (matchedDeals is { Count: > 0 })
+                var generateRequest = new GenerateMealPlanRequest
                 {
-                    var matchMap = matchedDeals
-                        .GroupBy(m => m.IngredientName, StringComparer.OrdinalIgnoreCase)
-                        .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+                    Cuisines = job.RequestPayload.Cuisines ?? [],
+                    AvoidIngredients = job.RequestPayload.AvoidIngredients ?? [],
+                    TopDeals = topDeals.Deals ?? []
+                };
 
-                    foreach (var meal in draft.Meals)
+                var draft = await _legacyPlanningClient.GenerateMealPlanAsync(generateRequest, ct);
+
+                _logger.LogInformation(
+                    "Generated meal plan {MealPlanId} with {MealCount} meals and {MissingCount} missing primary ingredients for Job {JobId}.",
+                    draft.MealPlanId,
+                    draft.Meals.Count,
+                    draft.MissingPrimaryIngredients.Count,
+                    jobId);
+
+                // 4. Phase 6 Loop-Back: Resolve missing primary ingredients
+                var matchedDeals = new List<MatchedIngredientDealDto>();
+                if (draft.MissingPrimaryIngredients is { Count: > 0 })
+                {
+                    await _jobStateStore.UpdateJobStatusAsync(
+                        jobId,
+                        JobStatus.GeneratingMealPlan,
+                        stageDescription: "Searching stores for secondary ingredients...",
+                        cancellationToken: ct);
+
+                    var secondaryMatches = await _shopperClient.LookupIngredientsAsync(storeIds, draft.MissingPrimaryIngredients, ct);
+
+                    if (secondaryMatches is { Count: > 0 })
                     {
-                        foreach (var ingredient in meal.Ingredients)
+                        matchedDeals = secondaryMatches;
+                        var matchMap = matchedDeals
+                            .GroupBy(m => m.IngredientName, StringComparer.OrdinalIgnoreCase)
+                            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+                        foreach (var meal in draft.Meals)
                         {
-                            if (string.IsNullOrWhiteSpace(ingredient.DealId) &&
-                                matchMap.TryGetValue(ingredient.Name, out var match))
+                            foreach (var ingredient in meal.Ingredients)
                             {
-                                ingredient.DealId = match.DealId;
-                                ingredient.StoreName = match.StoreName;
-                                ingredient.DealPrice = match.DealPrice;
-                                if (!string.IsNullOrWhiteSpace(match.Unit) && string.IsNullOrWhiteSpace(ingredient.Unit))
+                                if (string.IsNullOrWhiteSpace(ingredient.DealId) &&
+                                    matchMap.TryGetValue(ingredient.Name, out var match))
                                 {
-                                    ingredient.Unit = match.Unit;
+                                    ingredient.DealId = match.DealId;
+                                    ingredient.StoreName = match.StoreName;
+                                    ingredient.IsPromotional = true;
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            // 5. Assemble Final Result (MealPlanResultDto)
-            var recipeCards = new List<RecipeCardDto>();
+                // 5. Assemble Final Result (MealPlanResultDto)
+                var recipeCards = new List<RecipeCardDto>();
 
-            foreach (var meal in draft.Meals)
-            {
-                var ingredientsWithDeals = new List<DisplayIngredientDto>();
-                var pantryIngredients = new List<DisplayIngredientDto>();
-
-                foreach (var ingredient in meal.Ingredients)
+                // Build a fast lookup dictionary of all circular deals & matched secondary deals
+                // var dealLookup = topDeals.Deals.ToDictionary(d => d.DealId, StringComparer.OrdinalIgnoreCase);
+                var dealLookup = topDeals.Deals.ToDictionary(
+                    d => d.DealId, 
+                    d => new { Price = d.DealPrice, Unit = d.Unit }, 
+                    StringComparer.OrdinalIgnoreCase);
+                    
+                // Merge secondary matched deals so loop-back items get priced and factored into trip cost
+                foreach (var matched in matchedDeals)
                 {
-                    var hasDeal = !string.IsNullOrWhiteSpace(ingredient.StoreName) && ingredient.DealPrice.HasValue;
-                    var amountDesc = string.IsNullOrWhiteSpace(ingredient.Unit)
-                        ? $"{ingredient.Quantity}"
-                        : $"{ingredient.Quantity} {ingredient.Unit}".Trim();
-
-                    if (hasDeal)
+                    _logger.LogInformation("Matched deal {DealId}: {DealPrice} / {Unit}", matched.DealId, matched.DealPrice, matched.Unit);
+                    if (!dealLookup.ContainsKey(matched.DealId))
                     {
-                        var dealPriceDesc = string.IsNullOrWhiteSpace(ingredient.Unit)
-                            ? $"${ingredient.DealPrice!.Value:F2}"
-                            : $"${ingredient.DealPrice!.Value:F2} / {ingredient.Unit}";
-
-                        ingredientsWithDeals.Add(new DisplayIngredientDto
-                        {
-                            Name = ingredient.Name,
-                            AmountDescription = amountDesc,
-                            StoreName = ingredient.StoreName,
-                            DealPriceDescription = dealPriceDesc
-                        });
-                    }
-                    else
-                    {
-                        pantryIngredients.Add(new DisplayIngredientDto
-                        {
-                            Name = ingredient.Name,
-                            AmountDescription = amountDesc,
-                            StoreName = null,
-                            DealPriceDescription = null
-                        });
+                        dealLookup[matched.DealId] = new { Price = matched.DealPrice, Unit = matched.Unit };
                     }
                 }
 
-                recipeCards.Add(new RecipeCardDto
+                decimal estimatedTotalTripCost = 0m;
+
+                foreach (var meal in draft.Meals)
                 {
-                    RecipeTitle = meal.RecipeTitle,
-                    Description = meal.Description,
-                    ThumbnailUrl = null,
-                    IngredientsWithDeals = ingredientsWithDeals,
-                    PantryIngredients = pantryIngredients,
-                    Instructions = meal.Instructions ?? []
-                });
+                    var ingredientsWithDeals = new List<DisplayIngredientDto>();
+                    var pantryIngredients = new List<DisplayIngredientDto>();
+
+                    foreach (var ingredient in meal.Ingredients)
+                    {
+                        var hasDeal = !string.IsNullOrWhiteSpace(ingredient.StoreName) || !string.IsNullOrWhiteSpace(ingredient.DealId);
+                        var amountDesc = ingredient.Quantity;
+
+                        if (hasDeal)
+                        {
+                            string? priceDesc = null;
+                            if (!string.IsNullOrWhiteSpace(ingredient.DealId) && dealLookup.TryGetValue(ingredient.DealId, out var deal))
+                            {
+                                priceDesc = $"${deal.Price:F2} / {deal.Unit}";
+
+                                // Extract numeric quantity (e.g., "1.5 lbs" -> 1.5, "1" -> 1)
+                                var numericQty = 1.0m;
+                                var match = System.Text.RegularExpressions.Regex.Match(amountDesc ?? string.Empty, @"^-?\d+(\.\d+)?");
+                                if (match.Success && decimal.TryParse(match.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var parsedQty))
+                                {
+                                    numericQty = parsedQty;
+                                }
+
+                                estimatedTotalTripCost += (numericQty * deal.Price);
+                            }
+
+                            ingredientsWithDeals.Add(new DisplayIngredientDto
+                            {
+                                Name = ingredient.Name,
+                                AmountDescription = amountDesc,
+                                StoreName = ingredient.StoreName,
+                                DealPriceDescription = priceDesc
+                            });
+                        }
+                        else
+                        {
+                            pantryIngredients.Add(new DisplayIngredientDto
+                            {
+                                Name = ingredient.Name,
+                                AmountDescription = amountDesc,
+                                StoreName = null,
+                                DealPriceDescription = null
+                            });
+                        }
+                    }
+
+                    recipeCards.Add(new RecipeCardDto
+                    {
+                        RecipeTitle = meal.RecipeTitle,
+                        Description = meal.Description,
+                        ThumbnailUrl = null,
+                        IngredientsWithDeals = ingredientsWithDeals,
+                        PantryIngredients = pantryIngredients,
+                        Instructions = meal.Instructions ?? []
+                    });
+                }
+
+                var requiredStores = draft.Meals
+                    .SelectMany(m => m.Ingredients)
+                    .Where(i => !string.IsNullOrWhiteSpace(i.StoreName))
+                    .Select(i => i.StoreName!)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                var totalTravelTimeMinutes = 10 + (requiredStores.Count * 15);
+
+                var finalResultDto = new MealPlanResultDto
+                {
+                    MealPlanId = draft.MealPlanId,
+                    EstimatedTotalTripCost = estimatedTotalTripCost,
+                    TotalTravelTimeMinutes = totalTravelTimeMinutes,
+                    RequiredStores = requiredStores,
+                    Recipes = recipeCards
+                };
+
+                // 6. Transition Job to Completed
+                await _jobStateStore.CompleteJobAsync(jobId, finalResultDto, ct);
+
+                _logger.LogInformation(
+                    "Completed meal plan generation for Job {JobId}. Total Cost: {TotalCost:C}, Recipes Count: {RecipeCount}, Required Stores: {StoreCount}.",
+                    jobId,
+                    finalResultDto.EstimatedTotalTripCost,
+                    finalResultDto.Recipes.Count,
+                    finalResultDto.RequiredStores.Count);
             }
-
-            var requiredStores = draft.Meals
-                .SelectMany(m => m.Ingredients)
-                .Where(i => !string.IsNullOrWhiteSpace(i.StoreName) && i.DealPrice.HasValue)
-                .Select(i => i.StoreName!)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            var estimatedTotalTripCost = draft.Meals
-                .SelectMany(m => m.Ingredients)
-                .Where(i => !string.IsNullOrWhiteSpace(i.StoreName) && i.DealPrice.HasValue)
-                .Sum(i => i.DealPrice!.Value * i.Quantity);
-
-            var totalTravelTimeMinutes = 10 + (requiredStores.Count * 15);
-
-            var finalResultDto = new MealPlanResultDto
-            {
-                MealPlanId = draft.MealPlanId,
-                EstimatedTotalTripCost = estimatedTotalTripCost,
-                TotalTravelTimeMinutes = totalTravelTimeMinutes,
-                RequiredStores = requiredStores,
-                Recipes = recipeCards
-            };
-
-            // 6. Transition Job to Completed
-            await _jobStateStore.CompleteJobAsync(jobId, finalResultDto, ct);
-
-            _logger.LogInformation(
-                "Completed meal plan generation for Job {JobId}. Total Cost: {TotalCost:C}, Recipes Count: {RecipeCount}, Required Stores: {StoreCount}.",
-                jobId,
-                finalResultDto.EstimatedTotalTripCost,
-                finalResultDto.Recipes.Count,
-                finalResultDto.RequiredStores.Count);
         }
         catch (Exception ex)
         {
