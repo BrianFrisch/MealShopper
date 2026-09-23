@@ -141,3 +141,40 @@ BEGIN
     WHERE p.user_id = p_user_id;
 END;
 $$;
+
+-- 7. Application Role & Least-Privilege Grants
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'mealshopper_app') THEN
+        CREATE ROLE mealshopper_app WITH LOGIN PASSWORD 'MealShopperApp_Dev_Pwd99!';
+    ELSE
+        ALTER ROLE mealshopper_app WITH PASSWORD 'MealShopperApp_Dev_Pwd99!';
+    END IF;
+END
+$$;
+
+GRANT CONNECT ON DATABASE mealshopper TO mealshopper_app;
+GRANT USAGE ON SCHEMA public TO mealshopper_app;
+
+-- Grant DML execution on tables
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO mealshopper_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mealshopper_app;
+
+-- Grant Execution on functions and procedures
+GRANT EXECUTE ON ALL ROUTINES IN SCHEMA public TO mealshopper_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON ROUTINES TO mealshopper_app;
+
+-- -- 8. Seed Default Test User (Password: Password123!)
+-- -- Hash generated using standard ASP.NET Core Identity PasswordHasher (PBKDF2 with HMAC-SHA256)
+-- CALL sp_create_user(
+--     'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d'::UUID,
+--     'testuser@mealshopper.local',
+--     'AQAAAAIAAYagAAAAEI46P3jC5v1P84d0bH2+M5rV8N9m9K9E3S4f8t8r2J5W8Z7+L3e1Q==',
+--     ARRAY['User'],
+--     '15625 Hawthorne Blvd',
+--     'Lawndale',
+--     'CA',
+--     '90260',
+--     '["Italian", "Mexican"]'::jsonb,
+--     '["Peanuts"]'::jsonb
+-- );

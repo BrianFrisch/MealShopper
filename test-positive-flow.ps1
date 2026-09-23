@@ -1,11 +1,9 @@
 $ErrorActionPreference = "Stop"
 
-# Service endpoints
-$identityUrl = "http://localhost:5119"
-$gatewayUrl  = "http://localhost:5247"
+$gatewayUrl = "http://localhost:5247"
 
 Write-Host "=========================================" -ForegroundColor Cyan
-Write-Host " 1. Requesting Token from Identity Service" -ForegroundColor Cyan
+Write-Host " 1. Requesting Token via API Gateway" -ForegroundColor Cyan
 Write-Host "=========================================" -ForegroundColor Cyan
 
 $tokenBody = @{
@@ -16,15 +14,15 @@ $tokenBody = @{
 
 try {
     $tokenResponse = Invoke-RestMethod -Method Post `
-        -Uri "http://localhost:5119/v1/auth/token" `
+        -Uri "$gatewayUrl/v1/auth/token" `
         -ContentType "application/json" `
         -Body $tokenBody
 
-    $accessToken = $tokenResponse.access_token
+    $accessToken =$tokenResponse.access_token
     Write-Host "[SUCCESS] Acquired Bearer Token!" -ForegroundColor Green
     Write-Host "Expires in: $($tokenResponse.expires_in) seconds" -ForegroundColor Gray
 } catch {
-    Write-Host "[ERROR] Failed to obtain token from Identity Service: $_" -ForegroundColor Red
+    Write-Host "[ERROR] Failed to obtain token from Gateway: $_" -ForegroundColor Red
     exit 1
 }
 

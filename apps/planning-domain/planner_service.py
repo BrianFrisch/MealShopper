@@ -1,7 +1,7 @@
 import logging
 import os
 import uuid
-from typing import List
+from typing import Any, List
 from google import genai
 from google.genai import types
 
@@ -70,7 +70,7 @@ class MealPlannerService:
         total_spend = 0.0
 
         # Template recipes to draw from
-        recipe_templates = [
+        recipe_templates: List[dict[str, Any]] = [
             {
                 "name": "Pan-Seared Herb Protein with Roasted Vegetables",
                 "description": "Flavorful seared protein paired with seasoned roasted vegetables.",

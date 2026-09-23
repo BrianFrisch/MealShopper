@@ -16,6 +16,7 @@ public class TokenController : ControllerBase
     private readonly IClientStore _clientStore;
     private readonly HttpClient _httpClient;
     private readonly ILogger<TokenController> _logger;
+    private readonly string _userServiceBaseUrl;
 
     private sealed record ValidateCredentialsResponse(bool IsValid, Guid UserId, string Email, List<string>? Roles);
 
@@ -24,6 +25,7 @@ public class TokenController : ControllerBase
         IRefreshTokenStore refreshTokenStore,
         IClientStore clientStore,
         ILogger<TokenController> logger,
+        IConfiguration configuration,
         IHttpClientFactory? httpClientFactory = null,
         HttpClient? httpClient = null)
     {
@@ -32,6 +34,14 @@ public class TokenController : ControllerBase
         _clientStore = clientStore ?? throw new ArgumentNullException(nameof(clientStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _httpClient = httpClient ?? httpClientFactory?.CreateClient() ?? new HttpClient();
+
+        // Resolve user service URL from environment/appsettings with localhost fallback
+        _userServiceBaseUrl = configuration["UserService:BaseUrl"] 
+            ?? configuration["Services:UserServiceUrl"] 
+            ?? configuration["UserServiceUrl"] 
+            ?? "http://localhost:5125";
+            
+        _userServiceBaseUrl = _userServiceBaseUrl.TrimEnd('/');
     }
 
     /// <summary>
@@ -174,7 +184,7 @@ public class TokenController : ControllerBase
             try
             {
                 validationResponse = await _httpClient.PostAsJsonAsync(
-                    "http://localhost:5125/v1/internal/users/validate-credentials",
+                    $"{_userServiceBaseUrl}/v1/internal/users/validate-credentials",
                     validationPayload,
                     ct);
             }

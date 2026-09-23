@@ -6,5 +6,9 @@
             "approve": true,
             "matchCommandLine": true
         }
+    },
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportUnknownMemberType": "none",
+        "reportUnknownVariableType": "none"
     }
 }

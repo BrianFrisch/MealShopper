@@ -258,7 +258,7 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
 
                 // Build a fast lookup dictionary of all circular deals & matched secondary deals
                 // var dealLookup = topDeals.Deals.ToDictionary(d => d.DealId, StringComparer.OrdinalIgnoreCase);
-                var dealLookup = topDeals.Deals.ToDictionary(
+                var dealLookup = (topDeals.Deals ?? []).ToDictionary(
                     d => d.DealId, 
                     d => new { Price = d.DealPrice, Unit = d.Unit }, 
                     StringComparer.OrdinalIgnoreCase);
@@ -306,7 +306,7 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                             ingredientsWithDeals.Add(new DisplayIngredientDto
                             {
                                 Name = ingredient.Name,
-                                AmountDescription = amountDesc,
+                                AmountDescription = amountDesc ?? string.Empty,
                                 StoreName = ingredient.StoreName,
                                 DealPriceDescription = priceDesc
                             });
