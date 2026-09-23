@@ -41,7 +41,7 @@ public class MealPlanOrchestratorTests
             .Setup(s => s.ScoreDealsAsync(It.Is<DealScoringRequest>(r => r.StoreIds.Count == 2), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DealScoringResponse { Deals = scoredDeals, TotalScored = 1 });
 
-        var plannedMeals = new List<MealShopper.Orchestrator.Models.Domain.PlannedMealDto>
+        var plannedMeals = new List<PlannedMealDto>
         {
             new()
             {
@@ -180,7 +180,7 @@ public class MealPlanOrchestratorTests
             .ReturnsAsync(new MealPlanResponseDto
             {
                 PlanId = "plan-complete",
-                Meals = new List<MealShopper.Orchestrator.Models.Domain.PlannedMealDto>(),
+                Meals = new List<PlannedMealDto>(),
                 MissingPrimaryIngredients = new List<string>(),
                 EstimatedTotalSpend = 20.00m
             });

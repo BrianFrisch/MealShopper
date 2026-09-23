@@ -38,60 +38,104 @@ public class PasswordHasher : IPasswordHasher
             return false;
         }
 
-        // Support both delimiter formats ({salt}:{iterations}:{hash} or {iterations}.{salt}.{hash})
-        string[] parts;
-        byte[] salt;
-        int iterations;
-        byte[] expectedHash;
-
-        if (passwordHash.Contains(':'))
-        {
-            parts = passwordHash.Split(':', 3);
-            if (parts.Length != 3 || !int.TryParse(parts[1], out iterations))
-            {
-                return false;
-            }
-
-            try
-            {
-                salt = Convert.FromBase64String(parts[0]);
-                expectedHash = Convert.FromBase64String(parts[2]);
-            }
-            catch (FormatException)
-            {
-                return false;
-            }
-        }
-        else if (passwordHash.Contains('.'))
-        {
-            parts = passwordHash.Split('.', 3);
-            if (parts.Length != 3 || !int.TryParse(parts[0], out iterations))
-            {
-                return false;
-            }
-
-            try
-            {
-                salt = Convert.FromBase64String(parts[1]);
-                expectedHash = Convert.FromBase64String(parts[2]);
-            }
-            catch (FormatException)
-            {
-                return false;
-            }
-        }
-        else
+        if (!TryParsePasswordHash(passwordHash, out var salt, out var iterations, out var expectedHash))
         {
             return false;
         }
 
-        var actualHash = KeyDerivation.Pbkdf2(
+        var actualHash = ComputeHash(password, salt, iterations, expectedHash.Length);
+        return CryptographicOperations.FixedTimeEquals(actualHash, expectedHash);
+    }
+
+    private static bool TryParsePasswordHash(
+        string passwordHash,
+        out byte[] salt,
+        out int iterations,
+        out byte[] expectedHash)
+    {
+        if (passwordHash.Contains(':'))
+        {
+            return TryParseColonFormat(passwordHash, out salt, out iterations, out expectedHash);
+        }
+
+        if (passwordHash.Contains('.'))
+        {
+            return TryParseDotFormat(passwordHash, out salt, out iterations, out expectedHash);
+        }
+
+        salt = [];
+        iterations = 0;
+        expectedHash = [];
+        return false;
+    }
+
+    private static bool TryParseColonFormat(
+        string passwordHash,
+        out byte[] salt,
+        out int iterations,
+        out byte[] expectedHash)
+    {
+        salt = [];
+        iterations = 0;
+        expectedHash = [];
+
+        // Format: {salt_base64}:{iterations}:{hash_base64}
+        var parts = passwordHash.Split(':', 3);
+        if (parts.Length != 3 || !int.TryParse(parts[1], out iterations))
+        {
+            return false;
+        }
+
+        return TryDecodeBase64Pair(parts[0], parts[2], out salt, out expectedHash);
+    }
+
+    private static bool TryParseDotFormat(
+        string passwordHash,
+        out byte[] salt,
+        out int iterations,
+        out byte[] expectedHash)
+    {
+        salt = [];
+        iterations = 0;
+        expectedHash = [];
+
+        // Format: {iterations}.{salt_base64}.{hash_base64}
+        var parts = passwordHash.Split('.', 3);
+        if (parts.Length != 3 || !int.TryParse(parts[0], out iterations))
+        {
+            return false;
+        }
+
+        return TryDecodeBase64Pair(parts[1], parts[2], out salt, out expectedHash);
+    }
+
+    private static bool TryDecodeBase64Pair(
+        string saltBase64,
+        string hashBase64,
+        out byte[] salt,
+        out byte[] hash)
+    {
+        try
+        {
+            salt = Convert.FromBase64String(saltBase64);
+            hash = Convert.FromBase64String(hashBase64);
+            return true;
+        }
+        catch (FormatException)
+        {
+            salt = [];
+            hash = [];
+            return false;
+        }
+    }
+
+    private static byte[] ComputeHash(string password, byte[] salt, int iterations, int numBytesRequested)
+    {
+        return KeyDerivation.Pbkdf2(
             password: password,
             salt: salt,
             prf: Prf,
             iterationCount: iterations,
-            numBytesRequested: expectedHash.Length);
-
-        return CryptographicOperations.FixedTimeEquals(actualHash, expectedHash);
+            numBytesRequested: numBytesRequested);
     }
 }

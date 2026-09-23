@@ -27,7 +27,14 @@ public class SecurityHeadersContextMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        // 1. Header Sanitization: Strip untrusted client headers to prevent spoofing
+        SanitizeUntrustedHeaders(context);
+        InjectUserClaimsHeaders(context);
+
+        await _next(context);
+    }
+
+    private static void SanitizeUntrustedHeaders(HttpContext context)
+    {
         foreach (var header in HeadersToSanitize)
         {
             if (context.Request.Headers.ContainsKey(header))
@@ -35,47 +42,49 @@ public class SecurityHeadersContextMiddleware
                 context.Request.Headers.Remove(header);
             }
         }
+    }
 
-        // 2. Context Injection: Inject trusted identity headers if the request is authenticated
-        if (context.User.Identity?.IsAuthenticated == true)
+    private static void InjectUserClaimsHeaders(HttpContext context)
+    {
+        if (context.User.Identity?.IsAuthenticated != true)
         {
-            var userId = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                         ?? context.User.FindFirst("sub")?.Value;
-
-            if (!string.IsNullOrWhiteSpace(userId))
-            {
-                context.Request.Headers["X-User-Id"] = userId;
-            }
-
-            var email = context.User.FindFirst(ClaimTypes.Email)?.Value
-                        ?? context.User.FindFirst("email")?.Value;
-
-            if (!string.IsNullOrWhiteSpace(email))
-            {
-                context.Request.Headers["X-User-Email"] = email;
-            }
-
-            var roles = context.User.FindAll(ClaimTypes.Role)
-                .Concat(context.User.FindAll("role"))
-                .Select(c => c.Value)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            if (roles.Count > 0)
-            {
-                context.Request.Headers["X-User-Roles"] = string.Join(",", roles);
-            }
-
-            var clientId = context.User.FindFirst("client_id")?.Value;
-            if (!string.IsNullOrWhiteSpace(clientId))
-            {
-                context.Request.Headers["X-Client-Id"] = clientId;
-            }
-
-            context.Request.Headers["X-Authenticated"] = "true";
+            return;
         }
 
-        await _next(context);
+        var userId = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                     ?? context.User.FindFirst("sub")?.Value;
+
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            context.Request.Headers["X-User-Id"] = userId;
+        }
+
+        var email = context.User.FindFirst(ClaimTypes.Email)?.Value
+                    ?? context.User.FindFirst("email")?.Value;
+
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            context.Request.Headers["X-User-Email"] = email;
+        }
+
+        var roles = context.User.FindAll(ClaimTypes.Role)
+            .Concat(context.User.FindAll("role"))
+            .Select(c => c.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (roles.Count > 0)
+        {
+            context.Request.Headers["X-User-Roles"] = string.Join(",", roles);
+        }
+
+        var clientId = context.User.FindFirst("client_id")?.Value;
+        if (!string.IsNullOrWhiteSpace(clientId))
+        {
+            context.Request.Headers["X-Client-Id"] = clientId;
+        }
+
+        context.Request.Headers["X-Authenticated"] = "true";
     }
 }
 

@@ -31,16 +31,27 @@ public class ClientCredentialsTokenAcquisitionService : ITokenAcquisitionService
     /// <inheritdoc />
     public async Task<string> GetAccessTokenAsync(string scope, CancellationToken ct = default)
     {
-        var tokenEndpoint = _configuration["Identity:TokenEndpoint"] ?? "http://localhost:5119/v1/auth/token";
         var clientId = _configuration["Identity:ClientId"] ?? "orchestrator-client";
-        var clientSecret = _configuration["Identity:ClientSecret"] ?? "OrchestratorSecretKey_99!";
-
         var cacheKey = $"m2m_token_{clientId}_{scope}";
 
         if (_memoryCache.TryGetValue(cacheKey, out string? cachedToken) && !string.IsNullOrWhiteSpace(cachedToken))
         {
             return cachedToken;
         }
+
+        var tokenResponse = await FetchTokenFromIdentityServerAsync(clientId, scope, ct);
+        CacheAccessToken(cacheKey, tokenResponse);
+
+        return tokenResponse.AccessToken;
+    }
+
+    private async Task<TokenResponseDto> FetchTokenFromIdentityServerAsync(
+        string clientId,
+        string scope,
+        CancellationToken ct)
+    {
+        var tokenEndpoint = _configuration["Identity:TokenEndpoint"] ?? "http://localhost:5119/v1/auth/token";
+        var clientSecret = _configuration["Identity:ClientSecret"] ?? "OrchestratorSecretKey_99!";
 
         var requestPayload = new
         {
@@ -71,18 +82,20 @@ public class ClientCredentialsTokenAcquisitionService : ITokenAcquisitionService
         }
 
         var tokenResponse = await response.Content.ReadFromJsonAsync<TokenResponseDto>(cancellationToken: ct);
-
         if (tokenResponse == null || string.IsNullOrWhiteSpace(tokenResponse.AccessToken))
         {
             throw new InvalidOperationException("Identity service returned an empty token response.");
         }
 
+        return tokenResponse;
+    }
+
+    private void CacheAccessToken(string cacheKey, TokenResponseDto tokenResponse)
+    {
         var expiresInSeconds = tokenResponse.ExpiresIn > 0 ? tokenResponse.ExpiresIn : 900;
         var cacheDurationSeconds = Math.Max(30, expiresInSeconds - 60);
 
         _memoryCache.Set(cacheKey, tokenResponse.AccessToken, TimeSpan.FromSeconds(cacheDurationSeconds));
-
-        return tokenResponse.AccessToken;
     }
 
     private class TokenResponseDto

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using MealShopper.Orchestrator.Models.Domain;
 
 namespace MealShopper.Orchestrator.Models.Planner;
 
@@ -10,8 +11,11 @@ public class MealPlanDraftResponse
     /// <summary>
     /// Unique identifier for the generated meal plan draft.
     /// </summary>
-    [JsonPropertyName("plan_id")]
+    [JsonPropertyName("meal_plan_id")]
     public string MealPlanId { get; set; } = string.Empty;
+
+    [JsonPropertyName("plan_id")]
+    public string PlanId { get => MealPlanId; set => MealPlanId = value; }
 
     /// <summary>
     /// List of meals planned for the schedule.

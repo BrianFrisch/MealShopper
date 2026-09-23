@@ -33,62 +33,92 @@ public class MissingIngredientDtoConverter : JsonConverter<MissingIngredientDto>
 {
     public override MissingIngredientDto Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        if (reader.TokenType == JsonTokenType.String)
+        return reader.TokenType switch
         {
-            return new MissingIngredientDto(reader.GetString() ?? string.Empty);
+            JsonTokenType.String => new MissingIngredientDto(reader.GetString() ?? string.Empty),
+            JsonTokenType.StartObject => ReadFromObject(ref reader),
+            _ => new MissingIngredientDto()
+        };
+    }
+
+    private static MissingIngredientDto ReadFromObject(ref Utf8JsonReader reader)
+    {
+        using var doc = JsonDocument.ParseValue(ref reader);
+        var root = doc.RootElement;
+
+        return new MissingIngredientDto
+        {
+            IngredientName = ExtractIngredientName(root),
+            Quantity = ExtractQuantity(root),
+            Unit = ExtractUnit(root),
+            AssociatedRecipeTitles = ExtractAssociatedRecipeTitles(root)
+        };
+    }
+
+    private static string ExtractIngredientName(JsonElement root)
+    {
+        if (root.TryGetProperty("ingredient_name", out var nameProp))
+        {
+            return nameProp.GetString() ?? string.Empty;
         }
 
-        if (reader.TokenType == JsonTokenType.StartObject)
+        if (root.TryGetProperty("name", out var altName))
         {
-            using var doc = JsonDocument.ParseValue(ref reader);
-            var root = doc.RootElement;
-            var dto = new MissingIngredientDto();
-
-            if (root.TryGetProperty("ingredient_name", out var nameProp))
-            {
-                dto.IngredientName = nameProp.GetString() ?? string.Empty;
-            }
-            else if (root.TryGetProperty("name", out var altName))
-            {
-                dto.IngredientName = altName.GetString() ?? string.Empty;
-            }
-
-            if (root.TryGetProperty("quantity", out var qtyProp))
-            {
-                if (qtyProp.ValueKind == JsonValueKind.Number && qtyProp.TryGetDecimal(out var decVal))
-                {
-                    dto.Quantity = decVal;
-                }
-                else if (qtyProp.ValueKind == JsonValueKind.String)
-                {
-                    var text = qtyProp.GetString();
-                    if (System.Text.RegularExpressions.Regex.Match(text ?? "", @"^-?\d+(\.\d+)?") is { Success: true } m)
-                    {
-                        if (decimal.TryParse(m.Value, out var parsedDec))
-                        {
-                            dto.Quantity = parsedDec;
-                        }
-                    }
-                }
-            }
-
-            if (root.TryGetProperty("unit", out var unitProp))
-            {
-                dto.Unit = unitProp.GetString() ?? string.Empty;
-            }
-
-            if (root.TryGetProperty("associated_recipe_titles", out var recipesProp) && recipesProp.ValueKind == JsonValueKind.Array)
-            {
-                dto.AssociatedRecipeTitles = recipesProp.EnumerateArray()
-                    .Select(e => e.GetString() ?? string.Empty)
-                    .Where(s => !string.IsNullOrWhiteSpace(s))
-                    .ToList();
-            }
-
-            return dto;
+            return altName.GetString() ?? string.Empty;
         }
 
-        return new MissingIngredientDto();
+        return string.Empty;
+    }
+
+    private static decimal ExtractQuantity(JsonElement root)
+    {
+        if (!root.TryGetProperty("quantity", out var qtyProp))
+        {
+            return 0m;
+        }
+
+        if (qtyProp.ValueKind == JsonValueKind.Number && qtyProp.TryGetDecimal(out var decVal))
+        {
+            return decVal;
+        }
+
+        if (qtyProp.ValueKind == JsonValueKind.String)
+        {
+            return TryParseQuantityString(qtyProp.GetString());
+        }
+
+        return 0m;
+    }
+
+    private static decimal TryParseQuantityString(string? text)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(text ?? string.Empty, @"^-?\d+(\.\d+)?");
+        if (match.Success && decimal.TryParse(match.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var parsedDec))
+        {
+            return parsedDec;
+        }
+
+        return 0m;
+    }
+
+    private static string ExtractUnit(JsonElement root)
+    {
+        return root.TryGetProperty("unit", out var unitProp)
+            ? unitProp.GetString() ?? string.Empty
+            : string.Empty;
+    }
+
+    private static List<string> ExtractAssociatedRecipeTitles(JsonElement root)
+    {
+        if (root.TryGetProperty("associated_recipe_titles", out var recipesProp) && recipesProp.ValueKind == JsonValueKind.Array)
+        {
+            return recipesProp.EnumerateArray()
+                .Select(e => e.GetString() ?? string.Empty)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .ToList();
+        }
+
+        return [];
     }
 
     public override void Write(Utf8JsonWriter writer, MissingIngredientDto value, JsonSerializerOptions options)
