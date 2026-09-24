@@ -81,6 +81,8 @@ public class MealPlanOrchestratorTests
         var orchestrator = new MealPlanOrchestrator(
             mockShopper.Object,
             mockPlanner.Object,
+            Mock.Of<IPlanningClient>(),
+            Mock.Of<IJobStateStore>(),
             NullLogger<MealPlanOrchestrator>.Instance);
 
         var request = new PlanGenerationWorkflowRequest(
@@ -131,6 +133,8 @@ public class MealPlanOrchestratorTests
         var orchestrator = new MealPlanOrchestrator(
             mockShopper.Object,
             mockPlanner.Object,
+            Mock.Of<IPlanningClient>(),
+            Mock.Of<IJobStateStore>(),
             NullLogger<MealPlanOrchestrator>.Instance);
 
         var request = new PlanGenerationWorkflowRequest(
@@ -188,6 +192,8 @@ public class MealPlanOrchestratorTests
         var orchestrator = new MealPlanOrchestrator(
             mockShopper.Object,
             mockPlanner.Object,
+            Mock.Of<IPlanningClient>(),
+            Mock.Of<IJobStateStore>(),
             NullLogger<MealPlanOrchestrator>.Instance);
 
         var request = new PlanGenerationWorkflowRequest(
@@ -242,9 +248,10 @@ public class MealPlanOrchestratorTests
         var planningClient = new PlanningClient(plannerHttpClient, NullLogger<PlanningClient>.Instance);
 
         var orchestrator = new MealPlanOrchestrator(
-            jobStore,
             shopperClient,
+            Mock.Of<IPlannerClient>(),
             planningClient,
+            jobStore,
             NullLogger<MealPlanOrchestrator>.Instance);
 
         var jobId = Guid.NewGuid();
@@ -367,9 +374,10 @@ public class MealPlanOrchestratorTests
         var planningClient = new PlanningClient(plannerHttpClient, NullLogger<PlanningClient>.Instance);
 
         var orchestrator = new MealPlanOrchestrator(
-            jobStore,
             shopperClient,
+            Mock.Of<IPlannerClient>(),
             planningClient,
+            jobStore,
             NullLogger<MealPlanOrchestrator>.Instance);
 
         var jobId = Guid.NewGuid();
@@ -432,9 +440,10 @@ public class MealPlanOrchestratorTests
         };
 
         var orchestrator = new MealPlanOrchestrator(
-            jobStore,
             shopperClient,
+            Mock.Of<IPlannerClient>(),
             planningClient,
+            jobStore,
             NullLogger<MealPlanOrchestrator>.Instance);
 
         var jobId = Guid.NewGuid();
@@ -485,9 +494,10 @@ public class MealPlanOrchestratorTests
         var planningClient = new PlanningClient(plannerHttpClient, NullLogger<PlanningClient>.Instance);
 
         var orchestrator = new MealPlanOrchestrator(
-            jobStore,
             shopperClient,
+            Mock.Of<IPlannerClient>(),
             planningClient,
+            jobStore,
             NullLogger<MealPlanOrchestrator>.Instance);
 
         var jobId = Guid.NewGuid();
@@ -556,9 +566,10 @@ public class MealPlanOrchestratorTests
         var planningClient = new PlanningClient(plannerHttpClient, NullLogger<PlanningClient>.Instance);
 
         var orchestrator = new MealPlanOrchestrator(
-            jobStore,
             shopperClient,
+            Mock.Of<IPlannerClient>(),
             planningClient,
+            jobStore,
             NullLogger<MealPlanOrchestrator>.Instance);
 
         var jobId = Guid.NewGuid();
