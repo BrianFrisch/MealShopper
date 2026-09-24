@@ -39,6 +39,9 @@ public class MealPlansController : ControllerBase
             return BadRequest(ModelState);
         }
 
+        var userId = Request.Headers["X-User-Id"].FirstOrDefault() ?? "Anonymous";
+        var roles = Request.Headers["X-User-Roles"].FirstOrDefault() ?? "None";
+
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
 
@@ -53,7 +56,7 @@ public class MealPlansController : ControllerBase
 
         await _jobStateStore.CreateJobAsync(job, cancellationToken);
 
-        _logger.LogInformation("Accepted meal plan generation request. JobId: {JobId}", job.JobId);
+        _logger.LogInformation("Accepted meal plan generation request for {userId} ({roles}). JobId: {JobId}", userId, roles, job.JobId);
 
         // Trigger workflow execution asynchronously in background
         _ = Task.Run(async () =>

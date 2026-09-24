@@ -7,15 +7,6 @@ namespace MealShopper.Gateway.Middleware;
 /// </summary>
 public class SecurityHeadersContextMiddleware
 {
-    private static readonly string[] HeadersToSanitize =
-    [
-        "X-User-Id",
-        "X-User-Email",
-        "X-User-Roles",
-        "X-Client-Id",
-        "X-Authenticated"
-    ];
-
     private readonly RequestDelegate _next;
     private readonly ILogger<SecurityHeadersContextMiddleware> _logger;
 
@@ -33,18 +24,23 @@ public class SecurityHeadersContextMiddleware
         await _next(context);
     }
 
-    private static void SanitizeUntrustedHeaders(HttpContext context)
+    private void SanitizeUntrustedHeaders(HttpContext context)
     {
-        foreach (var header in HeadersToSanitize)
+        var headersToRemove = context.Request.Headers.Keys
+            .Where(k => k.StartsWith("X-User-", StringComparison.OrdinalIgnoreCase)
+                     || string.Equals(k, "X-Tenant-Id", StringComparison.OrdinalIgnoreCase)
+                     || string.Equals(k, "X-Client-Id", StringComparison.OrdinalIgnoreCase)
+                     || string.Equals(k, "X-Authenticated", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var header in headersToRemove)
         {
-            if (context.Request.Headers.ContainsKey(header))
-            {
-                context.Request.Headers.Remove(header);
-            }
+            context.Request.Headers.Remove(header);
+            _logger.LogInformation("Removed untrusted header: {Header}", header);
         }
     }
 
-    private static void InjectUserClaimsHeaders(HttpContext context)
+    private void InjectUserClaimsHeaders(HttpContext context)
     {
         if (context.User.Identity?.IsAuthenticated != true)
         {
@@ -69,7 +65,8 @@ public class SecurityHeadersContextMiddleware
 
         var roles = context.User.FindAll(ClaimTypes.Role)
             .Concat(context.User.FindAll("role"))
-            .Select(c => c.Value)
+            .Concat(context.User.FindAll("roles"))
+            .SelectMany(c => c.Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
