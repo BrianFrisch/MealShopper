@@ -90,3 +90,5 @@ C:\Users\admin\Repositories\MealShopper\apps\orchestrator\MealShopper.Orchestrat
 C:\Users\admin\Repositories\MealShopper\apps\orchestrator\MealShopper.Orchestrator\obj\Debug\net8.0\MealShopper.Orchestrator.pdb
 C:\Users\admin\Repositories\MealShopper\apps\orchestrator\MealShopper.Orchestrator\obj\Debug\net8.0\MealShopper.Orchestrator.genruntimeconfig.cache
 C:\Users\admin\Repositories\MealShopper\apps\orchestrator\MealShopper.Orchestrator\obj\Debug\net8.0\ref\MealShopper.Orchestrator.dll
+C:\Users\admin\Repositories\MealShopper\apps\orchestrator\MealShopper.Orchestrator\bin\Debug\net8.0\Pipelines.Sockets.Unofficial.dll
+C:\Users\admin\Repositories\MealShopper\apps\orchestrator\MealShopper.Orchestrator\bin\Debug\net8.0\StackExchange.Redis.dll

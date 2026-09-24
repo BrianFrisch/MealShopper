@@ -115,12 +115,15 @@ services:
       Identity__TokenEndpoint: "http://identity-service:5119/v1/auth/token"
       ShopperService__BaseUrl: "http://shopper-domain:8001"
       PlanningService__BaseUrl: "http://planning-domain:8002"
+      ConnectionStrings__Redis: "redis:6379"
+      Redis__InstanceName: "mealshopper:jobs:"
     ports:
       - "5277:5277"
     depends_on:
       - shopper-domain
       - planning-domain
       - identity-service
+      - redis
     networks:
       - mealshopper-net
 

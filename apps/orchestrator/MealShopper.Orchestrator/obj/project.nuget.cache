@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "QFrBO1ALxnw=",
+  "dgSpecHash": "h/L5fiECqxw=",
   "success": true,
   "projectFilePath": "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj",
   "expectedPackageFiles": [
@@ -33,9 +33,11 @@
     "C:\\Users\\admin\\.nuget\\packages\\microsoft.extensions.telemetry\\10.10.0\\microsoft.extensions.telemetry.10.10.0.nupkg.sha512",
     "C:\\Users\\admin\\.nuget\\packages\\microsoft.extensions.telemetry.abstractions\\10.10.0\\microsoft.extensions.telemetry.abstractions.10.10.0.nupkg.sha512",
     "C:\\Users\\admin\\.nuget\\packages\\microsoft.openapi\\1.6.30\\microsoft.openapi.1.6.30.nupkg.sha512",
+    "C:\\Users\\admin\\.nuget\\packages\\pipelines.sockets.unofficial\\2.2.8\\pipelines.sockets.unofficial.2.2.8.nupkg.sha512",
     "C:\\Users\\admin\\.nuget\\packages\\polly.core\\8.4.2\\polly.core.8.4.2.nupkg.sha512",
     "C:\\Users\\admin\\.nuget\\packages\\polly.extensions\\8.4.2\\polly.extensions.8.4.2.nupkg.sha512",
     "C:\\Users\\admin\\.nuget\\packages\\polly.ratelimiting\\8.4.2\\polly.ratelimiting.8.4.2.nupkg.sha512",
+    "C:\\Users\\admin\\.nuget\\packages\\stackexchange.redis\\2.8.31\\stackexchange.redis.2.8.31.nupkg.sha512",
     "C:\\Users\\admin\\.nuget\\packages\\swashbuckle.aspnetcore\\6.6.2\\swashbuckle.aspnetcore.6.6.2.nupkg.sha512",
     "C:\\Users\\admin\\.nuget\\packages\\swashbuckle.aspnetcore.swagger\\6.6.2\\swashbuckle.aspnetcore.swagger.6.6.2.nupkg.sha512",
     "C:\\Users\\admin\\.nuget\\packages\\swashbuckle.aspnetcore.swaggergen\\6.6.2\\swashbuckle.aspnetcore.swaggergen.6.6.2.nupkg.sha512",

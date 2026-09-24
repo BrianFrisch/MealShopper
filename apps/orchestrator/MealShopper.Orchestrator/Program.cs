@@ -5,6 +5,7 @@ using MealShopper.Orchestrator.Services;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Http.Resilience;
 using Polly;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -160,10 +161,16 @@ builder.Services.AddHttpClient<IPlannerClient, PlannerClient>(client =>
     return new M2MAuthenticationHandler(tokenService, "planner.generate", logger);
 });
 
+// Register Redis connection
+var redisConn = builder.Configuration.GetConnectionString("Redis") 
+    ?? builder.Configuration["Redis:Configuration"] 
+    ?? "localhost:6379";
+builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConn));
+
 // Register job state tracking services
-builder.Services.AddSingleton<InMemoryJobTracker>();
-builder.Services.AddSingleton<IJobStateStore>(sp => sp.GetRequiredService<InMemoryJobTracker>());
-builder.Services.AddSingleton<IJobTracker>(sp => sp.GetRequiredService<InMemoryJobTracker>());
+builder.Services.AddSingleton<RedisJobStateStore>();
+builder.Services.AddSingleton<IJobStateStore>(sp => sp.GetRequiredService<RedisJobStateStore>());
+builder.Services.AddSingleton<IJobTracker>(sp => sp.GetRequiredService<RedisJobStateStore>());
 
 // Register workflow orchestrator
 builder.Services.AddScoped<IMealPlanOrchestrator, MealPlanOrchestrator>();
