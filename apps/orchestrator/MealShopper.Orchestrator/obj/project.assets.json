@@ -746,6 +746,19 @@
         "build": {
           "buildTransitive/net6.0/_._": {}
         }
+      },
+      "MealShopper.Common/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "compile": {
+          "bin/placeholder/MealShopper.Common.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/MealShopper.Common.dll": {}
+        },
+        "frameworkReferences": [
+          "Microsoft.AspNetCore.App"
+        ]
       }
     }
   },
@@ -2100,10 +2113,16 @@
         "system.threading.ratelimiting.nuspec",
         "useSharedDesignerContext.txt"
       ]
+    },
+    "MealShopper.Common/1.0.0": {
+      "type": "project",
+      "path": "../../../libs/MealShopper.Common/MealShopper.Common.csproj",
+      "msbuildProject": "../../../libs/MealShopper.Common/MealShopper.Common.csproj"
     }
   },
   "projectFileDependencyGroups": {
     "net8.0": [
+      "MealShopper.Common >= 1.0.0",
       "Microsoft.AspNetCore.OpenApi >= 8.0.*",
       "Microsoft.Extensions.Http.Resilience >= 10.10.0",
       "StackExchange.Redis >= 2.8.31",
@@ -2134,7 +2153,11 @@
       "frameworks": {
         "net8.0": {
           "targetAlias": "net8.0",
-          "projectReferences": {}
+          "projectReferences": {
+            "c:\\Users\\admin\\Repositories\\MealShopper\\libs\\MealShopper.Common\\MealShopper.Common.csproj": {
+              "projectPath": "c:\\Users\\admin\\Repositories\\MealShopper\\libs\\MealShopper.Common\\MealShopper.Common.csproj"
+            }
+          }
         }
       },
       "warningProperties": {

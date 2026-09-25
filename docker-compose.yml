@@ -14,7 +14,6 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - postgres_data:/var/lib/postgresql/data
       - .apps/user-service/MealShopper.Users/Infrastructure/postgres/00_run_all.sh:/docker-entrypoint-initdb.d/00_run_all.sh
       - .apps/user-service/MealShopper.Users/Infrastructure/postgres/init:/docker-entrypoint-initdb.d/init
       # - ./apps/user-service/MealShopper.Users/Data/schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -37,8 +36,8 @@ services:
 
   user-service:
     build:
-      context: ./apps/user-service/MealShopper.Users
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/user-service/MealShopper.Users/Dockerfile
     container_name: mealshopper-users
     environment:
       ASPNETCORE_URLS: "http://+:5125"

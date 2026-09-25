@@ -1,6 +1,8 @@
+using Dapper;
+
+using MealShopper.Common.Security;
 using MealShopper.Users.Data;
 using MealShopper.Users.Services;
-using Dapper;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,6 +14,9 @@ builder.Services.AddSingleton<PasswordHasher>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+builder.Services.AddScoped<GatewayUserContext>();
+builder.Services.AddScoped<IGatewayUserContext>(sp => sp.GetRequiredService<GatewayUserContext>());
 
 var app = builder.Build();
 
