@@ -1,7 +1,5 @@
-using System.Data;
-using System.Text.Json;
 using Dapper;
-using MealShopper.Users.Models;
+using MealShopper.Users.Models.DTOs;
 using Npgsql;
 
 namespace MealShopper.Users.Data;
@@ -48,52 +46,18 @@ public class UserRepository
         Guid id,
         string email,
         string passwordHash,
-        string[] roles,
-        UserPreferencesDto prefs)
+        string[] roles)
     {
         using var conn = CreateConnection();
         // Calls the stored procedure sp_create_user
         await conn.ExecuteAsync(
-            "CALL sp_create_user(@Id, @Email, @Hash, @Roles, @Street, @City, @State, @Zip, @Cuisines::jsonb, @Avoid::jsonb)",
+            "CALL sp_create_user(@Id, @Email, @Hash, @Roles, @Cuisines::jsonb, @Avoid::jsonb)",
             new
             {
                 Id = id,
                 Email = email,
                 Hash = passwordHash,
-                Roles = roles,
-                Street = prefs.Street,
-                City = prefs.City,
-                State = prefs.State,
-                Zip = prefs.ZipCode,
-                Cuisines = JsonSerializer.Serialize(prefs.PreferredCuisines),
-                Avoid = JsonSerializer.Serialize(prefs.AvoidIngredients)
+                Roles = roles
             });
-    }
-
-    public async Task<UserPreferencesDto?> GetPreferencesAsync(Guid userId)
-    {
-        using var conn = CreateConnection();
-        // Calls the stored function fn_get_user_preferences
-        var row = await conn.QuerySingleOrDefaultAsync(
-            "SELECT * FROM fn_get_user_preferences(@UserId)",
-            new { UserId = userId });
-
-        if (row == null) return null;
-
-        return new UserPreferencesDto
-        {
-            UserId = row.user_id,
-            Street = row.street,
-            City = row.city,
-            State = row.state,
-            ZipCode = row.zip_code,
-            SearchRadiusMiles = row.search_radius_miles,
-            MaxStores = row.max_stores,
-
-            // PreferredCuisines = JsonSerializer.Deserialize<List<string>>(row.preferred_cuisines ?? "[]") ?? [],
-            // AvoidIngredients = JsonSerializer.Deserialize<List<string>>(row.avoid_ingredients ?? "[]") ?? []
-            PreferredCuisines = JsonSerializer.Deserialize<List<string>>((string?)row.preferred_cuisines ?? "[]") ?? [],
-            AvoidIngredients = JsonSerializer.Deserialize<List<string>>((string?)row.avoid_ingredients ?? "[]") ?? []
-        };
     }
 }

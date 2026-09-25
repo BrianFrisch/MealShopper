@@ -10,30 +10,32 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+
 CREATE TABLE IF NOT EXISTS user_preferences (
     user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    street VARCHAR(255) NOT NULL DEFAULT '',
-    city VARCHAR(100) NOT NULL DEFAULT '',
-    state VARCHAR(50) NOT NULL DEFAULT '',
-    zip_code VARCHAR(20) NOT NULL DEFAULT '',
-    search_radius_miles INT NOT NULL DEFAULT 5,
-    max_stores INT NOT NULL DEFAULT 2,
-    preferred_cuisines JSONB NOT NULL DEFAULT '[]'::jsonb,
-    avoid_ingredients JSONB NOT NULL DEFAULT '[]'::jsonb
+    default_address_label VARCHAR(100) NOT NULL DEFAULT '',
+    latitude NUMERIC(9, 6) NOT NULL DEFAULT 0.0,
+    longitude NUMERIC(9, 6) NOT NULL DEFAULT 0.0,
+    search_radius_miles INT NOT NULL DEFAULT 10,
+    max_stores INT NOT NULL DEFAULT 3,
+    household_size INT NOT NULL DEFAULT 2,
+    target_meal_count INT NOT NULL DEFAULT 3,
+    preferred_cuisines TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    dietary_restrictions TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    avoid_ingredients TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Grant least-privileged access
+--GRANT SELECT, INSERT, UPDATE ON user_preferences TO mealshopper_app;
 
 -- 2. Stored Procedure: Upsert User Account
 CREATE OR REPLACE PROCEDURE sp_create_user(
     p_id UUID,
     p_email VARCHAR(256),
     p_password_hash TEXT,
-    p_roles TEXT[],
-    p_street VARCHAR(255),
-    p_city VARCHAR(100),
-    p_state VARCHAR(50),
-    p_zip VARCHAR(20),
-    p_cuisines JSONB,
-    p_avoid JSONB
+    p_roles TEXT[]
 )
 LANGUAGE plpgsql
 AS $$
@@ -41,20 +43,6 @@ BEGIN
     INSERT INTO users (id, email, normalized_email, password_hash, roles)
     VALUES (p_id, p_email, UPPER(p_email), p_password_hash, p_roles)
     ON CONFLICT (normalized_email) DO NOTHING;
-
-    INSERT INTO user_preferences (
-        user_id, street, city, state, zip_code, preferred_cuisines, avoid_ingredients
-    )
-    VALUES (
-        p_id, p_street, p_city, p_state, p_zip, p_cuisines, p_avoid
-    )
-    ON CONFLICT (user_id) DO UPDATE SET
-        street = EXCLUDED.street,
-        city = EXCLUDED.city,
-        state = EXCLUDED.state,
-        zip_code = EXCLUDED.zip_code,
-        preferred_cuisines = EXCLUDED.preferred_cuisines,
-        avoid_ingredients = EXCLUDED.avoid_ingredients;
 END;
 $$;
 
@@ -114,67 +102,96 @@ $$;
 CREATE OR REPLACE FUNCTION fn_get_user_preferences(p_user_id UUID)
 RETURNS TABLE (
     user_id UUID,
-    street VARCHAR(255),
-    city VARCHAR(100),
-    state VARCHAR(50),
-    zip_code VARCHAR(20),
+    default_address_label VARCHAR(100),
+    latitude NUMERIC,
+    longitude NUMERIC,
     search_radius_miles INT,
     max_stores INT,
-    preferred_cuisines TEXT,
-    avoid_ingredients TEXT
+    household_size INT,
+    target_meal_count INT,
+    preferred_cuisines TEXT[],
+    dietary_restrictions TEXT[],
+    avoid_ingredients TEXT[],
+    created_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        up.user_id,
+        up.default_address_label,
+        up.latitude,
+        up.longitude,
+        up.search_radius_miles,
+        up.max_stores,
+        up.household_size,
+        up.target_meal_count,
+        up.preferred_cuisines,
+        up.dietary_restrictions,
+        up.avoid_ingredients,
+        up.created_at,
+        up.updated_at
+    FROM user_preferences up
+    WHERE up.user_id = p_user_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Stored Procedure: Upsert Preferences
+CREATE OR REPLACE PROCEDURE sp_upsert_user_preferences(
+    p_user_id UUID,
+    p_address_label VARCHAR(100),
+    p_latitude NUMERIC,
+    p_longitude NUMERIC,
+    p_search_radius_miles INT,
+    p_max_stores INT,
+    p_household_size INT,
+    p_target_meal_count INT,
+    p_preferred_cuisines TEXT[],
+    p_dietary_restrictions TEXT[],
+    p_avoid_ingredients TEXT[]
 )
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    RETURN QUERY
-    SELECT 
-        p.user_id, 
-        p.street, 
-        p.city, 
-        p.state, 
-        p.zip_code, 
-        p.search_radius_miles, 
-        p.max_stores, 
-        p.preferred_cuisines::text, 
-        p.avoid_ingredients::text
-    FROM user_preferences p
-    WHERE p.user_id = p_user_id;
+    INSERT INTO user_preferences (
+        user_id,
+        default_address_label,
+        latitude,
+        longitude,
+        search_radius_miles,
+        max_stores,
+        household_size,
+        target_meal_count,
+        preferred_cuisines,
+        dietary_restrictions,
+        avoid_ingredients,
+        updated_at
+    )
+    VALUES (
+        p_user_id,
+        p_address_label,
+        p_latitude,
+        p_longitude,
+        p_search_radius_miles,
+        p_max_stores,
+        p_household_size,
+        p_target_meal_count,
+        p_preferred_cuisines,
+        p_dietary_restrictions,
+        p_avoid_ingredients,
+        CURRENT_TIMESTAMP
+    )
+    ON CONFLICT (user_id) DO UPDATE SET
+        default_address_label = EXCLUDED.default_address_label,
+        latitude = EXCLUDED.latitude,
+        longitude = EXCLUDED.longitude,
+        search_radius_miles = EXCLUDED.search_radius_miles,
+        max_stores = EXCLUDED.max_stores,
+        household_size = EXCLUDED.household_size,
+        target_meal_count = EXCLUDED.target_meal_count,
+        preferred_cuisines = EXCLUDED.preferred_cuisines,
+        dietary_restrictions = EXCLUDED.dietary_restrictions,
+        avoid_ingredients = EXCLUDED.avoid_ingredients,
+        updated_at = CURRENT_TIMESTAMP;
 END;
 $$;
-
--- 7. Application Role & Least-Privilege Grants
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'mealshopper_app') THEN
-        CREATE ROLE mealshopper_app WITH LOGIN PASSWORD 'MealShopperApp_Dev_Pwd99!';
-    ELSE
-        ALTER ROLE mealshopper_app WITH PASSWORD 'MealShopperApp_Dev_Pwd99!';
-    END IF;
-END
-$$;
-
-GRANT CONNECT ON DATABASE mealshopper TO mealshopper_app;
-GRANT USAGE ON SCHEMA public TO mealshopper_app;
-
--- Grant DML execution on tables
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO mealshopper_app;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO mealshopper_app;
-
--- Grant Execution on functions and procedures
-GRANT EXECUTE ON ALL ROUTINES IN SCHEMA public TO mealshopper_app;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON ROUTINES TO mealshopper_app;
-
--- -- 8. Seed Default Test User (Password: Password123!)
--- -- Hash generated using standard ASP.NET Core Identity PasswordHasher (PBKDF2 with HMAC-SHA256)
--- CALL sp_create_user(
---     'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d'::UUID,
---     'testuser@mealshopper.local',
---     'AQAAAAIAAYagAAAAEI46P3jC5v1P84d0bH2+M5rV8N9m9K9E3S4f8t8r2J5W8Z7+L3e1Q==',
---     ARRAY['User'],
---     '15625 Hawthorne Blvd',
---     'Lawndale',
---     'CA',
---     '90260',
---     '["Italian", "Mexican"]'::jsonb,
---     '["Peanuts"]'::jsonb
--- );

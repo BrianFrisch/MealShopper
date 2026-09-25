@@ -1,5 +1,4 @@
 using MealShopper.Users.Data;
-using MealShopper.Users.Models;
 using MealShopper.Users.Services;
 using Dapper;
 
@@ -8,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 DefaultTypeMap.MatchNamesWithUnderscores = true;
 
 builder.Services.AddSingleton<UserRepository>();
+builder.Services.AddSingleton<UserPreferencesRepository>();
 builder.Services.AddSingleton<PasswordHasher>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -35,18 +35,7 @@ using (var scope = app.Services.CreateScope())
                     Guid.Parse("a51bce73-5b3e-4aad-b80c-dda90554aff2"),
                     testEmail,
                     hasher.HashPassword("P@ssword123!"),
-                    ["User"],
-                    new UserPreferencesDto
-                    {
-                        Street = "123 Hawthorne Blvd",
-                        City = "Lawndale",
-                        State = "CA",
-                        ZipCode = "90260",
-                        SearchRadiusMiles = 5,
-                        MaxStores = 2,
-                        PreferredCuisines = ["Mexican", "American"],
-                        AvoidIngredients = ["peanuts"]
-                    });
+                    ["User"]);
             }
             app.Logger.LogInformation("Database seed check completed successfully on attempt {Attempt}.", attempt);
             break;
