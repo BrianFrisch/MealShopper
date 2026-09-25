@@ -38,6 +38,7 @@ class PlannedMeal(BaseModel):
     meal_id: str
     recipe_name: str
     description: str
+    #cuisine: str
     estimated_prep_time_minutes: int
     servings: int
     ingredients: List[RecipeIngredient]
@@ -58,10 +59,10 @@ class MissingIngredient(BaseModel):
     def parse_quantity(cls, v: Union[str, float, int]) -> float:
         if isinstance(v, (int, float)):
             return float(v)
-        if isinstance(v, str):
-            match = re.search(r"^(\d+(?:\.\d+)?)", v.strip())
-            if match:
-                return float(match.group(1))
+        #if isinstance(v, str): #not needed??
+        match = re.search(r"^(\d+(?:\.\d+)?)", v.strip())
+        if match:
+            return float(match.group(1))
         return 1.0
 
 

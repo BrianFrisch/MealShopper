@@ -1,68 +1,16 @@
 import logging
-import os
 import uuid
 from typing import Any, List
-from google import genai
-from google.genai import types
 
-from models import MealPlanRequest, MealPlanResponse, PlannedMeal, RecipeIngredient, MissingIngredient
+from src.models import MealPlanRequest, MealPlanResponse, PlannedMeal, RecipeIngredient, MissingIngredient
 
 logger = logging.getLogger(__name__)
 
 
-class MealPlannerService:
+class MockMealPlannerService:
     """Service for generating meal plans utilizing Gemini GenAI with offline fallback."""
 
-    async def generate_plan(self, request: MealPlanRequest) -> MealPlanResponse:
-        """Generates a meal plan based on scored circular deals and dietary preferences."""
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if api_key:
-            try:
-                client = genai.Client()
-                system_prompt = (
-                    "You are an expert chef optimizing meal plans around provided circular deals. "
-                    "Prioritize using primary ingredients from scored_deals to maximize savings, "
-                    "respect dietary_restrictions and preferred_cuisines, avoid anything in avoid_ingredients, "
-                    "scale for household_size, and populate missing_primary_ingredients with any essential "
-                    "recipe protein or produce items not covered by deals."
-                )
-
-                config = types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=MealPlanResponse,
-                    system_instruction=system_prompt,
-                )
-
-                prompt_text = (
-                    f"Generate a meal plan matching the following criteria:\n"
-                    f"Target Meal Count: {request.target_meal_count}\n"
-                    f"Household Size: {request.household_size}\n"
-                    f"Preferred Cuisines: {', '.join(request.preferred_cuisines) if request.preferred_cuisines else 'Any'}\n"
-                    f"Dietary Restrictions: {', '.join(request.dietary_restrictions) if request.dietary_restrictions else 'None'}\n"
-                    f"Avoid Ingredients: {', '.join(request.avoid_ingredients) if request.avoid_ingredients else 'None'}\n\n"
-                    f"Available Scored Deals:\n"
-                    f"{request.model_dump_json(include={'scored_deals'})}"
-                )
-
-                response = await client.aio.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=prompt_text,
-                    config=config,
-                )
-
-                if response.parsed:
-                    if isinstance(response.parsed, MealPlanResponse):
-                        return response.parsed
-                    return MealPlanResponse.model_validate(response.parsed)
-                elif response.text:
-                    return MealPlanResponse.model_validate_json(response.text)
-
-            except Exception as ex:
-                logger.warning("Gemini generation failed (%s). Falling back to offline mock.", ex)
-
-        return self._generate_mock_plan(request)
-
-    def _generate_mock_plan(self, request: MealPlanRequest) -> MealPlanResponse:
+    async def generate_mock_plan(self, request: MealPlanRequest) -> MealPlanResponse:
         """Constructs a deterministic offline mock response based on available deals."""
         deals = request.scored_deals
         target_count = request.target_meal_count

@@ -98,7 +98,9 @@ services:
       dockerfile: Dockerfile
     container_name: mealshopper-planning-domain
     environment:
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      PLANNER_USE_MOCK: "${PLANNER_USE_MOCK:-false}"
+      GEMINI_MODEL_NAME: "${GEMINI_MODEL_NAME:-gemini-3.8-flash}"
     ports:
       - "8002:8002"
     networks:
