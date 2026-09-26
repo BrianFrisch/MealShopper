@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+
+using MealShopper.Common.Security;
 using MealShopper.Orchestrator.Models;
 using MealShopper.Orchestrator.Models.DTOs;
 using MealShopper.Orchestrator.Services;
@@ -12,15 +14,18 @@ public class MealPlansController : ControllerBase
     private readonly IJobStateStore _jobStateStore;
     private readonly IMealPlanOrchestrator _orchestrator;
     private readonly ILogger<MealPlansController> _logger;
+    private readonly IGatewayUserContext _userContext;
 
     public MealPlansController(
         IJobStateStore jobStateStore,
         IMealPlanOrchestrator orchestrator,
-        ILogger<MealPlansController> logger)
+        ILogger<MealPlansController> logger,
+        IGatewayUserContext userContext)
     {
         _jobStateStore = jobStateStore ?? throw new ArgumentNullException(nameof(jobStateStore));
         _orchestrator = orchestrator ?? throw new ArgumentNullException(nameof(orchestrator));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _userContext = userContext ?? throw new ArgumentNullException(nameof(userContext));
     }
 
     /// <summary>
@@ -32,15 +37,13 @@ public class MealPlansController : ControllerBase
     [HttpPost]
     [ProducesResponseType(typeof(CreateMealPlanResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [RequireGatewayUser]
     public async Task<IActionResult> CreateMealPlan([FromBody] CreateMealPlanRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
             return BadRequest(ModelState);
         }
-
-        var userId = Request.Headers["X-User-Id"].FirstOrDefault() ?? "Anonymous";
-        var roles = Request.Headers["X-User-Roles"].FirstOrDefault() ?? "None";
 
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
@@ -56,7 +59,7 @@ public class MealPlansController : ControllerBase
 
         await _jobStateStore.CreateJobAsync(job, cancellationToken);
 
-        _logger.LogInformation("Accepted meal plan generation request for {userId} ({roles}). JobId: {JobId}", userId, roles, job.JobId);
+        _logger.LogInformation("Accepted meal plan generation request for {userId} ({roles}). JobId: {JobId}", _userContext.UserId, _userContext.Roles, job.JobId);
 
         // Trigger workflow execution asynchronously in background
         _ = Task.Run(async () =>

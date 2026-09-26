@@ -1,11 +1,17 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-COPY ["MealShopper.Orchestrator.csproj", "./"]
-RUN dotnet restore "./MealShopper.Orchestrator.csproj"
+# Project files caching
+COPY ["apps/orchestrator/MealShopper.Orchestrator/MealShopper.Orchestrator.csproj", "apps/orchestrator/MealShopper.Orchestrator/"]
+COPY ["libs/MealShopper.Common/MealShopper.Common.csproj", "libs/MealShopper.Common/"]
+RUN dotnet restore "apps/orchestrator/MealShopper.Orchestrator/MealShopper.Orchestrator.csproj"
 
-COPY . .
-RUN dotnet publish "./MealShopper.Orchestrator.csproj" -c Release -o /app/publish /p:UseAppHost=false
+# Source copy
+COPY ["apps/orchestrator/MealShopper.Orchestrator/", "apps/orchestrator/MealShopper.Orchestrator/"]
+COPY ["libs/MealShopper.Common/", "libs/MealShopper.Common/"]
+
+WORKDIR "/src/apps/orchestrator/MealShopper.Orchestrator"
+RUN dotnet publish "MealShopper.Orchestrator.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app

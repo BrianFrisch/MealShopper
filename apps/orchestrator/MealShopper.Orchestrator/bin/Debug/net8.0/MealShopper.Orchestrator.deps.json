@@ -8,6 +8,7 @@
     ".NETCoreApp,Version=v8.0": {
       "MealShopper.Orchestrator/1.0.0": {
         "dependencies": {
+          "MealShopper.Common": "1.0.0",
           "Microsoft.AspNetCore.OpenApi": "8.0.31",
           "Microsoft.Extensions.Http.Resilience": "10.10.0",
           "StackExchange.Redis": "2.8.31",
@@ -424,7 +425,15 @@
         }
       },
       "System.IO.Pipelines/8.0.0": {},
-      "System.Threading.RateLimiting/8.0.0": {}
+      "System.Threading.RateLimiting/8.0.0": {},
+      "MealShopper.Common/1.0.0": {
+        "runtime": {
+          "MealShopper.Common.dll": {
+            "assemblyVersion": "1.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
     }
   },
   "libraries": {
@@ -712,6 +721,11 @@
       "sha512": "sha512-7mu9v0QDv66ar3DpGSZHg9NuNcxDaaAcnMULuZlaTpP9+hwXhrxNGsF5GmLkSHxFdb5bBc1TzeujsRgTrPWi+Q==",
       "path": "system.threading.ratelimiting/8.0.0",
       "hashPath": "system.threading.ratelimiting.8.0.0.nupkg.sha512"
+    },
+    "MealShopper.Common/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
     }
   }
 }

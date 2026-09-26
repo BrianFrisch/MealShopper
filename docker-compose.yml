@@ -110,8 +110,8 @@ services:
 
   orchestrator:
     build:
-      context: ./apps/orchestrator/MealShopper.Orchestrator
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/orchestrator/MealShopper.Orchestrator/Dockerfile
     container_name: mealshopper-orchestrator
     environment:
       ASPNETCORE_URLS: "http://+:5277"

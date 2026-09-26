@@ -2154,8 +2154,8 @@
         "net8.0": {
           "targetAlias": "net8.0",
           "projectReferences": {
-            "c:\\Users\\admin\\Repositories\\MealShopper\\libs\\MealShopper.Common\\MealShopper.Common.csproj": {
-              "projectPath": "c:\\Users\\admin\\Repositories\\MealShopper\\libs\\MealShopper.Common\\MealShopper.Common.csproj"
+            "C:\\Users\\admin\\Repositories\\MealShopper\\libs\\MealShopper.Common\\MealShopper.Common.csproj": {
+              "projectPath": "C:\\Users\\admin\\Repositories\\MealShopper\\libs\\MealShopper.Common\\MealShopper.Common.csproj"
             }
           }
         }

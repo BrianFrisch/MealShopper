@@ -1,5 +1,5 @@
 using MealShopper.Orchestrator.Clients;
-using MealShopper.Orchestrator.Common.Security;
+using MealShopper.Common.Security;
 using MealShopper.Orchestrator.Infrastructure.Security;
 using MealShopper.Orchestrator.Services;
 using Microsoft.Extensions.Caching.Memory;
@@ -16,7 +16,8 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddHttpContextAccessor();
 
 // Register gateway user security context
-builder.Services.AddScoped<IGatewayUserContext, GatewayUserContext>();
+builder.Services.AddScoped<GatewayUserContext>();
+builder.Services.AddScoped<IGatewayUserContext>(sp => sp.GetRequiredService<GatewayUserContext>());
 
 // Register memory cache and M2M token acquisition service
 builder.Services.AddMemoryCache();
