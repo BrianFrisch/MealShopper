@@ -1,6 +1,10 @@
+from contextlib import asynccontextmanager
+from datetime import datetime
+import os
+import redis.asyncio as redis 
 from pathlib import Path
-from typing import Any, List
-from fastapi import FastAPI
+from typing import Any, Dict, List, Optional
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from models import (
     StoreDiscoveryRequest,
@@ -13,6 +17,7 @@ from models import (
 from geo_service import StoreRepository
 from deal_service import DealRepository
 from pydantic import BaseModel, Field, AliasChoices
+from src.storage.deal_storage import PartitionedDealStorage
 
 app = FastAPI(title="MealShopper - Shopper Domain Service")
 
@@ -27,9 +32,19 @@ app.add_middleware(
 BASE_DIR = Path(__file__).resolve().parent
 STORES_PATH = BASE_DIR / "data" / "stores.json"
 DEALS_PATH = BASE_DIR / "data" / "deals.json"
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
+redis_pool: Optional[redis.ConnectionPool] = None
 store_repo = StoreRepository(STORES_PATH)
 deal_repo = DealRepository(DEALS_PATH)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global redis_pool
+    redis_pool = redis.ConnectionPool.from_url(REDIS_URL, decode_responses=True)
+    yield
+    if redis_pool:
+        await redis_pool.disconnect()
 
 
 @app.get("/healthz")
@@ -61,7 +76,7 @@ class LegacyStoreRequest(BaseModel):
 
 
 @app.post("/v1/shopper/stores")
-def discover_stores_legacy(payload: LegacyStoreRequest):
+def discover_stores_legacy(payload: LegacyStoreRequest) -> Dict[str, Any]:
     matched = store_repo.find_nearby(
         user_lat=payload.latitude,
         user_lon=payload.longitude,
@@ -89,7 +104,7 @@ class LegacyDealsRequest(BaseModel):
 
 
 @app.post("/v1/shopper/deals")
-def get_deals_legacy(payload: LegacyDealsRequest):
+def get_deals_legacy(payload: LegacyDealsRequest) -> Dict[str, Any]:
     """Dynamically queries deals.json for the Orchestrator client."""
     scored = deal_repo.get_scored_deals(
         store_ids=payload.store_ids,
@@ -127,6 +142,54 @@ def score_deals(payload: DealScoringRequest):
         total_scored=len(scored),
     )
 
+def get_deal_storage() -> PartitionedDealStorage:
+    client = redis.Redis(connection_pool=redis_pool)
+    return PartitionedDealStorage(redis_client=client)
+
+class DealItemDto(BaseModel):
+    product_name: str
+    clean_name: str
+    category: str
+    sale_price: float
+    pricing_unit: str
+    raw_promotion_text: str
+
+class StoreCircularIngestRequest(BaseModel):
+    store_id: str
+    store_chain: str
+    valid_from: datetime
+    valid_to: datetime
+    deals: List[DealItemDto]
+
+@app.post("/v1/deals/ingest")
+async def ingest_store_deals(
+    payload: StoreCircularIngestRequest,
+    storage: PartitionedDealStorage = Depends(get_deal_storage)
+) -> Dict[str, Any]:
+    deals_data = [item.model_dump() for item in payload.deals]
+    paths = await storage.save_deals(
+        store_id=payload.store_id,
+        deals=deals_data,
+        valid_from=payload.valid_from,
+        valid_to=payload.valid_to
+    )
+    return {
+        "status": "success",
+        "store_id": payload.store_id,
+        "deal_count": len(deals_data),
+        "persisted_partitions": paths
+    }
+
+@app.get("/v1/deals/stores/{store_id}")
+async def get_store_deals(
+    store_id: str,
+    storage: PartitionedDealStorage = Depends(get_deal_storage)
+) -> Dict[str, Any]:
+    results = await storage.get_deals_for_stores([store_id])
+    deals = results.get(store_id, [])
+    if not deals:
+        raise HTTPException(status_code=404, detail="No active deals found for store")
+    return {"store_id": store_id, "deals": deals}
 
 # ---- Loop-Back Matching Endpoints ----
 
@@ -147,7 +210,7 @@ class LookupIngredientsRequest(BaseModel):
     )
 
 @app.post("/v1/shopper/lookup-ingredients")
-def lookup_ingredients(payload: LookupIngredientsRequest):
+def lookup_ingredients(payload: LookupIngredientsRequest) -> Dict[str, Any]:
     """Dynamically runs fuzzy matching against deals.json for loop-back."""
     names: List[str] = []
     for item in payload.missing_ingredients:
@@ -157,7 +220,7 @@ def lookup_ingredients(payload: LookupIngredientsRequest):
                 or item.get("name")
                 or item.get("Name")
                 or item.get("IngredientName")
-                or ""
+                or "" # type: ignore
             )
         elif isinstance(item, str):
             names.append(item)
