@@ -4,7 +4,10 @@ import os
 from typing import Any
 
 import redis.asyncio as redis 
-from src.storage.cycle_helper import get_circular_cycle_key, get_spanning_cycle_keys
+try:
+    from src.storage.cycle_helper import get_circular_cycle_key, get_spanning_cycle_keys
+except ImportError:
+    from .cycle_helper import get_circular_cycle_key, get_spanning_cycle_keys
 
 from pathlib import Path
 

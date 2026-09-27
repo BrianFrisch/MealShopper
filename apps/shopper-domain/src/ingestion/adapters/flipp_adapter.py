@@ -6,8 +6,10 @@ import httpx
 
 try:
     from src.ingestion.models import NormalizedDealItem, clean_product_name
+    from src.ingestion.adapters.base import BaseDealAdapter
 except ImportError:
     from ..models import NormalizedDealItem, clean_product_name
+    from .base import BaseDealAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +17,7 @@ FLIPP_BASE_URL = "https://backflipp.wishabi.com/flipp"
 DEFAULT_TIMEOUT = 10.0
 
 
-class FlippAdapter:
+class FlippAdapter(BaseDealAdapter):
     """
     Asynchronous adapter for querying the Flipp circulars & promotions API.
     """
@@ -24,10 +26,12 @@ class FlippAdapter:
         self,
         client: Optional[httpx.AsyncClient] = None,
         timeout: float = DEFAULT_TIMEOUT,
+        merchant_name: str = "Ralphs",
     ) -> None:
         self._external_client = client is not None
         self._timeout = httpx.Timeout(timeout)
         self._client = client
+        self.default_merchant = merchant_name
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -52,52 +56,58 @@ class FlippAdapter:
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         await self.close()
 
+    def is_merchant_match(self, flyer: dict[str, Any], merchant_name: str) -> bool:
+        """
+        Checks whether a flyer dictionary matches the target merchant name or criteria.
+        Subclasses can override this method to customize merchant matching.
+        """
+        if not flyer or not merchant_name:
+            return False
+        merchant_lower = merchant_name.strip().lower()
+        name_candidate = (
+            flyer.get("merchant")
+            or flyer.get("merchant_name")
+            or flyer.get("name")
+            or flyer.get("flyer_run_id")
+            or ""
+        )
+        return merchant_lower in str(name_candidate).lower()
+
     async def fetch_flyers_by_postal_code(
-        self, postal_code: str, merchant_name: str = "Ralphs"
+        self, postal_code: str, merchant_name: Optional[str] = None
     ) -> list[dict[str, Any]]:
         """
         Fetch active flyers for a given postal code and filter by target merchant.
         """
+        target_merchant = merchant_name if merchant_name is not None else self.default_merchant
         url = f"{FLIPP_BASE_URL}/flyers"
         params = {"postal_code": postal_code}
 
         try:
             client = await self._get_client()
-            logger.info("Fetching flyers for postal_code=%s merchant=%s", postal_code, merchant_name)
+            logger.info("Fetching flyers for postal_code=%s merchant=%s", postal_code, target_merchant)
             response = await client.get(url, params=params)
             response.raise_for_status()
             data = response.json()
 
-            merchant_lower = merchant_name.strip().lower()
             matched_flyers: list[dict[str, Any]] = []
 
-            raw_flyers: list[Any] = []
+            raw_flyers: list[dict[str, Any]] = []
             if isinstance(data, list):
-                raw_flyers = data
+                raw_flyers = [f for f in data if isinstance(f, dict)]
             elif isinstance(data, dict):
                 raw = data.get("flyers")
                 if isinstance(raw, list):
-                    raw_flyers = raw
+                    raw_flyers = [f for f in raw if isinstance(f, dict)]
 
-            for item in raw_flyers:
-                if isinstance(item, dict):
-                    flyer_obj: dict[str, Any] = item
-                    name_candidate = flyer_obj.get("merchant") or flyer_obj.get("merchant_name") or flyer_obj.get("name") or flyer_obj.get("flyer_run_id") or ""
-                    if merchant_lower in str(name_candidate).lower():
-                        matched_flyers.append(flyer_obj)
+            for flyer_obj in raw_flyers:
+                if self.is_merchant_match(flyer_obj, target_merchant):
+                    matched_flyers.append(flyer_obj)
 
             logger.info(
                 "Found %d flyers matching merchant '%s' in postal code %s",
                 len(matched_flyers),
-                merchant_name,
-                postal_code,
-            )
-            return matched_flyers
-
-            logger.info(
-                "Found %d flyers matching merchant '%s' in postal code %s",
-                len(matched_flyers),
-                merchant_name,
+                target_merchant,
                 postal_code,
             )
             return matched_flyers
@@ -236,37 +246,115 @@ class FlippAdapter:
             return "lb"
         return "each"
 
-    async def get_normalized_deals(
+    def _extract_product_name(self, item: dict[str, Any]) -> str:
+        """Extracts raw product name from item dictionary."""
+        return str(
+            item.get("name")
+            or item.get("title")
+            or item.get("item_name")
+            or ""
+        ).strip()
+
+    def _extract_regular_price(self, item: dict[str, Any]) -> Optional[float]:
+        """Extracts regular/original price from item dictionary if present."""
+        orig_raw = item.get("original_price") or item.get("regular_price")
+        if orig_raw is not None:
+            try:
+                val = float(re.sub(r"[^\d.]", "", str(orig_raw)))
+                if val > 0:
+                    return val
+            except ValueError:
+                return None
+        return None
+
+    def _extract_raw_promotion(
+        self, item: dict[str, Any], sale_price: float, pricing_unit: str
+    ) -> str:
+        """Extracts promotion text or generates fallback from sale price and unit."""
+        return str(
+            item.get("sale_story")
+            or item.get("pre_price_text")
+            or item.get("post_price_text")
+            or item.get("description")
+            or f"${sale_price:.2f} {pricing_unit}"
+        )
+
+    def _extract_category(
+        self, item: dict[str, Any], flyer_context: Optional[dict[str, Any]] = None
+    ) -> str:
+        """Extracts or infers item category."""
+        cat = item.get("category") or item.get("item_category") or "Grocery"
+        return str(cat).strip() or "Grocery"
+
+    def _parse_deal_item(
         self,
-        postal_code: str,
-        store_id: str,
-        merchant_name: str = "Ralphs",
-    ) -> tuple[datetime, datetime, list[NormalizedDealItem]]:
-        """
-        Resolves the active weekly circular for the merchant and returns normalized deals.
-        """
-        now = datetime.now(timezone.utc)
-        default_valid_from = now
-        default_valid_to = now + timedelta(days=7)
+        item: dict[str, Any],
+        valid_from: datetime,
+        valid_to: datetime,
+        flyer_context: Optional[dict[str, Any]] = None,
+    ) -> Optional[NormalizedDealItem]:
+        """Parses a raw flyer item dictionary into a NormalizedDealItem."""
+        product_name = self._extract_product_name(item)
+        if not product_name:
+            return None
 
-        flyers = await self.fetch_flyers_by_postal_code(postal_code, merchant_name=merchant_name)
-        if not flyers:
-            logger.warning(
-                "No active flyer found for merchant='%s' in postal_code=%s (store_id=%s)",
-                merchant_name,
-                postal_code,
-                store_id,
-            )
-            return default_valid_from, default_valid_to, []
+        sale_price = self._extract_sale_price(item)
+        if sale_price is None or sale_price < 0:
+            return None
 
-        # Prioritize primary weekly circulars if available
+        regular_price = self._extract_regular_price(item)
+        pricing_unit = self._determine_pricing_unit(item)
+        raw_promo = self._extract_raw_promotion(item, sale_price, pricing_unit)
+        category = self._extract_category(item, flyer_context=flyer_context)
+
+        return NormalizedDealItem(
+            product_name=product_name,
+            clean_name=clean_product_name(product_name),
+            category=category or "Grocery",
+            sale_price=sale_price,
+            regular_price=regular_price,
+            pricing_unit=pricing_unit,
+            raw_promotion_text=raw_promo,
+            valid_from=valid_from,
+            valid_to=valid_to,
+        )
+
+    def prioritize_flyers(self, flyers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Prioritizes primary weekly circulars if available."""
         def flyer_priority(f: dict[str, Any]) -> int:
             name = str(f.get("name") or "").lower()
             if re.search(r"\b(?:weekly|ad|circular)\b", name, re.IGNORECASE):
                 return 0
             return 1
 
-        flyers.sort(key=flyer_priority)
+        return sorted(flyers, key=flyer_priority)
+
+    async def get_normalized_deals(
+        self,
+        postal_code: str,
+        store_id: str,
+        merchant_name: Optional[str] = None,
+        **kwargs: Any,
+    ) -> tuple[datetime, datetime, list[NormalizedDealItem]]:
+        """
+        Resolves the active weekly circular for the merchant and returns normalized deals.
+        """
+        target_merchant = merchant_name if merchant_name is not None else self.default_merchant
+        now = datetime.now(timezone.utc)
+        default_valid_from = now
+        default_valid_to = now + timedelta(days=7)
+
+        flyers = await self.fetch_flyers_by_postal_code(postal_code, merchant_name=target_merchant)
+        if not flyers:
+            logger.warning(
+                "No active flyer found for merchant='%s' in postal_code=%s (store_id=%s)",
+                target_merchant,
+                postal_code,
+                store_id,
+            )
+            return default_valid_from, default_valid_to, []
+
+        flyers = self.prioritize_flyers(flyers)
 
         # Use the first active flyer for the circular
         flyer = flyers[0]
@@ -288,53 +376,14 @@ class FlippAdapter:
         normalized_deals: list[NormalizedDealItem] = []
 
         for item in items:
-            product_name = str(
-                item.get("name")
-                or item.get("title")
-                or item.get("item_name")
-                or ""
-            ).strip()
-
-            if not product_name:
-                continue
-
-            sale_price = self._extract_sale_price(item)
-            if sale_price is None or sale_price < 0:
-                continue
-
-            # Regular / Original price if present
-            regular_price: Optional[float] = None
-            orig_raw = item.get("original_price") or item.get("regular_price")
-            if orig_raw is not None:
-                try:
-                    regular_price = float(re.sub(r"[^\d.]", "", str(orig_raw)))
-                except ValueError:
-                    regular_price = None
-
-            pricing_unit = self._determine_pricing_unit(item)
-
-            raw_promo = (
-                item.get("sale_story")
-                or item.get("pre_price_text")
-                or item.get("post_price_text")
-                or item.get("description")
-                or f"${sale_price:.2f} {pricing_unit}"
-            )
-
-            category = str(item.get("category") or item.get("item_category") or "Grocery").strip()
-
-            deal_item = NormalizedDealItem(
-                product_name=product_name,
-                clean_name=clean_product_name(product_name),
-                category=category or "Grocery",
-                sale_price=sale_price,
-                regular_price=regular_price,
-                pricing_unit=pricing_unit,
-                raw_promotion_text=str(raw_promo),
+            deal_item = self._parse_deal_item(
+                item,
                 valid_from=valid_from,
                 valid_to=valid_to,
+                flyer_context=flyer,
             )
-            normalized_deals.append(deal_item)
+            if deal_item is not None:
+                normalized_deals.append(deal_item)
 
         logger.info(
             "Successfully normalized %d deals for store %s from flyer %s",

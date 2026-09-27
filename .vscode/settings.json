@@ -21,6 +21,10 @@
         "/^python -c \"import sys; sys\\.path\\.insert\\(0, 'apps/shopper-domain'\\); import asyncio, redis\\.asyncio as redis\nasync def check_redis\\(\\):\n    try:\n        r = redis\\.Redis\\.from_url\\('redis://localhost:6379', decode_responses=True\\)\n        await r\\.ping\\(\\)\n        print\\('Redis is ONLINE'\\)\n        await r\\.aclose\\(\\)\n    except Exception as e:\n        print\\('Redis is OFFLINE:', e\\)\nasyncio\\.run\\(check_redis\\(\\)\\)\n\"$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^python -m pytest apps/shopper-domain/tests/test_flipp_adapter\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     },
     "python.analysis.diagnosticSeverityOverrides": {
