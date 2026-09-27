@@ -5,6 +5,22 @@
         "/^& \"C:\\\\Program Files\\\\dotnet\\\\dotnet\\.exe\" test apps/orchestrator/MealShopper\\.Orchestrator\\.Tests/MealShopper\\.Orchestrator\\.Tests\\.csproj$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^python -c \"import sys; sys\\.path\\.insert\\(0, 'apps/shopper-domain'\\); import asyncio; from datetime import datetime, timezone; import httpx; from src\\.ingestion\\.adapters\\.flipp_adapter import FlippAdapter;\nasync def test\\(\\):\n    def handler\\(request: httpx\\.Request\\) -> httpx\\.Response:\n        url_str = str\\(request\\.url\\)\n        print\\('REQUEST URL:', url_str\\)\n        if '/flipp/flyers/' in url_str and '/items' in url_str:\n            items = \\[\n                \\{'name': 'Fresh Heritage Farm Boneless Chicken Breast', 'current_price': 1\\.99, 'sale_story': '\\$1\\.99 / lb with Card', 'category': 'Meat & Seafood'\\},\n                \\{'name': 'Hass Avocados Large', 'current_price': None, 'sale_story': '4 for \\$3\\.00 with Card', 'category': 'Produce'\\},\n                \\{'name': 'Simple Truth Organic Extra Virgin Olive Oil 16\\.9 oz', 'current_price': 7\\.99, 'original_price': 9\\.99, 'sale_story': 'Save \\$2\\.00', 'category': 'Pantry'\\}\n            \\]\n            return httpx\\.Response\\(200, json=items\\)\n        elif '/flipp/flyers' in url_str:\n            flyers = \\[\n                \\{'id': 12345, 'merchant': 'Ralphs', 'valid_from': '2026-09-23T07:00:00Z', 'valid_to': '2026-09-30T06:59:59Z'\\},\n                \\{'id': 67890, 'merchant': 'Sprouts', 'valid_from': '2026-09-23T07:00:00Z', 'valid_to': '2026-09-30T06:59:59Z'\\}\n            \\]\n            return httpx\\.Response\\(200, json=\\{'flyers': flyers\\}\\)\n        return httpx\\.Response\\(404\\)\n\n    transport = httpx\\.MockTransport\\(handler\\)\n    async with httpx\\.AsyncClient\\(transport=transport\\) as client:\n        adapter = FlippAdapter\\(client=client\\)\n        v_from, v_to, deals = await adapter\\.get_normalized_deals\\('90210', 'ralphs-101', 'Ralphs'\\)\n        print\\('DEALS:', len\\(deals\\), deals\\)\n\nasyncio\\.run\\(test\\(\\)\\)\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python -c \"import sys; sys\\.path\\.insert\\(0, 'apps/shopper-domain'\\); from src\\.ingestion\\.adapters\\.flipp_adapter import FlippAdapter; a = FlippAdapter\\(\\); print\\('item2 price:', a\\._extract_sale_price\\(\\{'name': 'Hass Avocados Large', 'current_price': None, 'sale_story': '4 for \\$3\\.00 with Card'\\}\\)\\)\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python -c \"import sys; sys\\.path\\.insert\\(0, 'apps/shopper-domain'\\); from src\\.ingestion\\.adapters\\.flipp_adapter import FlippAdapter; a = FlippAdapter\\(\\); s = '4 for ' \\+ chr\\(36\\) \\+ '3\\.00 with Card'; print\\('String:', s\\); print\\('item2 price:', a\\._extract_sale_price\\(\\{'name': 'Hass Avocados Large', 'current_price': None, 'sale_story': s\\}\\)\\)\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python -c \"import sys; sys\\.path\\.insert\\(0, 'apps/shopper-domain'\\); import asyncio, redis\\.asyncio as redis\nasync def check_redis\\(\\):\n    try:\n        r = redis\\.Redis\\.from_url\\('redis://localhost:6379', decode_responses=True\\)\n        await r\\.ping\\(\\)\n        print\\('Redis is ONLINE'\\)\n        await r\\.aclose\\(\\)\n    except Exception as e:\n        print\\('Redis is OFFLINE:', e\\)\nasyncio\\.run\\(check_redis\\(\\)\\)\n\"$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     },
     "python.analysis.diagnosticSeverityOverrides": {
