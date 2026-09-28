@@ -5,7 +5,7 @@ import os
 import redis.asyncio as redis 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from fastapi import Depends, FastAPI, HTTPException, logger
+from fastapi import Depends, FastAPI, logger
 from fastapi.middleware.cors import CORSMiddleware
 from models import (
     StoreDiscoveryRequest,
@@ -44,7 +44,7 @@ deal_repo = DealRepository(DEALS_PATH)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global redis_pool
-    logger.info("Initializing Redis connection pool for Shopper Domain at %s", REDIS_URL)
+    logger.logger.info("Initializing Redis connection pool for Shopper Domain at %s", REDIS_URL)
     redis_pool = redis.ConnectionPool.from_url(REDIS_URL, decode_responses=True)
     yield
     if redis_pool:
@@ -169,20 +169,35 @@ async def ingest_store_on_demand(
 
     lock_key = f"lock:ingest:{store_id}"
     redis_client = storage.redis
+    lock_ttl_seconds = 15
 
-    # Acquire lock with a 20-second timeout
-    acquired = await redis_client.set(lock_key, "1", nx=True, ex=20)
+    # 1. Attempt to acquire ingestion lock
+    acquired = await redis_client.set(lock_key, "1", nx=True, ex=lock_ttl_seconds)
+
     if not acquired:
-        # Another worker is ingesting; wait briefly and check cache
-        await asyncio.sleep(1.5)
+        logger.logger.info("Store %s is currently being ingested by another request. Awaiting result...", store_id)
+        # Poll up to 6 seconds (12 x 500ms) for the scraping worker to complete
+        for _ in range(12):
+            await asyncio.sleep(0.5)
+            # Check if deals are now available in Redis/disk
+            cached = await storage.get_deals_for_stores([store_id])
+            deals = cached.get(store_id, [])
+            if deals:
+                return deals
+            # If lock cleared, worker finished or released
+            if not await redis_client.exists(lock_key):
+                break
+
+        # Final fallback check
         cached = await storage.get_deals_for_stores([store_id])
         return cached.get(store_id, [])
 
+    # 2. Worker executing the scrape
     try:
         valid_from, valid_to, deals = await adapter.get_normalized_deals(
             postal_code=postal_code,
             store_id=store_id,
-            merchant_name=chain
+            merchant_name=chain,
         )
         if deals:
             deal_dicts = [d.model_dump() if hasattr(d, "model_dump") else d for d in deals]
@@ -190,10 +205,14 @@ async def ingest_store_on_demand(
             return deal_dicts
         return []
     except Exception as exc:
-        logger.error("On-demand ingestion failed for %s (%s): %s", store_id, chain, exc)
+        logger.logger.error("On-demand ingestion failed for store %s (%s): %s", store_id, chain, exc, exc_info=True)
         return []
     finally:
-        await redis_client.delete(lock_key)
+        # 3. Always release lock so queued readers can complete immediately
+        try:
+            await redis_client.delete(lock_key)
+        except Exception:
+            pass
 
 class DealItemDto(BaseModel):
     product_name: str
@@ -291,13 +310,19 @@ async def evaluate_top_deals(
         if not clean_key:
             clean_key = str(d.get("deal_id") or id(d))
 
-        deal_price = float(d.get("deal_price") if d.get("deal_price") is not None else (d.get("price") or d.get("sale_price") or 0.0))
+        raw_price = d.get("deal_price")
+        if raw_price is None:
+            raw_price = d.get("price") or d.get("sale_price") or 0.0
+        deal_price = float(raw_price)
 
         if clean_key not in deduped_deals:
             deduped_deals[clean_key] = d
         else:
             existing = deduped_deals[clean_key]
-            existing_price = float(existing.get("deal_price") if existing.get("deal_price") is not None else (existing.get("price") or existing.get("sale_price") or 0.0))
+            existing_raw = existing.get("deal_price")
+            if existing_raw is None:
+                existing_raw = existing.get("price") or existing.get("sale_price") or 0.0
+            existing_price = float(existing_raw)
             if deal_price < existing_price:
                 deduped_deals[clean_key] = d
 

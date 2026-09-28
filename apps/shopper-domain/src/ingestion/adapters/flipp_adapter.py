@@ -11,11 +11,22 @@ except ImportError:
     from ..models import NormalizedDealItem, clean_product_name
     from .base import BaseDealAdapter
 
+try:
+    from src.ingestion.circuit_breaker import UpstreamCircuitBreaker, CircuitBreakerOpenException
+except ImportError:
+    from ..circuit_breaker import UpstreamCircuitBreaker, CircuitBreakerOpenException
+
 logger = logging.getLogger(__name__)
 
 FLIPP_BASE_URL = "https://backflipp.wishabi.com/flipp"
 DEFAULT_TIMEOUT = 10.0
 
+# Shared module breaker for wishabi/flipp backend endpoints
+flipp_circuit_breaker = UpstreamCircuitBreaker(
+    name="wishabi-flipp-api",
+    failure_threshold=3,
+    recovery_timeout_seconds=30.0,
+)
 
 def compute_value_score(deal_price: float, original_price: Optional[float] = None) -> float:
     """
@@ -154,7 +165,7 @@ class FlippAdapter(BaseDealAdapter):
         url = f"{FLIPP_BASE_URL}/flyers"
         params = {"postal_code": postal_code}
 
-        try:
+        async def _do_request() -> list[dict[str, Any]]:
             client = await self._get_client()
             logger.info("Fetching flyers for postal_code=%s merchant=%s", postal_code, target_merchant)
             response = await client.get(url, params=params)
@@ -183,23 +194,22 @@ class FlippAdapter(BaseDealAdapter):
             )
             return matched_flyers
 
-        except httpx.TimeoutException as exc:
-            logger.error("Timeout fetching flyers for postal_code=%s: %s", postal_code, exc)
-            return []
-        except httpx.HTTPError as exc:
-            logger.error("HTTP error fetching flyers for postal_code=%s: %s", postal_code, exc)
+        try:
+            return await flipp_circuit_breaker.call(_do_request)
+        except CircuitBreakerOpenException as cbe:
+            logger.warning("Flipp breaker active: %s", cbe)
             return []
         except Exception as exc:
-            logger.error("Unexpected error fetching flyers for postal_code=%s: %s", postal_code, exc)
+            logger.error("Error fetching flyers for postal_code=%s: %s", postal_code, exc)
             return []
 
-    async def fetch_promotions_for_flyer(self, flyer_id: int) -> list[dict[str, Any]]:
+    async def fetch_promotions_for_flyer(self, flyer_id: Any) -> list[dict[str, Any]]:
         """
         Fetch promotional items array for a specific flyer ID.
         """
         url = f"{FLIPP_BASE_URL}/flyers/{flyer_id}/items"
 
-        try:
+        async def _do_request() -> list[dict[str, Any]]:
             client = await self._get_client()
             logger.info("Fetching promotions for flyer_id=%s", flyer_id)
             response = await client.get(url)
@@ -221,15 +231,14 @@ class FlippAdapter(BaseDealAdapter):
                     return promos_val
 
             return []
-
-        except httpx.TimeoutException as exc:
-            logger.error("Timeout fetching promotions for flyer_id=%s: %s", flyer_id, exc)
-            return []
-        except httpx.HTTPError as exc:
-            logger.error("HTTP error fetching promotions for flyer_id=%s: %s", flyer_id, exc)
+        
+        try:
+            return await flipp_circuit_breaker.call(_do_request)
+        except CircuitBreakerOpenException as cbe:
+            logger.warning("Flipp breaker active: %s", cbe)
             return []
         except Exception as exc:
-            logger.error("Unexpected error fetching promotions for flyer_id=%s: %s", flyer_id, exc)
+            logger.error("Error fetching promos for flyer_id=%s: %s", flyer_id, exc)
             return []
 
     def _parse_datetime(self, date_val: Any, default: datetime) -> datetime:
@@ -252,12 +261,14 @@ class FlippAdapter(BaseDealAdapter):
             if isinstance(current_price, (int, float)) and current_price > 0:
                 return float(current_price)
             if isinstance(current_price, str):
-                try:
-                    val = float(re.sub(r"[^\d.]", "", current_price))
-                    if val > 0:
-                        return val
-                except ValueError:
-                    pass
+                simple_match = re.match(r"^\s*\$?\s*(\d+(?:\.\d+)?)\s*$", current_price)
+                if simple_match:
+                    try:
+                        val = float(simple_match.group(1))
+                        if val > 0:
+                            return val
+                    except ValueError:
+                        pass
 
         # Fallback to text parsing from sale_story, description, pre_price_text, post_price_text
         text_sources = [
@@ -313,7 +324,7 @@ class FlippAdapter(BaseDealAdapter):
             ]
         ).lower()
 
-        if "per lb" in text or "/lb" in text or "/ lb" in text or "per pound" in text:
+        if "per lb" in text or "/lb" in text or "/ lb" in text or "per pound" in text or "lbs" in text or "pound" in text:
             return "lb"
         return "each"
 
@@ -328,14 +339,19 @@ class FlippAdapter(BaseDealAdapter):
 
     def _extract_regular_price(self, item: dict[str, Any]) -> Optional[float]:
         """Extracts regular/original price from item dictionary if present."""
-        orig_raw = item.get("original_price") or item.get("regular_price")
+        orig_raw = item.get("original_price") if item.get("original_price") is not None else item.get("regular_price")
         if orig_raw is not None:
-            try:
-                val = float(re.sub(r"[^\d.]", "", str(orig_raw)))
-                if val > 0:
-                    return val
-            except ValueError:
-                return None
+            if isinstance(orig_raw, (int, float)) and orig_raw > 0:
+                return float(orig_raw)
+            if isinstance(orig_raw, str):
+                orig_match = re.search(r"\$?\s*(\d+(?:\.\d+)?)", orig_raw)
+                if orig_match:
+                    try:
+                        val = float(orig_match.group(1))
+                        if val > 0:
+                            return val
+                    except ValueError:
+                        return None
         return None
 
     def _extract_raw_promotion(
@@ -439,9 +455,13 @@ class FlippAdapter(BaseDealAdapter):
         if not flyers:
             return None
 
-        now_utc = now or datetime.now(timezone.utc)
-        active_flyers = []
-        upcoming_flyers = []
+        now_utc = (
+            now
+            if (now is not None and now.tzinfo is not None)
+            else (now.replace(tzinfo=timezone.utc) if now is not None else datetime.now(timezone.utc))
+        )
+        active_flyers: list[tuple[dict[str, Any], bool, datetime, datetime]] = []
+        upcoming_flyers: list[tuple[dict[str, Any], bool, datetime, datetime]] = []
 
         for flyer in flyers:
             v_from = self._parse_datetime(
@@ -453,7 +473,9 @@ class FlippAdapter(BaseDealAdapter):
                 default=now_utc + timedelta(days=7)
             )
 
-            is_weekly = bool(re.search(r"\b(?:weekly|ad|circular)\b", str(flyer.get("name") or ""), re.I))
+            is_weekly = bool(
+                re.search(r"\b(?:weekly|ad|circular)\b", str(flyer.get("name") or flyer.get("flyer_run_id") or ""), re.I)
+            )
 
             if v_from <= now_utc <= v_to:
                 active_flyers.append((flyer, is_weekly, v_from, v_to))
