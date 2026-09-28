@@ -189,4 +189,114 @@ public class ShopperClientTests
         exception.Which.StatusCode.Should().Be(System.Net.HttpStatusCode.InternalServerError);
         exception.Which.ResponseBody.Should().Contain("Ingredient lookup service error");
     }
+
+    [Fact]
+    public async Task GetDealsForStoreAsync_ReturnsDeals_WhenStoreExists()
+    {
+        // Act
+        var deals = await _client.GetDealsForStoreAsync("ralphs-101");
+
+        // Assert
+        deals.Should().NotBeNull();
+        deals.Should().HaveCount(2);
+        deals[0].StoreId.Should().Be("ralphs-101");
+        deals[0].ItemName.Should().Be("Boneless Skinless Chicken Breast");
+        deals[0].DealPrice.Should().Be(2.99m);
+    }
+
+    [Fact]
+    public async Task GetDealsForStoreAsync_ReturnsEmptyList_When404NotFound()
+    {
+        // Arrange
+        _mockHandler.SetCustomResponse(System.Net.HttpStatusCode.NotFound, "{\"detail\":\"No active deals found for store\"}");
+
+        // Act
+        var deals = await _client.GetDealsForStoreAsync("unknown-store");
+
+        // Assert
+        deals.Should().NotBeNull();
+        deals.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetDealsForStoreAsync_ReturnsEmptyList_WhenServerError()
+    {
+        // Arrange
+        _mockHandler.SetServerError("Shopper service down");
+
+        // Act
+        var deals = await _client.GetDealsForStoreAsync("ralphs-101");
+
+        // Assert
+        deals.Should().NotBeNull();
+        deals.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetTopDealsForStoresAsync_FetchesConcurrentlyAndDeduplicatesBestPrice()
+    {
+        // Arrange
+        _mockHandler.CustomHandler = request =>
+        {
+            var url = request.RequestUri?.ToString() ?? "";
+            if (url.Contains("ralphs-101"))
+            {
+                var json = """
+                {
+                  "timestamp": "2026-09-27T10:00:00Z",
+                  "region_context": { "coordinates": { "latitude": 33.8895, "longitude": -118.3533 }, "store_ids": ["ralphs-101"] },
+                  "deals": [
+                    { "deal_id": "r1", "store_id": "ralphs-101", "store_name": "Ralphs", "item_name": "Honeycrisp Apples", "clean_name": "honeycrisp apples", "deal_price": 1.99, "value_score": 8.0, "unit": "lb" }
+                  ]
+                }
+                """;
+                return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json") };
+            }
+            if (url.Contains("aldi-202"))
+            {
+                var json = """
+                {
+                  "timestamp": "2026-09-27T10:00:00Z",
+                  "region_context": { "coordinates": { "latitude": 33.8895, "longitude": -118.3533 }, "store_ids": ["aldi-202"] },
+                  "deals": [
+                    { "deal_id": "a1", "store_id": "aldi-202", "store_name": "ALDI", "item_name": "Honeycrisp Apples", "clean_name": "honeycrisp apples", "deal_price": 1.29, "value_score": 9.5, "unit": "lb" },
+                    { "deal_id": "a2", "store_id": "aldi-202", "store_name": "ALDI", "item_name": "Whole Milk", "clean_name": "whole milk", "deal_price": 2.79, "value_score": 8.5, "unit": "each" }
+                  ]
+                }
+                """;
+                return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json") };
+            }
+            return null;
+        };
+
+        // Act
+        var result = await _client.GetTopDealsForStoresAsync(["ralphs-101", "aldi-202"]);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.RegionContext.StoreIds.Should().Contain(["ralphs-101", "aldi-202"]);
+        result.Deals.Should().HaveCount(2);
+
+        // Deduplication by clean_name should keep ALDI's Honeycrisp Apples ($1.29) over Ralphs ($1.99)
+        var appleDeal = result.Deals.FirstOrDefault(d => d.CleanName == "honeycrisp apples");
+        appleDeal.Should().NotBeNull();
+        appleDeal!.DealId.Should().Be("a1");
+        appleDeal.DealPrice.Should().Be(1.29m);
+        appleDeal.StoreId.Should().Be("aldi-202");
+
+        // Ordered by value_score descending
+        result.Deals[0].ValueScore.Should().BeGreaterThanOrEqualTo(result.Deals[1].ValueScore);
+    }
+
+    [Fact]
+    public async Task GetTopDealsForStoresAsync_ReturnsEmptyDeals_WhenStoreIdsEmpty()
+    {
+        // Act
+        var result = await _client.GetTopDealsForStoresAsync(new List<string>());
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Deals.Should().BeEmpty();
+        result.RegionContext.StoreIds.Should().BeEmpty();
+    }
 }

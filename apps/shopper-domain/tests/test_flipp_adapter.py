@@ -77,30 +77,37 @@ async def test_flipp_adapter():
         assert v_to == datetime(2026, 9, 30, 6, 59, 59, tzinfo=timezone.utc)
 
         d0 = deals[0]
-        assert d0.product_name == "Fresh Heritage Farm Boneless Chicken Breast"
+        assert d0.item_name == "Fresh Heritage Farm Boneless Chicken Breast"
         assert d0.clean_name == "fresh heritage farm boneless chicken breast"
-        assert d0.sale_price == 1.99
-        assert d0.pricing_unit == "lb"
-        assert d0.category == "Meat & Seafood"
+        assert d0.deal_price == 1.99
+        assert d0.unit == "lb"
+        assert d0.normalized_category == "Meat"
+        assert d0.currency == "USD"
+        assert d0.store_id == "ralphs-101"
+        assert d0.store_name == "Ralphs"
+        assert d0.deal_id.startswith("ralphs-101_")
         assert d0.raw_promotion_text == "$1.99 / lb with Card"
 
         d1 = deals[1]
-        assert d1.product_name == "Hass Avocados Large"
+        assert d1.item_name == "Hass Avocados Large"
         assert d1.clean_name == "hass avocados large"
-        assert d1.sale_price == 0.75
-        assert d1.pricing_unit == "each"
+        assert d1.deal_price == 0.75
+        assert d1.unit == "each"
+        assert d1.normalized_category == "Produce"
         assert d1.raw_promotion_text == "4 for $3.00 with Card"
 
         d2 = deals[2]
-        assert d2.product_name == "Simple Truth Organic Extra Virgin Olive Oil 16.9 oz"
+        assert d2.item_name == "Simple Truth Organic Extra Virgin Olive Oil 16.9 oz"
         assert d2.clean_name == "simple truth organic extra virgin olive oil"
-        assert d2.sale_price == 7.99
-        assert d2.regular_price == 9.99
-        assert d2.pricing_unit == "each"
+        assert d2.deal_price == 7.99
+        assert d2.original_price == 9.99
+        assert d2.unit == "each"
+        assert d2.normalized_category == "Pantry"
 
         d3 = deals[3]
-        assert d3.sale_price == 4.99
-        assert d3.pricing_unit == "lb"
+        assert d3.deal_price == 4.99
+        assert d3.unit == "lb"
+        assert d3.normalized_category == "Meat"
 
         # 4. Test error handling on HTTP failure
         error_flyers = await adapter.fetch_flyers_by_postal_code("00000", merchant_name="UnknownStore")

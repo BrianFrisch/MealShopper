@@ -163,6 +163,57 @@ public class MockHttpMessageHandler : HttpMessageHandler
 
         var url = request.RequestUri?.ToString() ?? string.Empty;
 
+        if (url.Contains("v1/deals/stores", StringComparison.OrdinalIgnoreCase))
+        {
+            var segments = url.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            var storeId = segments.Length > 0 ? segments[^1] : "store-1";
+            var dealsJson = $$"""
+            {
+              "timestamp": "2026-09-27T10:00:00Z",
+              "region_context": {
+                "coordinates": {
+                  "latitude": 33.8895,
+                  "longitude": -118.3533
+                },
+                "store_ids": ["{{storeId}}"]
+              },
+              "deals": [
+                {
+                  "deal_id": "{{storeId}}_item_001",
+                  "store_id": "{{storeId}}",
+                  "store_name": "Store {{storeId}}",
+                  "item_name": "Boneless Skinless Chicken Breast",
+                  "clean_name": "boneless skinless chicken breast",
+                  "normalized_category": "Meat",
+                  "deal_price": 2.99,
+                  "original_price": 4.99,
+                  "currency": "USD",
+                  "unit": "lb",
+                  "value_score": 9.2
+                },
+                {
+                  "deal_id": "{{storeId}}_item_002",
+                  "store_id": "{{storeId}}",
+                  "store_name": "Store {{storeId}}",
+                  "item_name": "Organic Strawberries",
+                  "clean_name": "organic strawberries",
+                  "normalized_category": "Produce",
+                  "deal_price": 1.99,
+                  "original_price": 2.99,
+                  "currency": "USD",
+                  "unit": "each",
+                  "value_score": 8.5
+                }
+              ]
+            }
+            """;
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(dealsJson, Encoding.UTF8, "application/json")
+            };
+            return Task.FromResult(response);
+        }
+
         if (url.Contains("v1/shopper/stores", StringComparison.OrdinalIgnoreCase))
         {
             var response = new HttpResponseMessage(HttpStatusCode.OK)

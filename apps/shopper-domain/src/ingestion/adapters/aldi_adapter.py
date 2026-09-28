@@ -565,6 +565,8 @@ class AldiAdapter(FlippAdapter):
                 valid_from=valid_from,
                 valid_to=valid_to,
                 flyer_context=flyer,
+                store_id=store_id,
+                store_name=target_merchant,
             )
             if deal_item is not None:
                 normalized_deals.append(deal_item)

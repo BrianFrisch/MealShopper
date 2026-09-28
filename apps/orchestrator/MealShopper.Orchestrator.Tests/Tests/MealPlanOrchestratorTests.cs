@@ -300,12 +300,13 @@ public class MealPlanOrchestratorTests
             JobStatus.GeneratingMealPlan,
             JobStatus.Completed);
 
-        // Verify that stores, deals, planner, and loopback lookup requests were captured
-        mockHandler.CapturedRequests.Should().HaveCount(4);
+        // Verify that stores, deals (for 2 stores), planner, and loopback lookup requests were captured
+        mockHandler.CapturedRequests.Should().HaveCount(5);
         mockHandler.CapturedRequests[0].RequestUri!.ToString().Should().Contain("v1/shopper/stores");
-        mockHandler.CapturedRequests[1].RequestUri!.ToString().Should().Contain("v1/shopper/deals");
-        mockHandler.CapturedRequests[2].RequestUri!.ToString().Should().Contain("v1/planner/generate");
-        mockHandler.CapturedRequests[3].RequestUri!.ToString().Should().Contain("v1/shopper/lookup-ingredients");
+        mockHandler.CapturedRequests.Should().Contain(r => r.RequestUri!.ToString().Contains("v1/deals/stores/store_vons_1"));
+        mockHandler.CapturedRequests.Should().Contain(r => r.RequestUri!.ToString().Contains("v1/deals/stores/store_grocoutlet_1"));
+        mockHandler.CapturedRequests.Should().Contain(r => r.RequestUri!.ToString().Contains("v1/planner/generate"));
+        mockHandler.CapturedRequests.Should().Contain(r => r.RequestUri!.ToString().Contains("v1/shopper/lookup-ingredients"));
     }
 
     private class TrackingJobStateStore : IJobStateStore

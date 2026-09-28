@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using MealShopper.Orchestrator.Exceptions;
@@ -24,6 +25,117 @@ public class ShopperClient : IShopperClient
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DealItemDto>> GetDealsForStoreAsync(string storeId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(storeId))
+        {
+            _logger.LogWarning("GetDealsForStoreAsync was called with an empty or whitespace storeId.");
+            return Array.Empty<DealItemDto>();
+        }
+
+        _logger.LogInformation("Fetching deals for store {StoreId}", storeId);
+
+        try
+        {
+            using var response = await _httpClient.GetAsync($"v1/deals/stores/{Uri.EscapeDataString(storeId)}", ct);
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                _logger.LogWarning("No active deals found for store {StoreId} (404 Not Found)", storeId);
+                return Array.Empty<DealItemDto>();
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(ct);
+                _logger.LogError(
+                    "Failed to fetch deals for store {StoreId} with status code {StatusCode}. Response: {ResponseBody}",
+                    storeId, response.StatusCode, errorBody);
+                return Array.Empty<DealItemDto>();
+            }
+
+            var data = await response.Content.ReadFromJsonAsync<TopDealsResponse>(JsonOptions, ct);
+            return data?.Deals ?? (IReadOnlyList<DealItemDto>)Array.Empty<DealItemDto>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HTTP request error occurred while fetching deals for store {StoreId}.", storeId);
+            return Array.Empty<DealItemDto>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error occurred while fetching deals for store {StoreId}.", storeId);
+            return Array.Empty<DealItemDto>();
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<TopDealsResponse> GetTopDealsForStoresAsync(IEnumerable<string> storeIds, CancellationToken ct = default)
+    {
+        var storeList = storeIds?
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct()
+            .ToList() ?? [];
+
+        if (storeList.Count == 0)
+        {
+            _logger.LogWarning("GetTopDealsForStoresAsync called with empty storeIds.");
+            return new TopDealsResponse
+            {
+                Timestamp = DateTimeOffset.UtcNow,
+                RegionContext = new RegionContextDto
+                {
+                    Coordinates = new CoordinatesDto
+                    {
+                        Latitude = 33.8895,
+                        Longitude = -118.3533
+                    },
+                    StoreIds = []
+                },
+                Deals = []
+            };
+        }
+
+        _logger.LogInformation(
+            "Fetching deals concurrently across {StoreCount} stores: {StoreIds}",
+            storeList.Count, string.Join(", ", storeList));
+
+        var fetchTasks = storeList.Select(sid => GetDealsForStoreAsync(sid, ct));
+        var storeDealsResults = await Task.WhenAll(fetchTasks);
+
+        var allDeals = storeDealsResults.SelectMany(deals => deals).ToList();
+
+        // Deduplicate items by ItemName or CleanName keeping the best price/value score
+        var dedupedDeals = allDeals
+            .GroupBy(d => !string.IsNullOrWhiteSpace(d.CleanName)
+                ? d.CleanName.Trim().ToLowerInvariant()
+                : d.ItemName.Trim().ToLowerInvariant())
+            .Where(g => !string.IsNullOrWhiteSpace(g.Key))
+            .Select(g => g.OrderBy(d => d.DealPrice).ThenByDescending(d => d.ValueScore).First())
+            .OrderByDescending(d => d.ValueScore)
+            .ToList();
+
+        _logger.LogInformation(
+            "Consolidated {TotalDeals} raw deals across {StoreCount} stores into {DedupedCount} top deals.",
+            allDeals.Count, storeList.Count, dedupedDeals.Count);
+
+        return new TopDealsResponse
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            RegionContext = new RegionContextDto
+            {
+                Coordinates = new CoordinatesDto
+                {
+                    Latitude = 33.8895,
+                    Longitude = -118.3533
+                },
+                StoreIds = storeList
+            },
+            Deals = dedupedDeals
+        };
     }
 
     /// <inheritdoc />

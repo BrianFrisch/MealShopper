@@ -38,5 +38,25 @@
     "zip_code": "90503",
     "latitude": 33.8615,
     "longitude": -118.3701
+  },
+  {
+    "id": "ralphs-90260",
+    "name": "Ralphs",
+    "street": "1413 Hawthorne Blvd",
+    "city": "Redondo Beach",
+    "state": "CA",
+    "zip_code": "90260",
+    "latitude": 33.8895,
+    "longitude": -118.3533
+  },
+  {
+    "id": "aldi-90260",
+    "name": "ALDI",
+    "street": "22235 S Vermont Ave",
+    "city": "Torrance",
+    "state": "CA",
+    "zip_code": "90260",
+    "latitude": 33.8895,
+    "longitude": -118.3533
   }
 ]

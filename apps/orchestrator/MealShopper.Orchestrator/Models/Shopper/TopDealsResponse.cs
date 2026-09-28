@@ -68,6 +68,12 @@ public class DealItemDto
     public string ItemName { get; set; } = string.Empty;
 
     /// <summary>
+    /// Cleaned/sanitized product name.
+    /// </summary>
+    [JsonPropertyName("clean_name")]
+    public string CleanName { get; set; } = string.Empty;
+
+    /// <summary>
     /// Standardized product category (e.g., Produce, Dairy, Meat, Seafood, Pantry, Bakery).
     /// </summary>
     [JsonPropertyName("normalized_category")]

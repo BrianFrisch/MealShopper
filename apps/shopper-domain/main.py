@@ -1,10 +1,10 @@
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import redis.asyncio as redis 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, logger
 from fastapi.middleware.cors import CORSMiddleware
 from models import (
     StoreDiscoveryRequest,
@@ -18,6 +18,7 @@ from geo_service import StoreRepository
 from deal_service import DealRepository
 from pydantic import BaseModel, Field, AliasChoices
 from src.storage.deal_storage import PartitionedDealStorage
+from src.ingestion.models import TopDealsResponse, RegionContextDto, CoordinatesDto, NormalizedDealItem
 
 app = FastAPI(title="MealShopper - Shopper Domain Service")
 
@@ -41,6 +42,7 @@ deal_repo = DealRepository(DEALS_PATH)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global redis_pool
+    logger.info("Initializing Redis connection pool for Shopper Domain at %s", REDIS_URL)
     redis_pool = redis.ConnectionPool.from_url(REDIS_URL, decode_responses=True)
     yield
     if redis_pool:
@@ -143,6 +145,9 @@ def score_deals(payload: DealScoringRequest):
     )
 
 def get_deal_storage() -> PartitionedDealStorage:
+    global redis_pool
+    if redis_pool is None:
+        redis_pool = redis.ConnectionPool.from_url(REDIS_URL, decode_responses=True)
     client = redis.Redis(connection_pool=redis_pool)
     return PartitionedDealStorage(redis_client=client)
 
@@ -189,7 +194,84 @@ async def get_store_deals(
     deals = results.get(store_id, [])
     if not deals:
         raise HTTPException(status_code=404, detail="No active deals found for store")
-    return {"store_id": store_id, "deals": deals}
+    return {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "region_context": {
+            "coordinates": {"latitude": 33.8895, "longitude": -118.3533},
+            "store_ids": [store_id],
+        },
+        "deals": deals,
+    }
+
+
+class EvaluateTopDealsRequest(BaseModel):
+    store_ids: list[str] = Field(default_factory=list)
+    limit: int = Field(default=30, ge=1, le=100)
+
+
+@app.post("/v1/deals/evaluate-top", response_model=TopDealsResponse)
+async def evaluate_top_deals(
+    payload: EvaluateTopDealsRequest,
+    storage: PartitionedDealStorage = Depends(get_deal_storage),
+) -> TopDealsResponse:
+    if not payload.store_ids:
+        return TopDealsResponse(
+            timestamp=datetime.now(timezone.utc),
+            region_context=RegionContextDto(
+                coordinates=CoordinatesDto(latitude=33.8895, longitude=-118.3533),
+                store_ids=[],
+            ),
+            deals=[],
+        )
+
+    deals_by_store = await storage.get_deals_for_stores(payload.store_ids)
+
+    # Flatten deals across all stores
+    all_deals_raw: list[dict[str, Any]] = []
+    for sid in payload.store_ids:
+        store_deals = deals_by_store.get(sid, [])
+        all_deals_raw.extend(store_deals)
+
+    # Deduplicate by clean_name, keeping the deal with lowest deal_price
+    deduped_deals: dict[str, dict[str, Any]] = {}
+    for d in all_deals_raw:
+        clean_name = d.get("clean_name") or d.get("item_name") or d.get("product_name") or ""
+        clean_key = clean_name.strip().lower()
+        if not clean_key:
+            clean_key = str(d.get("deal_id") or id(d))
+
+        deal_price = float(d.get("deal_price") if d.get("deal_price") is not None else (d.get("price") or d.get("sale_price") or 0.0))
+
+        if clean_key not in deduped_deals:
+            deduped_deals[clean_key] = d
+        else:
+            existing = deduped_deals[clean_key]
+            existing_price = float(existing.get("deal_price") if existing.get("deal_price") is not None else (existing.get("price") or existing.get("sale_price") or 0.0))
+            if deal_price < existing_price:
+                deduped_deals[clean_key] = d
+
+    # Convert to NormalizedDealItem models
+    normalized_items: list[NormalizedDealItem] = []
+    for d in deduped_deals.values():
+        if isinstance(d, NormalizedDealItem):
+            normalized_items.append(d)
+        else:
+            normalized_items.append(NormalizedDealItem.model_validate(d))
+
+    # Sort descending by value_score
+    normalized_items.sort(key=lambda x: x.value_score, reverse=True)
+
+    # Take limit items
+    selected_deals = normalized_items[: payload.limit]
+
+    return TopDealsResponse(
+        timestamp=datetime.now(timezone.utc),
+        region_context=RegionContextDto(
+            coordinates=CoordinatesDto(latitude=33.8895, longitude=-118.3533),
+            store_ids=payload.store_ids,
+        ),
+        deals=selected_deals,
+    )
 
 # ---- Loop-Back Matching Endpoints ----
 

@@ -46,7 +46,14 @@ class PartitionedDealStorage:
             written_paths.append(file_path)
             
         # 2. Redis active cache with TTL matching flyer expiry
-        ttl_seconds = max(int((valid_to - datetime.now(timezone.utc)).total_seconds()), 3600)
+        # Normalize timezone to UTC
+        valid_to_utc = valid_to.astimezone(timezone.utc) if valid_to.tzinfo else valid_to.replace(tzinfo=timezone.utc)
+        now_utc = datetime.now(timezone.utc)
+        diff_seconds = int((valid_to_utc - now_utc).total_seconds())
+
+        # Enforce minimum 24 hours so active circulars survive inspection
+        ttl_seconds = max(diff_seconds, 86400)
+        
         cache_key = f"deals:store:{store_id}"
         await self.redis.set(cache_key, serialized, ex=ttl_seconds)
 

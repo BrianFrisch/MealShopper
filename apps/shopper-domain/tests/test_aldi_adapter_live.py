@@ -5,6 +5,7 @@ import os
 import httpx
 import redis.asyncio as redis
 
+from src.ingestion.adapters.aldi_adapter import AldiAdapter
 from src.ingestion.factory import DealAdapterFactory
 from src.storage.deal_storage import PartitionedDealStorage
 
@@ -32,7 +33,7 @@ async def test_live_aldi_ingestion() -> None:
 
             # Discover flyer ID for logging / reporting
             flyers = []
-            if hasattr(adapter, "fetch_flyers_by_postal_code"):
+            if isinstance(adapter, AldiAdapter):
                 flyers = await adapter.fetch_flyers_by_postal_code(postal_code)
             active_flyer_id = flyers[0].get("id") if flyers else "N/A"
 
@@ -44,9 +45,9 @@ async def test_live_aldi_ingestion() -> None:
         # 4. Assertions:
         # - Returned deals list is non-empty
         assert len(deals) > 0, "Expected non-empty list of deals"
-        # - Each item has sale_price > 0
+        # - Each item has deal_price > 0
         for deal in deals:
-            assert deal.sale_price > 0, f"Deal '{deal.product_name}' has invalid sale_price: {deal.sale_price}"
+            assert deal.deal_price > 0, f"Deal '{deal.item_name}' has invalid deal_price: {deal.deal_price}"
 
         # - Start and end dates are valid UTC datetimes
         assert isinstance(valid_from, datetime), "valid_from must be a datetime"
@@ -67,7 +68,7 @@ async def test_live_aldi_ingestion() -> None:
         # - Top 5 deals formatted as: [category] product_name -> $sale_price / pricing_unit (raw_promotion_text)
         print("\nTop 5 Deals:")
         for deal in deals[:5]:
-            print(f"[{deal.category}] {deal.product_name} -> ${deal.sale_price:.2f} / {deal.pricing_unit} ({deal.raw_promotion_text})")
+            print(f"[{deal.normalized_category}] {deal.item_name} -> ${deal.deal_price:.2f} / {deal.unit} ({deal.raw_promotion_text})")
 
         # 6. Save deals using PartitionedDealStorage and assert retrieval from both Redis and local partition files
         deals_payload = [deal.model_dump(mode="json") for deal in deals]

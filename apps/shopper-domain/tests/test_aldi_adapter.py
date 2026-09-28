@@ -114,59 +114,68 @@ async def test_aldi_adapter():
 
         # 3. Test Aldi Fresh Meat Special items
         d0 = deals[0]
-        assert d0.product_name == "Fresh Family Pack Boneless Skinless Chicken Thighs"
-        assert d0.sale_price == 2.29
-        assert d0.pricing_unit == "lb"
-        assert d0.category == "Fresh Meat"
-        assert d0.regular_price is None
+        assert d0.item_name == "Fresh Family Pack Boneless Skinless Chicken Thighs"
+        assert d0.clean_name == "fresh family boneless skinless chicken thighs"
+        assert d0.deal_price == 2.29
+        assert d0.unit == "lb"
+        assert d0.normalized_category == "Meat"
+        assert d0.original_price is None
+        assert d0.currency == "USD"
+        assert d0.store_id == "aldi-chicago-01"
+        assert d0.store_name == "ALDI"
+        assert d0.deal_id.startswith("aldi-chicago-01_")
 
         d1 = deals[1]
-        assert d1.product_name == "Fresh USDA Choice Black Angus Beef Chuck Roast"
-        assert d1.sale_price == 4.99
-        assert d1.pricing_unit == "lb"
-        assert d1.category == "Fresh Meat"
+        assert d1.item_name == "Fresh USDA Choice Black Angus Beef Chuck Roast"
+        assert d1.deal_price == 4.99
+        assert d1.unit == "lb"
+        assert d1.normalized_category == "Meat"
 
         # 4. Test Produce pricing conventions
         d2 = deals[2]  # 49¢ each avocados
-        assert d2.product_name == "Hass Avocados"
-        assert d2.sale_price == 0.49
-        assert d2.pricing_unit == "each"
-        assert d2.category == "Produce"
+        assert d2.item_name == "Hass Avocados"
+        assert d2.deal_price == 0.49
+        assert d2.unit == "each"
+        assert d2.normalized_category == "Produce"
 
         d3 = deals[3]  # Strawberries $1.49 each
-        assert d3.sale_price == 1.49
-        assert d3.pricing_unit == "each"
-        assert d3.category == "Produce"
+        assert d3.item_name == "Strawberries 1 lb Pkg"
+        assert d3.deal_price == 1.49
+        assert d3.unit == "each"
+        assert d3.normalized_category == "Produce"
 
         d4 = deals[4]  # Honeycrisp apples $1.29 per lb
-        assert d4.sale_price == 1.29
-        assert d4.pricing_unit == "lb"
-        assert d4.category == "Produce"
+        assert d4.item_name == "Honeycrisp Apples"
+        assert d4.deal_price == 1.29
+        assert d4.unit == "lb"
+        assert d4.normalized_category == "Produce"
 
         # 5. Test Pantry category & regular_price omitted cleanly
         d5 = deals[5]
-        assert d5.product_name == "Specially Selected Extra Virgin Olive Oil 16.9 oz"
-        assert d5.sale_price == 5.99
-        assert d5.regular_price is None
-        assert d5.category == "Pantry"
+        assert d5.item_name == "Specially Selected Extra Virgin Olive Oil 16.9 oz"
+        assert d5.deal_price == 5.99
+        assert d5.original_price is None
+        assert d5.normalized_category == "Pantry"
 
         # 6. Test Aldi Finds section / category hints
         d6 = deals[6]
-        assert d6.product_name == "Crofton 12-Inch Cast Iron Skillet"
-        assert d6.sale_price == 14.99
-        assert d6.category == "Aldi Finds"
+        assert d6.item_name == "Crofton 12-Inch Cast Iron Skillet"
+        assert d6.deal_price == 14.99
+        assert d6.normalized_category == "Pantry"
 
         # 7. Test Dairy & regular price present
         d7 = deals[7]
-        assert d7.sale_price == 2.79
-        assert d7.regular_price == 3.19
-        assert d7.pricing_unit == "each"
-        assert d7.category == "Dairy & Eggs"
+        assert d7.item_name == "Friendly Farms Whole Milk 1 Gallon"
+        assert d7.deal_price == 2.79
+        assert d7.original_price == 3.19
+        assert d7.unit == "each"
+        assert d7.normalized_category == "Dairy"
 
         # 8. Test Snacks / Multi-buy pricing
         d8 = deals[8]
-        assert d8.sale_price == 1.50
-        assert d8.category == "Snacks"
+        assert d8.item_name == "Clancy's Sea Salt Kettle Chips"
+        assert d8.deal_price == 1.50
+        assert d8.normalized_category == "Pantry"
 
         # 9. Test no active circulars for postal code
         empty_from, empty_to, empty_deals = await adapter.get_normalized_deals("99999", "aldi-empty-01")

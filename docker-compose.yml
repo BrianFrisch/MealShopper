@@ -89,6 +89,8 @@ services:
       context: ./apps/shopper-domain
       dockerfile: Dockerfile
     container_name: mealshopper-shopper-domain
+    environment:
+      - REDIS_URL=redis://redis:6379
     ports:
       - "8001:8001"
     networks:

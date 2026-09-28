@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 from typing import Any, Optional
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 def clean_product_name(raw_name: str) -> str:
@@ -54,14 +54,29 @@ def clean_product_name(raw_name: str) -> str:
     return text
 
 
+class CoordinatesDto(BaseModel):
+    latitude: float = 33.8895
+    longitude: float = -118.3533
+
+
+class RegionContextDto(BaseModel):
+    coordinates: CoordinatesDto = Field(default_factory=CoordinatesDto)
+    store_ids: list[str] = Field(default_factory=list)
+
+
 class NormalizedDealItem(BaseModel):
-    product_name: str
-    clean_name: str = ""
-    category: str = "Grocery"
-    sale_price: float
-    regular_price: Optional[float] = None
-    pricing_unit: str
-    raw_promotion_text: str
+    deal_id: str
+    store_id: str
+    store_name: str
+    item_name: str
+    clean_name: str
+    normalized_category: str = "Pantry"
+    deal_price: float
+    original_price: Optional[float] = None
+    currency: str = "USD"
+    unit: str = "each"
+    value_score: float = 8.0
+    raw_promotion_text: str = ""
     valid_from: datetime
     valid_to: datetime
 
@@ -69,8 +84,16 @@ class NormalizedDealItem(BaseModel):
     @classmethod
     def populate_clean_name(cls, data: Any) -> Any:
         if isinstance(data, dict):
-            if not data.get("clean_name") and "product_name" in data:
-                product_name = data.get("product_name")
-                if isinstance(product_name, str):
-                    data["clean_name"] = clean_product_name(product_name)
+            if not data.get("clean_name"):
+                name = data.get("item_name") or data.get("product_name")
+                if isinstance(name, str):
+                    data["clean_name"] = clean_product_name(name)
+                elif "clean_name" not in data:
+                    data["clean_name"] = ""
         return data
+
+
+class TopDealsResponse(BaseModel):
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    region_context: RegionContextDto
+    deals: list[NormalizedDealItem]

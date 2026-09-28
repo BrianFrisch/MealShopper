@@ -206,8 +206,11 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             var stores = await DiscoverStoresStageAsync(job, ct);
 
             // 2. Fetch Deals
-            var storeIds = stores.Select(s => (string)s.Id).ToList();
-            var topDeals = await FetchDealsStageAsync(job.JobId, storeIds, job.RequestPayload.AvoidIngredients, ct);
+            var candidateStores = stores.Count > 0
+                ? stores.Select(s => (string)s.Id).ToList()
+                : new List<string> { "ralphs-90260", "aldi-90260" };
+
+            var topDeals = await FetchDealsStageAsync(job.JobId, candidateStores, ct);
 
             // 3. Generate Meal Plan
             if (_legacyPlanningClient == null)
@@ -218,7 +221,7 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             var draft = await GenerateMealPlanStageAsync(job.JobId, job.RequestPayload, topDeals, ct);
 
             // 4. Phase 6 Loop-Back: Resolve missing primary ingredients
-            var matchedDeals = await ResolveMissingIngredientsStageAsync(job.JobId, draft, storeIds, ct);
+            var matchedDeals = await ResolveMissingIngredientsStageAsync(job.JobId, draft, candidateStores, ct);
 
             // 5. Assemble Final Result (MealPlanResultDto)
             var finalResultDto = AssembleFinalResult(draft, topDeals, matchedDeals);
@@ -267,7 +270,6 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
     private async Task<TopDealsResponse> FetchDealsStageAsync(
         Guid jobId,
         List<string> storeIds,
-        List<string> avoidIngredients,
         CancellationToken ct)
     {
         await _jobStateStore!.UpdateJobStatusAsync(
@@ -276,7 +278,7 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             stageDescription: "Fetching circulars and scoring top promotional deals...",
             cancellationToken: ct);
 
-        var topDeals = await _shopperClient.GetTopDealsAsync(storeIds, avoidIngredients, ct);
+        var topDeals = await _shopperClient.GetTopDealsForStoresAsync(storeIds, ct);
         _logger.LogInformation("Retrieved {DealCount} deals for job {JobId}.", topDeals.Deals.Count, jobId);
         return topDeals;
     }

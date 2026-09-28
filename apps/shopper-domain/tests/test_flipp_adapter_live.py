@@ -34,7 +34,7 @@ async def test_live_flipp_ingestion() -> None:
     # 4. Assertions
     assert len(deals) > 0, "Expected non-empty list of deals"
     for deal in deals:
-        assert deal.sale_price > 0, f"Deal '{deal.product_name}' has invalid sale_price: {deal.sale_price}"
+        assert deal.deal_price > 0, f"Deal '{deal.item_name}' has invalid deal_price: {deal.deal_price}"
 
     now_utc = datetime.now(timezone.utc)
     valid_to_utc = valid_to.astimezone(timezone.utc) if valid_to.tzinfo else valid_to.replace(tzinfo=timezone.utc)
@@ -46,7 +46,7 @@ async def test_live_flipp_ingestion() -> None:
     print(f"Total Items Extracted: {len(deals)}")
     print("\nTop 5 Extracted Deals:")
     for deal in deals[:5]:
-        print(f"[{deal.category}] {deal.product_name} -> ${deal.sale_price:.2f} / {deal.pricing_unit} ({deal.raw_promotion_text})")
+        print(f"[{deal.normalized_category}] {deal.item_name} -> ${deal.deal_price:.2f} / {deal.unit} ({deal.raw_promotion_text})")
 
     # 6. Pipe returned deals into PartitionedDealStorage
     r_client = redis.Redis.from_url("redis://localhost:6379", decode_responses=True)

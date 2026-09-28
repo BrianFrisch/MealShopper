@@ -17,6 +17,77 @@ FLIPP_BASE_URL = "https://backflipp.wishabi.com/flipp"
 DEFAULT_TIMEOUT = 10.0
 
 
+def compute_value_score(deal_price: float, original_price: Optional[float] = None) -> float:
+    """
+    Computes value score on a scale of 1 to 10.
+    Defaults to 8.0, or calculates higher if a valid original_price shows >20% savings.
+    """
+    if original_price is not None and original_price > deal_price > 0:
+        savings = (original_price - deal_price) / original_price
+        if savings > 0.20:
+            return round(min(8.0 + (savings - 0.20) * 5.0, 10.0), 1)
+    return 8.0
+
+
+def normalize_category_name(category_raw: str, item_name: str = "") -> str:
+    """
+    Maps raw or extracted category strings to one of the standardized categories:
+    Produce, Dairy, Meat, Seafood, Bakery, Pantry.
+    """
+    raw_clean = (category_raw or "").strip()
+    item_clean = (item_name or "").lower()
+    cat_lower = raw_clean.lower()
+    combined = f"{cat_lower} {item_clean}"
+
+    # Handle combined "Meat & Seafood" category based on item name
+    if "meat" in cat_lower and "seafood" in cat_lower:
+        seafood_item_terms = [
+            "seafood", "fish", "shrimp", "salmon", "tilapia", "tuna", "crab",
+            "lobster", "cod", "flounder", "scallop", "trout", "halibut", "mahi"
+        ]
+        if any(k in item_clean for k in seafood_item_terms):
+            return "Seafood"
+        return "Meat"
+
+    exact_map = {
+        "produce": "Produce",
+        "dairy": "Dairy",
+        "meat": "Meat",
+        "seafood": "Seafood",
+        "bakery": "Bakery",
+        "pantry": "Pantry",
+    }
+    if cat_lower in exact_map:
+        return exact_map[cat_lower]
+
+    if any(k in combined for k in ["seafood", "fish", "shrimp", "salmon", "tilapia", "tuna", "crab", "lobster", "cod", "flounder"]):
+        return "Seafood"
+    if any(k in combined for k in [
+        "fresh meat", "meat", "poultry", "beef", "pork", "chicken", "turkey",
+        "steak", "lamb", "ribs", "sausage", "bacon", "roast", "chop", "drumstick", "wing"
+    ]):
+        return "Meat"
+    if any(k in combined for k in [
+        "produce", "fruit", "vegetable", "greens", "apple", "banana", "avocado",
+        "berry", "berries", "salad", "spinach", "lettuce", "tomato", "potato",
+        "onion", "carrot", "pepper", "cucumber", "zucchini", "squash", "broccoli",
+        "asparagus", "celery", "citrus", "orange", "lemon", "lime"
+    ]):
+        return "Produce"
+    if any(k in combined for k in [
+        "dairy & eggs", "dairy", "cheese", "milk", "egg", "yogurt", "butter",
+        "cream", "cheddar", "mozzarella", "sour cream", "cottage cheese"
+    ]):
+        return "Dairy"
+    if any(k in combined for k in [
+        "bakery", "bread", "bagel", "pastry", "muffin", "croissant", "cake",
+        "buns", "rolls", "brioche", "tortilla"
+    ]):
+        return "Bakery"
+
+    return "Pantry"
+
+
 class FlippAdapter(BaseDealAdapter):
     """
     Asynchronous adapter for querying the Flipp circulars & promotions API.
@@ -292,6 +363,8 @@ class FlippAdapter(BaseDealAdapter):
         valid_from: datetime,
         valid_to: datetime,
         flyer_context: Optional[dict[str, Any]] = None,
+        store_id: str = "store-1",
+        store_name: Optional[str] = None,
     ) -> Optional[NormalizedDealItem]:
         """Parses a raw flyer item dictionary into a NormalizedDealItem."""
         product_name = self._extract_product_name(item)
@@ -305,15 +378,38 @@ class FlippAdapter(BaseDealAdapter):
         regular_price = self._extract_regular_price(item)
         pricing_unit = self._determine_pricing_unit(item)
         raw_promo = self._extract_raw_promotion(item, sale_price, pricing_unit)
-        category = self._extract_category(item, flyer_context=flyer_context)
+        raw_category = self._extract_category(item, flyer_context=flyer_context)
+
+        clean_name = clean_product_name(product_name)
+        normalized_cat = normalize_category_name(raw_category, product_name)
+
+        item_id = item.get("id") or item.get("item_id") or item.get("flyer_item_id")
+        if item_id is not None:
+            deal_id = f"{store_id}_{item_id}"
+        else:
+            deal_id = f"{store_id}_{abs(hash(clean_name))}"
+
+        effective_store_name = (
+            store_name
+            or (flyer_context.get("merchant") if flyer_context else None)
+            or (flyer_context.get("merchant_name") if flyer_context else None)
+            or self.default_merchant
+        )
+
+        value_score = compute_value_score(sale_price, regular_price)
 
         return NormalizedDealItem(
-            product_name=product_name,
-            clean_name=clean_product_name(product_name),
-            category=category or "Grocery",
-            sale_price=sale_price,
-            regular_price=regular_price,
-            pricing_unit=pricing_unit,
+            deal_id=deal_id,
+            store_id=store_id,
+            store_name=effective_store_name,
+            item_name=product_name,
+            clean_name=clean_name,
+            normalized_category=normalized_cat,
+            deal_price=sale_price,
+            original_price=regular_price,
+            currency="USD",
+            unit=pricing_unit,
+            value_score=value_score,
             raw_promotion_text=raw_promo,
             valid_from=valid_from,
             valid_to=valid_to,
@@ -328,6 +424,54 @@ class FlippAdapter(BaseDealAdapter):
             return 1
 
         return sorted(flyers, key=flyer_priority)
+
+    def select_active_flyer(
+        self,
+        flyers: list[dict[str, Any]],
+        now: Optional[datetime] = None
+    ) -> Optional[dict[str, Any]]:
+        """
+        Selects the best flyer:
+        1. Prioritizes circulars currently valid (valid_from <= now <= valid_to).
+        2. If multiple are active, prefers weekly circulars with the latest start date.
+        3. If no circular is currently active, falls back to the closest upcoming circular.
+        """
+        if not flyers:
+            return None
+
+        now_utc = now or datetime.now(timezone.utc)
+        active_flyers = []
+        upcoming_flyers = []
+
+        for flyer in flyers:
+            v_from = self._parse_datetime(
+                flyer.get("valid_from") or flyer.get("available_from"),
+                default=now_utc
+            )
+            v_to = self._parse_datetime(
+                flyer.get("valid_to") or flyer.get("available_to"),
+                default=now_utc + timedelta(days=7)
+            )
+
+            is_weekly = bool(re.search(r"\b(?:weekly|ad|circular)\b", str(flyer.get("name") or ""), re.I))
+
+            if v_from <= now_utc <= v_to:
+                active_flyers.append((flyer, is_weekly, v_from, v_to))
+            elif v_from > now_utc:
+                upcoming_flyers.append((flyer, is_weekly, v_from, v_to))
+
+        # 1. Prefer currently active circulars
+        if active_flyers:
+            # Sort weekly circulars first, then newest valid_from
+            active_flyers.sort(key=lambda x: (1 if x[1] else 0, x[2]), reverse=True)
+            return active_flyers[0][0]
+
+        # 2. Fall back to closest upcoming circular
+        if upcoming_flyers:
+            upcoming_flyers.sort(key=lambda x: (1 if x[1] else 0, -x[2].timestamp()), reverse=True)
+            return upcoming_flyers[0][0]
+
+        return flyers[0]
 
     async def get_normalized_deals(
         self,
@@ -354,10 +498,11 @@ class FlippAdapter(BaseDealAdapter):
             )
             return default_valid_from, default_valid_to, []
 
-        flyers = self.prioritize_flyers(flyers)
-
-        # Use the first active flyer for the circular
-        flyer = flyers[0]
+        flyer = self.select_active_flyer(flyers, now=now)
+        if not flyer:
+            logger.warning("No suitable flyer found for store_id=%s", store_id)
+            return default_valid_from, default_valid_to, []
+        
         valid_from = self._parse_datetime(
             flyer.get("valid_from") or flyer.get("available_from"),
             default=default_valid_from,
@@ -381,6 +526,8 @@ class FlippAdapter(BaseDealAdapter):
                 valid_from=valid_from,
                 valid_to=valid_to,
                 flyer_context=flyer,
+                store_id=store_id,
+                store_name=target_merchant,
             )
             if deal_item is not None:
                 normalized_deals.append(deal_item)

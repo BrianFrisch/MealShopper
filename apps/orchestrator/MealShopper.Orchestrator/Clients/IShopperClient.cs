@@ -10,6 +10,16 @@ namespace MealShopper.Orchestrator.Clients;
 public interface IShopperClient
 {
     /// <summary>
+    /// Fetches all active deals for a specific store.
+    /// </summary>
+    Task<IReadOnlyList<DealItemDto>> GetDealsForStoreAsync(string storeId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fetches deals across all store IDs concurrently and returns evaluated top deals.
+    /// </summary>
+    Task<TopDealsResponse> GetTopDealsForStoresAsync(IEnumerable<string> storeIds, CancellationToken ct = default);
+
+    /// <summary>
     /// Discovers grocery stores within the specified radius and coordinates.
     /// </summary>
     Task<StoreDiscoveryResponse> DiscoverStoresAsync(StoreDiscoveryRequest req, CancellationToken ct = default);
