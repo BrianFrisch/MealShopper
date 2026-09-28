@@ -207,8 +207,12 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
 
             // 2. Fetch Deals
             var candidateStores = stores.Count > 0
-                ? stores.Select(s => (string)s.Id).ToList()
-                : new List<string> { "ralphs-90260", "aldi-90260" };
+                ? stores
+                : new List<StoreDto>
+                {
+                    new() { Id = "ralphs-90260", Name = "Ralphs", ZipCode = "90260" },
+                    new() { Id = "aldi-90260", Name = "ALDI", ZipCode = "90260" }
+                };
 
             var topDeals = await FetchDealsStageAsync(job.JobId, candidateStores, ct);
 
@@ -221,7 +225,8 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             var draft = await GenerateMealPlanStageAsync(job.JobId, job.RequestPayload, topDeals, ct);
 
             // 4. Phase 6 Loop-Back: Resolve missing primary ingredients
-            var matchedDeals = await ResolveMissingIngredientsStageAsync(job.JobId, draft, candidateStores, ct);
+            var candidateStoreIds = candidateStores.Select(s => s.Id).ToList();
+            var matchedDeals = await ResolveMissingIngredientsStageAsync(job.JobId, draft, candidateStoreIds, ct);
 
             // 5. Assemble Final Result (MealPlanResultDto)
             var finalResultDto = AssembleFinalResult(draft, topDeals, matchedDeals);
@@ -263,13 +268,24 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
         var maxStores = job.RequestPayload.MaxStores;
 
         var stores = await _shopperClient.DiscoverStoresAsync(lat, lon, radiusMiles, maxStores, ct);
+        if (!string.IsNullOrWhiteSpace(address.ZipCode))
+        {
+            foreach (var store in stores)
+            {
+                if (string.IsNullOrWhiteSpace(store.PostalCode))
+                {
+                    store.PostalCode = address.ZipCode;
+                }
+            }
+        }
+
         _logger.LogInformation("Discovered {StoreCount} stores for Job {JobId}.", stores.Count, job.JobId);
         return stores;
     }
 
     private async Task<TopDealsResponse> FetchDealsStageAsync(
         Guid jobId,
-        List<string> storeIds,
+        List<StoreDto> stores,
         CancellationToken ct)
     {
         await _jobStateStore!.UpdateJobStatusAsync(
@@ -278,7 +294,37 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             stageDescription: "Fetching circulars and scoring top promotional deals...",
             cancellationToken: ct);
 
-        var topDeals = await _shopperClient.GetTopDealsForStoresAsync(storeIds, ct);
+        var dealFetchTasks = stores.Select(store =>
+            _shopperClient.GetDealsForStoreAsync(store.Id, store.PostalCode, store.Name, ct));
+        var storeDealsResults = await Task.WhenAll(dealFetchTasks);
+
+        var allDeals = storeDealsResults.SelectMany(deals => deals).ToList();
+
+        // Deduplicate items by ItemName or CleanName keeping the best price/value score
+        var dedupedDeals = allDeals
+            .GroupBy(d => !string.IsNullOrWhiteSpace(d.CleanName)
+                ? d.CleanName.Trim().ToLowerInvariant()
+                : d.ItemName.Trim().ToLowerInvariant())
+            .Where(g => !string.IsNullOrWhiteSpace(g.Key))
+            .Select(g => g.OrderBy(d => d.DealPrice).ThenByDescending(d => d.ValueScore).First())
+            .OrderByDescending(d => d.ValueScore)
+            .ToList();
+
+        var topDeals = new TopDealsResponse
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            RegionContext = new RegionContextDto
+            {
+                Coordinates = new CoordinatesDto
+                {
+                    Latitude = 33.8895,
+                    Longitude = -118.3533
+                },
+                StoreIds = stores.Select(s => s.Id).ToList()
+            },
+            Deals = dedupedDeals
+        };
+
         _logger.LogInformation("Retrieved {DealCount} deals for job {JobId}.", topDeals.Deals.Count, jobId);
         return topDeals;
     }

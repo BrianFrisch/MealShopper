@@ -28,7 +28,11 @@ public class ShopperClient : IShopperClient
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<DealItemDto>> GetDealsForStoreAsync(string storeId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<DealItemDto>> GetDealsForStoreAsync(
+        string storeId,
+        string? postalCode = null,
+        string? chain = null,
+        CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(storeId))
         {
@@ -36,11 +40,31 @@ public class ShopperClient : IShopperClient
             return Array.Empty<DealItemDto>();
         }
 
-        _logger.LogInformation("Fetching deals for store {StoreId}", storeId);
+        _logger.LogInformation(
+            "Fetching deals for store {StoreId} (PostalCode: {PostalCode}, Chain: {Chain})",
+            storeId, postalCode, chain);
 
         try
         {
-            using var response = await _httpClient.GetAsync($"v1/deals/stores/{Uri.EscapeDataString(storeId)}", ct);
+            var uri = $"v1/deals/stores/{Uri.EscapeDataString(storeId)}";
+            var queryParams = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(postalCode))
+            {
+                queryParams.Add($"postal_code={Uri.EscapeDataString(postalCode)}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(chain))
+            {
+                queryParams.Add($"chain={Uri.EscapeDataString(chain)}");
+            }
+
+            if (queryParams.Count > 0)
+            {
+                uri += "?" + string.Join("&", queryParams);
+            }
+
+            using var response = await _httpClient.GetAsync(uri, ct);
 
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
@@ -103,7 +127,7 @@ public class ShopperClient : IShopperClient
             "Fetching deals concurrently across {StoreCount} stores: {StoreIds}",
             storeList.Count, string.Join(", ", storeList));
 
-        var fetchTasks = storeList.Select(sid => GetDealsForStoreAsync(sid, ct));
+        var fetchTasks = storeList.Select(sid => GetDealsForStoreAsync(sid, ct: ct));
         var storeDealsResults = await Task.WhenAll(fetchTasks);
 
         var allDeals = storeDealsResults.SelectMany(deals => deals).ToList();

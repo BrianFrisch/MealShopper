@@ -28,6 +28,9 @@ public class StoreDto
     [JsonPropertyName("zip_code")]
     public string ZipCode { get; set; } = string.Empty;
 
+    [JsonPropertyName("postal_code")]
+    public string? PostalCode { get => !string.IsNullOrWhiteSpace(ZipCode) ? ZipCode : null; set => ZipCode = value ?? string.Empty; }
+
     [JsonPropertyName("distance_miles")]
     public double? DistanceMiles { get; set; }
 }

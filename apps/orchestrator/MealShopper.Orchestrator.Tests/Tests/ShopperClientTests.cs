@@ -205,6 +205,32 @@ public class ShopperClientTests
     }
 
     [Fact]
+    public async Task GetDealsForStoreAsync_AppendsQueryParameters_WhenPostalCodeAndChainProvided()
+    {
+        // Act
+        var deals = await _client.GetDealsForStoreAsync("ralphs-101", postalCode: "90260", chain: "Ralphs");
+
+        // Assert
+        deals.Should().NotBeNull();
+        deals.Should().HaveCount(2);
+        _mockHandler.CapturedRequests.Should().Contain(r =>
+            r.RequestUri!.ToString().Contains("v1/deals/stores/ralphs-101?postal_code=90260&chain=Ralphs"));
+    }
+
+    [Fact]
+    public async Task GetDealsForStoreAsync_AppendsOnlyPostalCode_WhenChainNull()
+    {
+        // Act
+        var deals = await _client.GetDealsForStoreAsync("ralphs-101", postalCode: "90260");
+
+        // Assert
+        deals.Should().NotBeNull();
+        _mockHandler.CapturedRequests.Should().Contain(r =>
+            r.RequestUri!.ToString().Contains("v1/deals/stores/ralphs-101?postal_code=90260") &&
+            !r.RequestUri!.ToString().Contains("chain="));
+    }
+
+    [Fact]
     public async Task GetDealsForStoreAsync_ReturnsEmptyList_When404NotFound()
     {
         // Arrange

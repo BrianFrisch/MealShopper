@@ -12,7 +12,11 @@ public interface IShopperClient
     /// <summary>
     /// Fetches all active deals for a specific store.
     /// </summary>
-    Task<IReadOnlyList<DealItemDto>> GetDealsForStoreAsync(string storeId, CancellationToken ct = default);
+    Task<IReadOnlyList<DealItemDto>> GetDealsForStoreAsync(
+        string storeId,
+        string? postalCode = null,
+        string? chain = null,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Fetches deals across all store IDs concurrently and returns evaluated top deals.

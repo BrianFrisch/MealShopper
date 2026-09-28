@@ -165,7 +165,8 @@ public class MockHttpMessageHandler : HttpMessageHandler
 
         if (url.Contains("v1/deals/stores", StringComparison.OrdinalIgnoreCase))
         {
-            var segments = url.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            var pathOnly = url.Split('?')[0];
+            var segments = pathOnly.Split('/', StringSplitOptions.RemoveEmptyEntries);
             var storeId = segments.Length > 0 ? segments[^1] : "store-1";
             var dealsJson = $$"""
             {

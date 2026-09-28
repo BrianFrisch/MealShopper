@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import os
@@ -19,6 +20,7 @@ from deal_service import DealRepository
 from pydantic import BaseModel, Field, AliasChoices
 from src.storage.deal_storage import PartitionedDealStorage
 from src.ingestion.models import TopDealsResponse, RegionContextDto, CoordinatesDto, NormalizedDealItem
+from src.ingestion.factory import DealAdapterFactory
 
 app = FastAPI(title="MealShopper - Shopper Domain Service")
 
@@ -151,6 +153,48 @@ def get_deal_storage() -> PartitionedDealStorage:
     client = redis.Redis(connection_pool=redis_pool)
     return PartitionedDealStorage(redis_client=client)
 
+def get_deal_adapter_factory() -> DealAdapterFactory:
+    return DealAdapterFactory()
+
+async def ingest_store_on_demand(
+    store_id: str,
+    chain: str,
+    postal_code: str,
+    storage: PartitionedDealStorage,
+    factory: DealAdapterFactory
+) -> list[dict[str, Any]]:
+    adapter = factory.get_adapter(chain)
+    if adapter is None:
+        return []
+
+    lock_key = f"lock:ingest:{store_id}"
+    redis_client = storage.redis
+
+    # Acquire lock with a 20-second timeout
+    acquired = await redis_client.set(lock_key, "1", nx=True, ex=20)
+    if not acquired:
+        # Another worker is ingesting; wait briefly and check cache
+        await asyncio.sleep(1.5)
+        cached = await storage.get_deals_for_stores([store_id])
+        return cached.get(store_id, [])
+
+    try:
+        valid_from, valid_to, deals = await adapter.get_normalized_deals(
+            postal_code=postal_code,
+            store_id=store_id,
+            merchant_name=chain
+        )
+        if deals:
+            deal_dicts = [d.model_dump() if hasattr(d, "model_dump") else d for d in deals]
+            await storage.save_deals(store_id, deal_dicts, valid_from, valid_to)
+            return deal_dicts
+        return []
+    except Exception as exc:
+        logger.error("On-demand ingestion failed for %s (%s): %s", store_id, chain, exc)
+        return []
+    finally:
+        await redis_client.delete(lock_key)
+
 class DealItemDto(BaseModel):
     product_name: str
     clean_name: str
@@ -188,12 +232,19 @@ async def ingest_store_deals(
 @app.get("/v1/deals/stores/{store_id}")
 async def get_store_deals(
     store_id: str,
-    storage: PartitionedDealStorage = Depends(get_deal_storage)
+    postal_code: Optional[str] = None,
+    chain: Optional[str] = None,
+    storage: PartitionedDealStorage = Depends(get_deal_storage),
+    factory: DealAdapterFactory = Depends(get_deal_adapter_factory)
 ) -> Dict[str, Any]:
+    # 1. Check local/Redis cache
     results = await storage.get_deals_for_stores([store_id])
     deals = results.get(store_id, [])
-    if not deals:
-        raise HTTPException(status_code=404, detail="No active deals found for store")
+
+    # 2. Lazy ingest on miss if params provided
+    if not deals and postal_code and chain:
+        deals = await ingest_store_on_demand(store_id, chain, postal_code, storage, factory)
+
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "region_context": {

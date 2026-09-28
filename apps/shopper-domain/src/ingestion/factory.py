@@ -43,21 +43,24 @@ class DealAdapterFactory:
             raise ValueError("store_chain cannot be empty")
         self._registry[store_chain.strip().lower()] = adapter
 
-    def get_adapter(self, store_chain: str) -> BaseDealAdapter:
+    def get_adapter(self, store_chain: str) -> Optional[Any]:
         """
-        Case-insensitive lookup returning the adapter instance for a store chain.
-        Raises ValueError if the chain is unknown.
+        Retrieves an adapter for the specified chain.
+        Returns None and logs a warning if the chain is unsupported.
         """
         if not store_chain:
-            raise ValueError(
-                f"Invalid store chain: '{store_chain}'. Supported chains: {self.supported_chains()}"
-            )
+            logger.warning("Empty store chain provided to DealAdapterFactory.")
+            return None
 
         key = store_chain.strip().lower()
         if key not in self._registry:
-            raise ValueError(
-                f"Unsupported store chain: '{store_chain}'. Supported chains: {self.supported_chains()}"
+            logger.warning(
+                "Unsupported store chain '%s'. Supported chains: %s. Proceeding without circular deals.",
+                store_chain,
+                self.supported_chains(),
             )
+            return None
+
         return self._registry[key]
 
     def supported_chains(self) -> list[str]:
@@ -80,49 +83,58 @@ class DealAdapterFactory:
         store_chain: str,
         store_id: str,
         postal_code: str,
-        storage: PartitionedDealStorage,
+        storage: Any
     ) -> dict[str, Any]:
-        """
-        Convenience method to resolve the adapter for store_chain, fetch normalized deals,
-        persist them to local partition files and Redis via storage, and return a summary.
-        """
         adapter = self.get_adapter(store_chain)
-        logger.info(
-            "Fetching circular deals for chain=%s store_id=%s postal_code=%s",
-            store_chain,
-            store_id,
-            postal_code,
-        )
+        if adapter is None:
+            return {
+                "store_chain": store_chain,
+                "store_id": store_id,
+                "deal_count": 0,
+                "partitions": [],
+                "status": "unsupported_chain",
+            }
 
-        valid_from, valid_to, deals = await adapter.get_normalized_deals(
-            postal_code=postal_code, store_id=store_id
-        )
+        try:
+            valid_from, valid_to, deals = await adapter.get_normalized_deals(
+                postal_code=postal_code,
+                store_id=store_id,
+                merchant_name=store_chain
+            )
+            if not deals:
+                return {
+                    "store_chain": store_chain,
+                    "store_id": store_id,
+                    "deal_count": 0,
+                    "partitions": [],
+                    "status": "no_deals_found",
+                }
 
-        deals_payload: list[dict[str, Any]] = [
-            deal.model_dump(mode="json") if hasattr(deal, "model_dump") else (deal if isinstance(deal, dict) else deal.__dict__)
-            for deal in deals
-        ]
+            deal_dicts = [d.model_dump() if hasattr(d, "model_dump") else d for d in deals]
+            written_paths = await storage.save_deals(store_id, deal_dicts, valid_from, valid_to)
 
-        partitions = await storage.save_deals(
-            store_id=store_id,
-            deals=deals_payload,
-            valid_from=valid_from,
-            valid_to=valid_to,
-        )
-
-        logger.info(
-            "Successfully fetched and persisted %d deals for store %s into %d partition files",
-            len(deals),
-            store_id,
-            len(partitions),
-        )
-
-        return {
-            "store_chain": store_chain.strip().lower(),
-            "store_id": store_id,
-            "deal_count": len(deals),
-            "partitions": partitions,
-        }
+            return {
+                "store_chain": store_chain,
+                "store_id": store_id,
+                "deal_count": len(deals),
+                "partitions": written_paths,
+                "status": "success",
+            }
+        except Exception as exc:
+            logger.error(
+                "Failed to fetch circular deals for '%s' (store %s): %s",
+                store_chain,
+                store_id,
+                exc,
+                exc_info=True,
+            )
+            return {
+                "store_chain": store_chain,
+                "store_id": store_id,
+                "deal_count": 0,
+                "partitions": [],
+                "status": "error",
+            }
 
 
 async def fetch_and_persist(
