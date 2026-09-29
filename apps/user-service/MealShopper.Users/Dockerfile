@@ -16,11 +16,26 @@ RUN dotnet publish "MealShopper.Users.csproj" -c Release -o /app/publish /p:UseA
 
 # 4. Final runtime image
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+
+# Install system dependencies including psql client
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+
 WORKDIR /app
 COPY --from=build /app/publish .
+
+# Copy migration scripts and entrypoint into the final image
+COPY ["apps/user-service/MealShopper.Users/Infrastructure/postgres", "/app/Infrastructure/postgres"]
+COPY ["apps/user-service/MealShopper.Users/entrypoint.sh", "/app/entrypoint.sh"]
 
 ENV ASPNETCORE_URLS=http://+:5125 \
     DOTNET_RUNNING_IN_CONTAINER=true
 
+    # Grant execution permissions
+RUN chmod +x /app/Infrastructure/postgres/deploy.sh /app/entrypoint.sh
+
 EXPOSE 5125
-ENTRYPOINT ["dotnet", "MealShopper.Users.dll"]
+ENTRYPOINT ["/app/entrypoint.sh"]

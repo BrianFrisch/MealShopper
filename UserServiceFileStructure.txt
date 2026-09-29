@@ -1,0 +1,283 @@
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         9/25/2026   1:33 PM                MealShopper.Users
+-a----         9/29/2026  11:08 AM            185 entrypoint.sh
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         9/16/2026   4:00 PM                bin
+d-----         9/16/2026   4:32 PM                Controllers
+d-----         9/25/2026   8:42 AM                Data
+d-----         9/25/2026  11:55 AM                Infrastructure
+d-----         9/25/2026  10:39 AM                Models
+d-----         9/26/2026   9:36 AM                obj
+d-----         9/16/2026   4:00 PM                Properties
+d-----         9/25/2026   1:34 PM                Scripts
+d-----         9/16/2026   4:20 PM                Services
+-a----         9/29/2026  11:05 AM            284 appsettings.Development.json
+-a----         9/16/2026   4:00 PM            151 appsettings.json
+-a----         9/29/2026  12:02 PM           1403 Dockerfile
+-a----         9/25/2026   2:01 PM            755 MealShopper.Users.csproj
+-a----         9/16/2026   4:00 PM            147 MealShopper.Users.http
+-a----         9/29/2026   9:52 AM           2801 Program.cs
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\bin
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         9/16/2026   4:00 PM                Debug
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\bin\Debug
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         9/25/2026  10:54 AM                net8.0
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\bin\Debug\net8.0
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/16/2026  11:33 PM            284 appsettings.Development.json
+-a----         9/16/2026   4:00 PM            151 appsettings.json
+-a----         9/12/2026   5:31 AM         249344 Dapper.dll
+-a----         9/25/2026  10:54 AM           8642 MealShopper.Users.deps.json
+-a----         9/25/2026  10:54 AM          43520 MealShopper.Users.dll
+-a----         9/25/2026  10:54 AM         151552 MealShopper.Users.exe
+-a----         9/25/2026  10:54 AM          28300 MealShopper.Users.pdb
+-a----         9/25/2026  10:54 AM            416 MealShopper.Users.runtimeconfig.json
+-a----         8/21/2026   6:00 PM          52560 Microsoft.AspNetCore.Cryptography.Internal.dll
+-a----         8/21/2026   6:00 PM          23336 Microsoft.AspNetCore.Cryptography.KeyDerivation.dll
+-a----         9/25/2025   7:24 PM          65800 Microsoft.AspNetCore.OpenApi.dll
+-a----          3/6/2024   8:00 AM         233408 Microsoft.OpenApi.dll
+-a----         3/12/2026   8:41 AM        1409024 Npgsql.dll
+-a----         5/21/2024   9:42 AM          17408 Swashbuckle.AspNetCore.Swagger.dll
+-a----         5/21/2024   9:42 AM         118784 Swashbuckle.AspNetCore.SwaggerGen.dll
+-a----         5/21/2024   9:42 AM        2270720 Swashbuckle.AspNetCore.SwaggerUI.dll
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\Controllers
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/16/2026   4:45 PM           1706 InternalValidationController.cs
+-a----         9/25/2026   2:14 PM            989 PreferencesController.cs
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\Data
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/29/2026  11:05 AM           5796 schema.sql
+-a----         9/25/2026  11:36 AM           3058 UserPreferencesRepository.cs
+-a----         9/29/2026   9:57 AM           2050 UserRepository.cs
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\Infrastructure
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         9/29/2026  11:55 AM                postgres
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\Infrastructure\postgres
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         9/25/2026  11:57 AM                init
+-a----         9/29/2026  11:56 AM           1094 deploy.sh
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\Infrastructure\postgres\init
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         9/25/2026   1:29 PM                00_init
+d-----         9/25/2026   1:30 PM                01_tables
+d-----         9/25/2026   1:30 PM                02_functions
+d-----         9/25/2026   1:31 PM                03_procedures
+d-----         9/25/2026   1:31 PM                04_grants
+
+
+    Directory:
+    C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\Infrastructure\postgres\init\00_init
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/29/2026  11:05 AM            482 00_roles_and_extensions.sql
+
+
+    Directory:
+    C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\Infrastructure\postgres\init\01_tables
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/25/2026   1:30 PM            388 01_users.sql
+-a----         9/25/2026   1:30 PM            771 02_user_preferences.sql
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\Infrastructure\postgres\init
+    \02_functions
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/25/2026   1:30 PM            427 01_fn_get_user_by_email.sql
+-a----         9/25/2026   1:30 PM            914 02_fn_get_user_preferences.sql
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\Infrastructure\postgres\init
+    \03_procedures
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/25/2026   1:31 PM            359 01_sp_create_user.sql
+-a----         9/25/2026   1:31 PM            452 02_sp_record_login_failure.sql
+-a----         9/25/2026   1:31 PM            205 03_sp_reset_login_failure.sql
+-a----         9/25/2026   1:40 PM           1670 04_sp_upsert_user_preferences.sql
+
+
+    Directory:
+    C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\Infrastructure\postgres\init\04_grants
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/29/2026  11:05 AM            364 01_least_privilege_grants.sql
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\Models
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         9/25/2026  10:12 AM                DTOs
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\Models\DTOs
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/25/2026  10:18 AM            365 DbUser.cs
+-a----         9/25/2026  10:48 AM            725 UserPreferencesDto.cs
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\obj
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         9/16/2026   4:00 PM                Debug
+-a----         9/26/2026   9:36 AM           5361 MealShopper.Users.csproj.nuget.dgspec.json
+-a----         9/16/2026   4:13 PM           2085 MealShopper.Users.csproj.nuget.g.props
+-a----         9/16/2026   4:13 PM            879 MealShopper.Users.csproj.nuget.g.targets
+-a----         9/26/2026   9:36 AM          40884 project.assets.json
+-a----         9/26/2026   9:36 AM           2013 project.nuget.cache
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\obj\Debug
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         9/28/2026   5:59 PM                net8.0
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\obj\Debug\net8.0
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         9/25/2026  10:54 AM                ref
+d-----         9/25/2026  10:54 AM                refint
+d-----         9/25/2026  10:54 AM                staticwebassets
+-a----         9/16/2026   4:00 PM            198 .NETCoreApp,Version=v8.0.AssemblyAttributes.cs
+-a----         9/25/2026  10:54 AM         151552 apphost.exe
+-a----         9/25/2026  10:54 AM              0 MealShop.470AA157.Up2Date
+-a----         9/28/2026   5:59 PM           1025 MealShopper.Users.AssemblyInfo.cs
+-a----         9/28/2026   5:59 PM             66 MealShopper.Users.AssemblyInfoInputs.cache
+-a----         9/26/2026   9:36 AM           8443 MealShopper.Users.assets.cache
+-a----         9/28/2026   5:59 PM           4475 MealShopper.Users.csproj.AssemblyReference.cache
+-a----         9/25/2026  10:54 AM             66 MealShopper.Users.csproj.CoreCompileInputs.cache
+-a----         9/25/2026  10:54 AM           4982 MealShopper.Users.csproj.FileListAbsolute.txt
+-a----         9/25/2026  10:54 AM          43520 MealShopper.Users.dll
+-a----         9/25/2026  10:54 AM           1003 MealShopper.Users.GeneratedMSBuildEditorConfig.editorconfig
+-a----         9/25/2026  10:54 AM             66 MealShopper.Users.genruntimeconfig.cache
+-a----         9/16/2026   4:00 PM            770 MealShopper.Users.GlobalUsings.g.cs
+-a----         9/25/2026  10:54 AM              0 MealShopper.Users.MvcApplicationPartsAssemblyInfo.cache
+-a----         9/25/2026  10:54 AM            697 MealShopper.Users.MvcApplicationPartsAssemblyInfo.cs
+-a----         9/25/2026  10:54 AM          28300 MealShopper.Users.pdb
+-a----         9/25/2026  10:54 AM            167 MealShopper.Users.sourcelink.json
+-a----         9/25/2026  10:54 AM            295 staticwebassets.build.json
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\obj\Debug\net8.0\ref
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/25/2026  10:54 AM          15360 MealShopper.Users.dll
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\obj\Debug\net8.0\refint
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/25/2026  10:54 AM          15360 MealShopper.Users.dll
+
+
+    Directory:
+    C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\obj\Debug\net8.0\staticwebassets
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/25/2026  10:54 AM             91 msbuild.build.MealShopper.Users.props
+-a----         9/25/2026  10:54 AM             81 msbuild.buildMultiTargeting.MealShopper.Users.props
+-a----         9/25/2026  10:54 AM             95 msbuild.buildTransitive.MealShopper.Users.props
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\Properties
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/16/2026   4:00 PM           1125 launchSettings.json
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\Scripts
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/25/2026   1:40 PM           1542 Deploy-Database.ps1
+
+
+    Directory: C:\Users\admin\Repositories\MealShopper\apps\user-service\MealShopper.Users\Services
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/19/2026   8:51 PM           2087 PasswordHasher.cs

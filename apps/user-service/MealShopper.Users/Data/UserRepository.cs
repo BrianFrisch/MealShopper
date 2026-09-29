@@ -51,7 +51,7 @@ public class UserRepository
         using var conn = CreateConnection();
         // Calls the stored procedure sp_create_user
         await conn.ExecuteAsync(
-            "CALL sp_create_user(@Id, @Email, @Hash, @Roles, @Cuisines::jsonb, @Avoid::jsonb)",
+            "CALL sp_create_user(@Id, @Email, @Hash, @Roles)",
             new
             {
                 Id = id,

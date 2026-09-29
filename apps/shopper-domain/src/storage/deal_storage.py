@@ -12,7 +12,11 @@ except ImportError:
 from pathlib import Path
 
 # Resolve to apps/shopper-domain/data/deals by default
-DEFAULT_DATA_DIR = str(Path(__file__).resolve().parent.parent.parent / "data" / "deals")
+DEFAULT_DATA_DIR = os.getenv(
+    "DEAL_DATA_DIR",
+    str(Path(__file__).resolve().parent.parent.parent / "data" / "deals")
+)
+
 
 class PartitionedDealStorage:
     def __init__(self, redis_client: redis.Redis, base_storage_dir: str | None = None):

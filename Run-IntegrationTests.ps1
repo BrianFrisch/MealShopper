@@ -36,8 +36,8 @@ try {
     # Adjust payload to match your Identity setup for the test user
     $tokenBody = @{
         grant_type = "password"
-        email      = "testuser@mealshopper.local"
-        password   = "P@ssword123!"
+        email      = "admin@mealshopper.local"
+        password   = "AdminP@ssword123!"
     }
     
     $tokenResponse = Invoke-RestMethod -Uri "$GatewayUrl/v1/auth/token" -Method Post -Body $tokenBody -ContentType "application/x-www-form-urlencoded"

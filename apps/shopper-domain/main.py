@@ -5,7 +5,7 @@ import os
 import redis.asyncio as redis 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from fastapi import Depends, FastAPI, logger
+from fastapi import Depends, FastAPI, HTTPException, logger
 from fastapi.middleware.cors import CORSMiddleware
 from models import (
     StoreDiscoveryRequest,
@@ -21,6 +21,8 @@ from pydantic import BaseModel, Field, AliasChoices
 from src.storage.deal_storage import PartitionedDealStorage
 from src.ingestion.models import TopDealsResponse, RegionContextDto, CoordinatesDto, NormalizedDealItem
 from src.ingestion.factory import DealAdapterFactory
+from src.auth import require_admin_role
+from src.services.store_importer import StoreImportService
 
 app = FastAPI(title="MealShopper - Shopper Domain Service")
 
@@ -33,12 +35,16 @@ app.add_middleware(
 )
 
 BASE_DIR = Path(__file__).resolve().parent
-STORES_PATH = BASE_DIR / "data" / "stores.json"
+# STORES_PATH = BASE_DIR / "data" / "stores.json"
 DEALS_PATH = BASE_DIR / "data" / "deals.json"
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+SHOPPER_DATABASE_URL = os.getenv(
+    "SHOPPER_DATABASE_URL",
+    "postgresql://shopper_app:ShopperApp_Dev_Pwd99!@postgres:5432/mealshopper_shopper",
+)
 
 redis_pool: Optional[redis.ConnectionPool] = None
-store_repo = StoreRepository(STORES_PATH)
+store_repo = StoreRepository(SHOPPER_DATABASE_URL)
 deal_repo = DealRepository(DEALS_PATH)
 
 @asynccontextmanager
@@ -59,10 +65,10 @@ def health_check():
 # ---- Store Discovery Endpoints ----
 
 @app.post("/v1/shopper/stores/discover", response_model=StoreDiscoveryResponse)
-def discover_stores_v1(payload: StoreDiscoveryRequest):
-    matched_stores = store_repo.find_nearby(
-        user_lat=payload.latitude,
-        user_lon=payload.longitude,
+async def discover_stores_v1(payload: StoreDiscoveryRequest):
+    matched_stores = await store_repo.find_nearby(
+        latitude=payload.latitude,
+        longitude=payload.longitude,
         radius_miles=payload.radius_miles,
         max_stores=payload.max_stores,
     )
@@ -80,21 +86,21 @@ class LegacyStoreRequest(BaseModel):
 
 
 @app.post("/v1/shopper/stores")
-def discover_stores_legacy(payload: LegacyStoreRequest) -> Dict[str, Any]:
-    matched = store_repo.find_nearby(
-        user_lat=payload.latitude,
-        user_lon=payload.longitude,
+async def discover_stores_legacy(payload: LegacyStoreRequest) -> Dict[str, Any]:
+    matched = await store_repo.find_nearby(
+        latitude=payload.latitude,
+        longitude=payload.longitude,
         radius_miles=payload.radius_miles,
         max_stores=payload.max_stores,
     )
     return {
         "stores": [
             {
-                "id": s.id,
-                "store_id": s.id,
-                "name": s.name,
-                "address": f"{s.street}, {s.city}",
-                "distance_miles": s.distance_miles or 0.0,
+                "id": s["store_id"],
+                "store_id": s["store_id"],
+                "name": s["name"],
+                "address": f"{s['street_address']}, {s['city']}",
+                "distance_miles": s.get("distance_miles") or 0.0,
             }
             for s in matched
         ]
@@ -420,3 +426,34 @@ def match_missing_ingredients(payload: IngredientMatchRequest):
         matches=results,
         total_matched=len(results),
     )
+
+class AdminStoreImportRequest(BaseModel):
+    chain_id: str = Field(..., description="Target chain identifier (e.g. ralphs, aldi, vons)")
+    region: str = Field(default="California", description="State or region name for Overpass query")
+
+@app.post(
+    "/v1/admin/stores/import",
+    tags=["Admin - Store Management"],
+    dependencies=[Depends(require_admin_role)],
+)
+async def import_stores_admin(
+    payload: AdminStoreImportRequest,
+    current_admin: Dict[str, Any] = Depends(require_admin_role),
+) -> Dict[str, Any]:
+    importer = StoreImportService(db_url=SHOPPER_DATABASE_URL)
+    try:
+        result = await importer.run_import_alltheplaces(
+            chain_id=payload.chain_id,
+            region_state=payload.region,
+        )
+        return {
+            "status": "success",
+            "initiated_by": current_admin.get("sub", "unknown_admin"),
+            **result,
+        }
+    except Exception as exc:
+        logger.logger.error("Import operation failed: %r", exc, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Import operation failed: {type(exc).__name__}: {str(exc) or repr(exc)}",
+        )

@@ -1,11 +1,14 @@
-import json
 import math
-from pathlib import Path
-from typing import List
-from models import Store
+import os
+import asyncpg #type: ignore
+from typing import List, Any, Dict
+
 
 EARTH_RADIUS_MILES = 3958.8
-
+SHOPPER_DATABASE_URL = os.getenv(
+    "SHOPPER_DATABASE_URL",
+    "postgresql://shopper_app:ShopperApp_Dev_Pwd99!@postgres:5432/mealshopper_shopper",
+)
 
 def calculate_haversine_distance(
     lat1: float, lon1: float, lat2: float, lon2: float
@@ -24,28 +27,25 @@ def calculate_haversine_distance(
 
 
 class StoreRepository:
-    def __init__(self, data_path: Path):
-        self._stores: List[Store] = []
-        if data_path.exists():
-            with open(data_path, "r", encoding="utf-8") as f:
-                raw_stores = json.load(f)
-                self._stores = [Store(**item) for item in raw_stores]
+    def __init__(self, db_url: str = SHOPPER_DATABASE_URL):
+        self.db_url = db_url
 
-    def find_nearby(
-        self, user_lat: float, user_lon: float, radius_miles: float, max_stores: int
-    ) -> List[Store]:
-        """Filters stores within radius_miles, sorts by closest, and caps by max_stores."""
-        stores_with_distance: List[Store] = []
-
-        for store in self._stores:
-            distance = calculate_haversine_distance(
-                user_lat, user_lon, store.latitude, store.longitude
+    async def find_nearby(
+        self,
+        latitude: float,
+        longitude: float,
+        radius_miles: float = 10.0,
+        max_stores: int = 15,
+    ) -> List[Dict[str, Any]]:
+        conn = await asyncpg.connect(self.db_url)
+        try:
+            records = await conn.fetch(
+                "SELECT * FROM fn_find_nearby_stores($1, $2, $3, $4);",
+                longitude,
+                latitude,
+                float(radius_miles),
+                int(max_stores),
             )
-            if distance <= radius_miles:
-                # Copy and attach calculated distance
-                store_copy = store.model_copy(update={"distance_miles": distance})
-                stores_with_distance.append(store_copy)
-
-        # Sort ascending by distance and apply user's store cap
-        stores_with_distance.sort(key=lambda s: s.distance_miles or 0.0)
-        return stores_with_distance[:max_stores]
+            return [dict(record) for record in records]
+        finally:
+            await conn.close()

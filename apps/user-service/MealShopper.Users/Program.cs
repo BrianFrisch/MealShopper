@@ -50,6 +50,29 @@ using (var scope = app.Services.CreateScope())
             app.Logger.LogWarning(ex, "Could not seed default user. Ensure Postgres and stored procedures exist.");
         }
     }
+
+    testEmail = "admin@mealshopper.local";
+    for (var attempt = 1; attempt <= maxRetries; attempt++)
+    {
+        try 
+        {
+            var existing = await repo.GetUserByEmailAsync(testEmail);
+            if (existing == null)
+            {
+                await repo.CreateUserAsync(
+                    Guid.Parse("75fcf7d7-d1ca-472f-beb0-b047e705f50c"),
+                    testEmail,
+                    hasher.HashPassword("AdminP@ssword123!"),
+                    ["Admin"]);
+            }
+            app.Logger.LogInformation("Database seed check completed successfully on attempt {Attempt}.", attempt);
+            break;
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "Could not seed default user. Ensure Postgres and stored procedures exist.");
+        }
+    }
 }
 
 if (app.Environment.IsDevelopment())

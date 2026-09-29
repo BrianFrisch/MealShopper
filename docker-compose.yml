@@ -4,7 +4,7 @@ networks:
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgis/postgis:16-3.4-alpine
     container_name: mealshopper-postgres
     environment:
       POSTGRES_DB: mealshopper
@@ -14,11 +14,9 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - .apps/user-service/MealShopper.Users/Infrastructure/postgres/00_run_all.sh:/docker-entrypoint-initdb.d/00_run_all.sh
-      - .apps/user-service/MealShopper.Users/Infrastructure/postgres/init:/docker-entrypoint-initdb.d/init
-      # - ./apps/user-service/MealShopper.Users/Data/schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d mealshopper"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]  # -d mealshopper
       interval: 3s
       timeout: 3s
       retries: 10
@@ -42,7 +40,12 @@ services:
     environment:
       ASPNETCORE_URLS: "http://+:5125"
       ASPNETCORE_ENVIRONMENT: "Development"
-      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=mealshopper;Username=mealshopper_app;Password=MealShopperApp_Dev_Pwd99!;"
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=mealshopper_users;Username=users_app;Password=MealShopperApp_Dev_Pwd99!;"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: mealshopper_users
+      POSTGRES_USER: users_app
+      POSTGRES_PASSWORD: MealShopperApp_Dev_Pwd99!
     ports:
       - "5125:5125"
     depends_on:
@@ -77,10 +80,13 @@ services:
     environment:
       ReverseProxy__Clusters__orchestratorCluster__Destinations__destination1__Address: "http://orchestrator:5186"
       ReverseProxy__Clusters__identityCluster__Destinations__destination1__Address: "http://identity-service:5119"
+      ReverseProxy__Clusters__shopperCluster__Destinations__destination1__Address: "http://shopper-domain:8001"
     ports:
       - "5247:5247"
     depends_on:
       - identity-service
+      - orchestrator
+      - shopper-domain
     networks:
       - mealshopper-net
 
@@ -91,8 +97,18 @@ services:
     container_name: mealshopper-shopper-domain
     environment:
       - REDIS_URL=redis://redis:6379
+      - DEAL_DATA_DIR=/app/data/deals
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=mealshopper_shopper
+      - POSTGRES_USER=shopper_app
+      - POSTGRES_PASSWORD=ShopperApp_Dev_Pwd99!
+      - SHOPPER_DATABASE_URL=postgresql://shopper_app:ShopperApp_Dev_Pwd99!@postgres:5432/mealshopper_shopper
     ports:
       - "8001:8001"
+    volumes:
+      - ./apps/shopper-domain/data/deals:/app/data/deals
+      - ./apps/shopper-domain/Infrastructure/postgres:/app/Infrastructure/postgres
     networks:
       - mealshopper-net
 
