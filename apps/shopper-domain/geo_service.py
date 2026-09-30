@@ -1,7 +1,7 @@
 import math
 import os
 import asyncpg #type: ignore
-from typing import List, Any, Dict
+from typing import List, Any, Dict, Optional
 
 
 EARTH_RADIUS_MILES = 3958.8
@@ -47,5 +47,16 @@ class StoreRepository:
                 int(max_stores),
             )
             return [dict(record) for record in records]
+        finally:
+            await conn.close()
+
+    async def get_store_context(self, store_id: str) -> Optional[Dict[str, Any]]:
+        conn = await asyncpg.connect(self.db_url)
+        try:
+            row = await conn.fetchrow(
+                "SELECT * FROM fn_get_store_context($1);",
+                store_id
+            )
+            return dict(row) if row else None
         finally:
             await conn.close()

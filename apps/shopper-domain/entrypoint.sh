@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-
+chmod +x ./Infrastructure/postgres/deploy.sh
 # Run service's own migrations independently
 ./Infrastructure/postgres/deploy.sh
 

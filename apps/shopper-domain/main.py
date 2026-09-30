@@ -206,7 +206,10 @@ async def ingest_store_on_demand(
             merchant_name=chain,
         )
         if deals:
-            deal_dicts = [d.model_dump() if hasattr(d, "model_dump") else d for d in deals]
+            deal_dicts = [
+                d.model_dump(mode="json") if hasattr(d, "model_dump") else d
+                for d in deals
+            ]
             await storage.save_deals(store_id, deal_dicts, valid_from, valid_to)
             return deal_dicts
         return []
@@ -254,35 +257,50 @@ async def ingest_store_deals(
         "persisted_partitions": paths
     }
 
+
 @app.get("/v1/deals/stores/{store_id}")
 async def get_store_deals(
     store_id: str,
+    tier: str = "primary",  # "primary", "secondary", or "all"
     postal_code: Optional[str] = None,
     chain: Optional[str] = None,
     storage: PartitionedDealStorage = Depends(get_deal_storage),
-    factory: DealAdapterFactory = Depends(get_deal_adapter_factory)
+    factory: DealAdapterFactory = Depends(get_deal_adapter_factory),
 ) -> Dict[str, Any]:
-    # 1. Check local/Redis cache
-    results = await storage.get_deals_for_stores([store_id])
+    # 1. Read-through cache check for requested tier
+    results = await storage.get_deals_for_stores([store_id], tier=tier)
     deals = results.get(store_id, [])
 
-    # 2. Lazy ingest on miss if params provided
-    if not deals and postal_code and chain:
-        deals = await ingest_store_on_demand(store_id, chain, postal_code, storage, factory)
+    # 2. If completely empty, run on-demand ingestion to generate both tiers
+    if not deals:
+        if not postal_code or not chain:
+            ctx = await store_repo.get_store_context(store_id)
+            if ctx:
+                postal_code = postal_code or ctx.get("postal_code")
+                chain = chain or ctx.get("adapter_name") or ctx.get("chain_id")
+
+        if postal_code and chain:
+            await ingest_store_on_demand(
+                store_id, chain, postal_code, storage, factory
+            )
+            # Re-read the specific requested tier after fresh save
+            fresh_results = await storage.get_deals_for_stores([store_id], tier=tier)
+            deals = fresh_results.get(store_id, [])
 
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "region_context": {
-            "coordinates": {"latitude": 33.8895, "longitude": -118.3533},
-            "store_ids": [store_id],
-        },
+        "store_id": store_id,
+        "tier": tier,
+        "deals_count": len(deals),
         "deals": deals,
     }
 
+# apps/shopper-domain/src/main.py
 
 class EvaluateTopDealsRequest(BaseModel):
     store_ids: list[str] = Field(default_factory=list)
     limit: int = Field(default=30, ge=1, le=100)
+    tier: str = Field(default="primary", description="primary (meat/seafood), secondary, or all")
 
 
 @app.post("/v1/deals/evaluate-top", response_model=TopDealsResponse)
@@ -300,18 +318,25 @@ async def evaluate_top_deals(
             deals=[],
         )
 
-    deals_by_store = await storage.get_deals_for_stores(payload.store_ids)
+    # Load only the specified tier (defaults strictly to "primary" meat/seafood)
+    deals_by_store = await storage.get_deals_for_stores(
+        payload.store_ids, tier=payload.tier
+    )
 
-    # Flatten deals across all stores
     all_deals_raw: list[dict[str, Any]] = []
     for sid in payload.store_ids:
         store_deals = deals_by_store.get(sid, [])
         all_deals_raw.extend(store_deals)
 
-    # Deduplicate by clean_name, keeping the deal with lowest deal_price
+    # Deduplicate by clean_name, keeping lowest deal_price
     deduped_deals: dict[str, dict[str, Any]] = {}
     for d in all_deals_raw:
-        clean_name = d.get("clean_name") or d.get("item_name") or d.get("product_name") or ""
+        clean_name = (
+            d.get("clean_name")
+            or d.get("item_name")
+            or d.get("product_name")
+            or ""
+        )
         clean_key = clean_name.strip().lower()
         if not clean_key:
             clean_key = str(d.get("deal_id") or id(d))
@@ -327,23 +352,19 @@ async def evaluate_top_deals(
             existing = deduped_deals[clean_key]
             existing_raw = existing.get("deal_price")
             if existing_raw is None:
-                existing_raw = existing.get("price") or existing.get("sale_price") or 0.0
-            existing_price = float(existing_raw)
-            if deal_price < existing_price:
+                existing_raw = (
+                    existing.get("price") or existing.get("sale_price") or 0.0
+                )
+            if deal_price < float(existing_raw):
                 deduped_deals[clean_key] = d
 
-    # Convert to NormalizedDealItem models
-    normalized_items: list[NormalizedDealItem] = []
-    for d in deduped_deals.values():
-        if isinstance(d, NormalizedDealItem):
-            normalized_items.append(d)
-        else:
-            normalized_items.append(NormalizedDealItem.model_validate(d))
+    normalized_items: list[NormalizedDealItem] = [
+        NormalizedDealItem.model_validate(d) if not isinstance(d, NormalizedDealItem) else d
+        for d in deduped_deals.values()
+    ]
 
-    # Sort descending by value_score
+    # Rank descending by score
     normalized_items.sort(key=lambda x: x.value_score, reverse=True)
-
-    # Take limit items
     selected_deals = normalized_items[: payload.limit]
 
     return TopDealsResponse(
@@ -354,6 +375,7 @@ async def evaluate_top_deals(
         ),
         deals=selected_deals,
     )
+
 
 # ---- Loop-Back Matching Endpoints ----
 
