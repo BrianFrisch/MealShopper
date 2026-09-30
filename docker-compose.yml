@@ -109,6 +109,11 @@ services:
     volumes:
       - ./apps/shopper-domain/data/deals:/app/data/deals
       - ./apps/shopper-domain/Infrastructure/postgres:/app/Infrastructure/postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     networks:
       - mealshopper-net
 
