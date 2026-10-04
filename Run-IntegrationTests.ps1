@@ -36,8 +36,8 @@ try {
     # Adjust payload to match your Identity setup for the test user
     $tokenBody = @{
         grant_type = "password"
-        email      = "admin@mealshopper.local"
-        password   = "AdminP@ssword123!"
+        email      = "testuser@mealshopper.local"
+        password   = "P@ssword123!"
     }
     
     $tokenResponse = Invoke-RestMethod -Uri "$GatewayUrl/v1/auth/token" -Method Post -Body $tokenBody -ContentType "application/x-www-form-urlencoded"
@@ -74,7 +74,7 @@ try {
     #     AvoidIngredients = @("Pork")
     # } | ConvertTo-Json -Depth 5
     $Payload = @{
-        cuisines          = @("Mexican", "American")
+        cuisines          = @("Chinese", "Thai")
         avoidIngredients  = @("peanuts")
         address           = @{
             street  = "123 Hawthorne Blvd"
@@ -83,7 +83,7 @@ try {
             zipCode = "90260"
         }
         searchRadiusMiles = 10
-        maxStores         = 3
+        maxStores         = 4
     } | ConvertTo-Json
 
     $response = Invoke-WebRequest -Uri "$GatewayUrl/v1/meal-plans" -Method Post -Headers $headers -Body $payload -ContentType "application/json"
@@ -105,7 +105,7 @@ try {
 # TEST 4: Polling Job Status & Payload Assertion
 # ---------------------------------------------------------
 Write-Host "`n[4/4] Polling Redis Job Store for AI Completion..."
-$MaxAttempts = 40
+$MaxAttempts = 100
 $Attempt = 0
 $JobCompleted = $false
 $FinalResult = $null
@@ -143,6 +143,61 @@ try {
     Write-Host "Total Trip Cost  : `$ $($FinalResult.estimatedTotalTripCost)"
     Write-Host "Stores Required  : $($FinalResult.requiredStores -join ', ')"
     Write-Host "----------------------"
+
+    
+    Write-Host "`n--------------------------------------------------------" -ForegroundColor DarkGray
+    Write-Host "REQUIRED STORES" -ForegroundColor Yellow
+    Write-Host "--------------------------------------------------------" -ForegroundColor DarkGray
+    foreach ($store in $FinalResult.requiredStores) {
+        Write-Host "  * $store" -ForegroundColor White
+    }
+
+    Write-Host "`n--------------------------------------------------------" -ForegroundColor DarkGray
+    Write-Host "RECIPES & MEAL DETAILS" -ForegroundColor Yellow
+    Write-Host "--------------------------------------------------------" -ForegroundColor DarkGray
+
+
+    $mealIndex = 1
+    foreach ($recipe in $FinalResult.recipes) {
+        Write-Host "`n[$mealIndex] $($recipe.recipeTitle)" -ForegroundColor Green
+        Write-Host "    Description: $($recipe.description)" -ForegroundColor Gray
+
+        # Promotional / Deal Ingredients
+        Write-Host "    Ingredients with Deals:" -ForegroundColor Cyan
+        if ($recipe.ingredientsWithDeals -and $recipe.ingredientsWithDeals.Count -gt 0) {
+            foreach ($dealIng in $recipe.ingredientsWithDeals) {
+                $priceText = if ([string]::IsNullOrWhiteSpace($dealIng.dealPriceDescription)) { "" } else { " ($($dealIng.dealPriceDescription))" }
+                $storeText = if ([string]::IsNullOrWhiteSpace($dealIng.storeName)) { "" } else { " @ $($dealIng.storeName)" }
+                Write-Host "      + $($dealIng.amountDescription) $($dealIng.name)$priceText$storeText" -ForegroundColor White
+            }
+        } else {
+            Write-Host "      (None)" -ForegroundColor DarkGray
+        }
+
+        # Pantry Staples
+        Write-Host "    Pantry Ingredients:" -ForegroundColor DarkYellow
+        if ($recipe.pantryIngredients -and $recipe.pantryIngredients.Count -gt 0) {
+            foreach ($pantryIng in $recipe.pantryIngredients) {
+                Write-Host "      - $($pantryIng.amountDescription) $($pantryIng.name)" -ForegroundColor DarkGray
+            }
+        } else {
+            Write-Host "      (None)" -ForegroundColor DarkGray
+        }
+
+        # Preparation Instructions
+        Write-Host "    Instructions:" -ForegroundColor Magenta
+        if ($recipe.instructions -and $recipe.instructions.Count -gt 0) {
+            $stepIndex = 1
+            foreach ($step in $recipe.instructions) {
+                Write-Host "      $stepIndex.$step" -ForegroundColor Gray
+                $stepIndex++
+            }
+        } else {
+            Write-Host "      (No instructions provided)" -ForegroundColor DarkGray
+        }
+
+        $mealIndex++
+    }
 
 } catch {
     Write-Host "FAIL: Final result payload invalid. $($_.Exception.Message)" -ForegroundColor Red

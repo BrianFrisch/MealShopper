@@ -6,6 +6,11 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, TypedDict
 import asyncpg # type: ignore
 import httpx
 
+try:
+    from src.services.grocery_chain_service import GroceryChainService
+except ImportError:
+    from .grocery_chain_service import GroceryChainService
+
 logger = logging.getLogger(__name__)
 
 ALL_THE_PLACES_BASE = "https://data.alltheplaces.xyz/runs/latest/output"
@@ -38,8 +43,6 @@ def clean_store_number(raw_num: Optional[Any], fallback_id: str) -> str:
 
 def normalize_state(region_state: str) -> str:
     state = region_state.strip().upper()
-    if state in ("CALIFORNIA", "CA"):
-        return "CA"
     return state
 
 
@@ -79,6 +82,7 @@ def parse_geojson_feature(
     chain_key: str,
     meta: Dict[str, str],
     target_state: str,
+    include_all_brands: bool = False,
 ) -> Optional[ParsedStore]:
     props = feat.get("properties", {})
     geom = feat.get("geometry", {})
@@ -99,7 +103,7 @@ def parse_geojson_feature(
 
     brand = (props.get("brand") or props.get("name") or "").strip()
     target_banner = meta["display_name"].lower()
-    if not is_matching_banner(brand, target_banner):
+    if not is_matching_banner(brand, target_banner) and not include_all_brands:
         return None
 
     raw_num = props.get("ref") or props.get("store_number") or props.get("@id")
@@ -137,32 +141,13 @@ def deduplicate_stores(stores: Sequence[ParsedStore]) -> List[ParsedStore]:
 
 
 class StoreImportService:
-    def __init__(self, db_url: str):
+    def __init__(self, db_url: str, chain_service: Optional[GroceryChainService] = None):
         self.db_url = db_url
+        self.chain_service = chain_service or GroceryChainService(db_url=db_url)
 
     async def get_chain_metadata(self, chain_id: str) -> Dict[str, str]:
-        """Retrieve grocery chain metadata from the database."""
-        chain_key = chain_id.strip().lower()
-        conn = await asyncpg.connect(self.db_url)
-        try:
-            row = await conn.fetchrow(
-                "SELECT chain_id, display_name, adapter_name, spider_name, flyer_source_type "
-                "FROM fn_get_grocery_chains($1);",
-                chain_key,
-            )
-            if not row:
-                raise ValueError(f"Unsupported chain: {chain_id}")
-            spider = row["spider_name"] or row["chain_id"]
-            return {
-                "chain_id": row["chain_id"],
-                "display_name": row["display_name"],
-                "adapter_name": row["adapter_name"],
-                "spider": spider,
-                "spider_name": spider,
-                "flyer_source_type": row["flyer_source_type"] or "flipp",
-            }
-        finally:
-            await conn.close()
+        """Retrieve grocery chain metadata through the shared chain service."""
+        return await self.chain_service.get_chain_metadata(chain_id)
 
     async def _fetch_geojson(self, spider: str) -> Dict[str, Any]:
         spider_file = f"{spider}.geojson"
@@ -179,16 +164,15 @@ class StoreImportService:
     async def _persist_stores(
         self, chain_key: str, meta: Dict[str, str], stores: List[ParsedStore]
     ) -> None:
+        await self.chain_service.upsert_chain(
+            chain_id=chain_key,
+            display_name=meta["display_name"],
+            adapter_name=meta["adapter_name"],
+            spider_name=meta.get("spider") or meta.get("spider_name"),
+            flyer_source_type=meta.get("flyer_source_type", "flipp"),
+        )
         conn = await asyncpg.connect(self.db_url)
         try:
-            await conn.execute(
-                "CALL sp_upsert_grocery_chain($1, $2, $3, $4, $5);",
-                chain_key,
-                meta["display_name"],
-                meta["adapter_name"],
-                meta.get("spider") or meta.get("spider_name"),
-                meta.get("flyer_source_type", "flipp"),
-            )
             await conn.execute(
                 "CALL sp_import_grocery_stores_batch_v2($1::jsonb, NULL);",
                 json.dumps(stores),
@@ -196,7 +180,7 @@ class StoreImportService:
         finally:
             await conn.close()
 
-    async def run_import_alltheplaces(self, chain_id: str, region_state: str = "CA") -> Dict[str, Any]:
+    async def run_import_alltheplaces(self, chain_id: str, region_state: str = "CA", include_all_brands: bool = False) -> Dict[str, Any]:
         meta = await self.get_chain_metadata(chain_id)
         chain_key = meta["chain_id"]
         target_state = normalize_state(region_state)
@@ -207,7 +191,7 @@ class StoreImportService:
         features = geojson.get("features", [])
         parsed_stores: List[ParsedStore] = []
         for feat in features:
-            parsed = parse_geojson_feature(feat, chain_key, meta, target_state)
+            parsed = parse_geojson_feature(feat, chain_key, meta, target_state, include_all_brands)
             if parsed:
                 parsed_stores.append(parsed)
 

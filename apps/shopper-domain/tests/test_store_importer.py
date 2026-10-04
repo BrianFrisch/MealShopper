@@ -25,8 +25,6 @@ class TestStoreImporterHelpers(unittest.TestCase):
 
     def test_normalize_state(self):
         self.assertEqual(normalize_state("CA"), "CA")
-        self.assertEqual(normalize_state("california"), "CA")
-        self.assertEqual(normalize_state("California"), "CA")
         self.assertEqual(normalize_state("ny"), "NY")
         self.assertEqual(normalize_state(" TX "), "TX")
 
@@ -137,34 +135,61 @@ class TestStoreImporterHelpers(unittest.TestCase):
 
 class TestStoreImportService(unittest.IsolatedAsyncioTestCase):
     async def test_get_chain_metadata(self):
-        service = StoreImportService(db_url="postgresql://mock:5432/mock")
-
-        mock_conn = AsyncMock()
-        mock_conn.fetchrow.return_value = {
+        mock_chain_service = AsyncMock()
+        mock_chain_service.get_chain_metadata.return_value = {
             "chain_id": "ralphs",
             "display_name": "Ralphs",
             "adapter_name": "ralphs",
             "spider_name": "kroger_us",
             "flyer_source_type": "flipp",
         }
+        service = StoreImportService(
+            db_url="postgresql://mock:5432/mock",
+            chain_service=mock_chain_service,
+        )
 
-        with patch("src.services.store_importer.asyncpg.connect", new=AsyncMock(return_value=mock_conn)):
-            meta = await service.get_chain_metadata("ralphs")
-            self.assertEqual(meta["chain_id"], "ralphs")
-            self.assertEqual(meta["display_name"], "Ralphs")
-            self.assertEqual(meta["adapter_name"], "ralphs")
-            self.assertEqual(meta["spider_name"], "kroger_us")
-            mock_conn.close.assert_awaited_once()
+        meta = await service.get_chain_metadata("ralphs")
+        self.assertEqual(meta["chain_id"], "ralphs")
+        self.assertEqual(meta["display_name"], "Ralphs")
+        self.assertEqual(meta["adapter_name"], "ralphs")
+        mock_chain_service.get_chain_metadata.assert_awaited_once_with("ralphs")
 
     async def test_get_chain_metadata_not_found(self):
-        service = StoreImportService(db_url="postgresql://mock:5432/mock")
+        mock_chain_service = AsyncMock()
+        mock_chain_service.get_chain_metadata.side_effect = ValueError("Unsupported chain")
+        service = StoreImportService(
+            db_url="postgresql://mock:5432/mock",
+            chain_service=mock_chain_service,
+        )
 
+        with self.assertRaises(ValueError):
+            await service.get_chain_metadata("unknown_chain")
+
+    async def test_persist_stores_upserts_chain_through_chain_service(self):
+        mock_chain_service = AsyncMock()
+        service = StoreImportService(
+            db_url="postgresql://mock:5432/mock",
+            chain_service=mock_chain_service,
+        )
         mock_conn = AsyncMock()
-        mock_conn.fetchrow.return_value = None
+        metadata = {
+            "display_name": "Ralphs",
+            "adapter_name": "ralphs",
+            "spider": "kroger_us",
+            "flyer_source_type": "flipp",
+        }
 
         with patch("src.services.store_importer.asyncpg.connect", new=AsyncMock(return_value=mock_conn)):
-            with self.assertRaises(ValueError):
-                await service.get_chain_metadata("unknown_chain")
+            await service._persist_stores("ralphs", metadata, [])
+
+        mock_chain_service.upsert_chain.assert_awaited_once_with(
+            chain_id="ralphs",
+            display_name="Ralphs",
+            adapter_name="ralphs",
+            spider_name="kroger_us",
+            flyer_source_type="flipp",
+        )
+        mock_conn.execute.assert_awaited_once()
 
     async def test_store_import_service_orchestration(self):
         service = StoreImportService(db_url="postgresql://mock:5432/mock")

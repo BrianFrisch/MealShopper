@@ -7,7 +7,10 @@ param(
     [string]$Region = "CA",
 
     [Parameter(HelpMessage = "API Gateway Base URL")]
-    [string]$GatewayUrl = "http://localhost:5247"
+    [string]$GatewayUrl = "http://localhost:5247",
+
+    [Parameter(HelpMessage = "If true, imports all banners for the chain; otherwise filters by primary banner only")]
+    [bool]$IncludeAllBrands = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -50,6 +53,7 @@ $authHeaders = @{
 $importBody = @{
     chain_id = $ChainId
     region   = $Region
+    all_brands = $IncludeAllBrands
 } | ConvertTo-Json
 
 try {

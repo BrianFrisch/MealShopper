@@ -48,6 +48,8 @@ CONSTRAINTS:
    - Populate 'storeName' and 'dealId' exactly as provided in the deals list.
 4. If an essential main recipe component (e.g. protein or fresh produce base) is missing from the circular deals, list its generic name in 'missingPrimaryIngredients' so our shopper engine can search for it in secondary circulars.
 5. Common pantry staples (oil, salt, pepper, flour, vinegar, standard dried spices) should have 'storeName' and 'dealId' set to null, 'isPromotional' to false, and must NOT be added to 'missingPrimaryIngredients'.
+6. RECIPE NAMING: Do not use generic placeholders like "Protein" or "Meat" in your recipe titles. Name the actual dish (e.g., "Garlic Butter Ribeye" or "DiGiorno Pizza with Side Salad").
+7. PREPARED FOODS: If an ingredient is a fully prepared or frozen food (like a frozen pizza, lasagna, or chicken nuggets), DO NOT treat it as a raw ingredient to be seared, marinated, or heavily prepped. Instruct the user to cook it according to package directions and pair it with a fresh side.
 
 AVAILABLE PROMOTIONAL DEALS:
 {deals_context}

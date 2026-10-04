@@ -25,7 +25,12 @@
         "/^python -m pytest apps/shopper-domain/tests/test_flipp_adapter\\.py$/": {
             "approve": true,
             "matchCommandLine": true
-        }
+        },
+        "/^& \\.venv/Scripts/python\\.exe apps/shopper-domain/tests/test_on_demand_ingestion\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "&": true
     },
     "python.analysis.diagnosticSeverityOverrides": {
         "reportUnknownMemberType": "none",

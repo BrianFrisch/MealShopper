@@ -57,6 +57,26 @@ class MockAdapter(BaseDealAdapter):
         self.deals = deals if deals is not None else []
         self.called_with = []
 
+    async def fetch_flyer_metadata(
+        self, postal_code: str, chain_id: Optional[str] = None, **kwargs: Any
+    ) -> tuple[Optional[str], datetime, datetime]:
+        now = datetime.now(timezone.utc)
+        return "mock-flyer-1", now, now + timedelta(days=7)
+
+    async def fetch_raw_items(self, flyer_id: Any) -> list[dict[str, Any]]:
+        return []
+
+    def extract_product_name(self, item: dict[str, Any]) -> str:
+        return item.get("item_name", "")
+
+    def extract_pricing(
+        self, item: dict[str, Any]
+    ) -> tuple[Optional[float], Optional[float], str]:
+        return item.get("deal_price"), item.get("original_price"), item.get("unit", "each")
+
+    def extract_raw_category(self, item: dict[str, Any]) -> str:
+        return item.get("category", "Pantry")
+
     async def get_normalized_deals(
         self, postal_code: str, store_id: str, merchant_name: Optional[str] = None, **kwargs: Any
     ) -> tuple[datetime, datetime, list[NormalizedDealItem]]:

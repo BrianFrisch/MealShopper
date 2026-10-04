@@ -1,17 +1,17 @@
 import logging
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 import httpx
 
 try:
     from src.ingestion.adapters.base import BaseDealAdapter
     from src.ingestion.adapters.flipp_adapter import FlippAdapter, DEFAULT_TIMEOUT
     from src.ingestion.adapters.aldi_adapter import AldiAdapter
-    from src.storage.deal_storage import PartitionedDealStorage
+    from src.services.grocery_chain_service import GroceryChainService
 except ImportError:
     from .adapters.base import BaseDealAdapter
     from .adapters.flipp_adapter import FlippAdapter, DEFAULT_TIMEOUT
     from .adapters.aldi_adapter import AldiAdapter
-    from ..storage.deal_storage import PartitionedDealStorage
+    from ..services.grocery_chain_service import GroceryChainService
 
 logger = logging.getLogger(__name__)
 
@@ -19,23 +19,87 @@ logger = logging.getLogger(__name__)
 class DealAdapterFactory:
     """
     Factory for instantiating and resolving store deal ingestion adapters.
-    Maintains a registry of supported store chains and provides convenience
-    orchestration for fetching and persisting normalized circular deals.
+    Maintains a registry of supported store chains populated dynamically from
+    the database via GroceryChainService.
     """
 
     def __init__(
         self,
         client: Optional[httpx.AsyncClient] = None,
         timeout: float = DEFAULT_TIMEOUT,
+        db_url: Optional[str] = None,
+        chain_service: Optional[Any] = None,
     ) -> None:
         self._client = client
         self._timeout = timeout
-        self._registry: dict[str, BaseDealAdapter] = {
-            "ralphs": FlippAdapter(
-                client=self._client, timeout=self._timeout, merchant_name="Ralphs"
-            ),
-            "aldi": AldiAdapter(client=self._client, timeout=self._timeout),
-        }
+        self.chain_service = chain_service or GroceryChainService()
+        self._registry: dict[str, BaseDealAdapter] = {}
+
+    def _create_adapter_from_metadata(self, meta: Dict[str, Any]) -> BaseDealAdapter:
+        """Instantiates an adapter instance based on chain metadata."""
+        adapter_name = str(meta.get("adapter_name") or meta.get("chain_id") or "").strip().lower()
+        display_name = str(meta.get("display_name") or meta.get("chain_id") or "").strip()
+
+        if adapter_name == "aldi" or "aldi" in adapter_name:
+            return AldiAdapter(client=self._client, timeout=self._timeout)
+        return FlippAdapter(
+            client=self._client,
+            timeout=self._timeout,
+            merchant_name=display_name or adapter_name.title(),
+        )
+
+    async def get_chain_metadata(self, chain_id: str) -> Dict[str, str]:
+        """Retrieve grocery chain metadata from the database via GroceryChainService."""
+        return await self.chain_service.get_chain_metadata(chain_id)
+
+    async def load_chains_from_db(self) -> None:
+        """Populate or update the adapter registry from the database using GroceryChainService."""
+        try:
+            chains = await self.chain_service.get_all_chains()
+            for meta in chains:
+                adapter = self._create_adapter_from_metadata(meta)
+                chain_key = str(meta.get("chain_id") or "").strip().lower()
+                if chain_key:
+                    self._registry[chain_key] = adapter
+                adapter_key = str(meta.get("adapter_name") or "").strip().lower()
+                if adapter_key and adapter_key not in self._registry:
+                    self._registry[adapter_key] = adapter
+        except Exception as exc:
+            logger.warning("Failed to populate chain adapters from database: %s", exc)
+
+    async def get_or_load_adapter(self, store_chain: str) -> Optional[BaseDealAdapter]:
+        """
+        Retrieves adapter from cache or loads chain metadata dynamically from the DB.
+        """
+        if not store_chain:
+            logger.warning("Empty store chain provided to DealAdapterFactory.")
+            return None
+
+        key = store_chain.strip().lower()
+        if key in self._registry:
+            return self._registry[key]
+
+        try:
+            await self.load_chains_from_db()
+            if key in self._registry:
+                return self._registry[key]
+
+            meta = await self.chain_service.get_chain_metadata(key)
+            adapter = self._create_adapter_from_metadata(meta)
+            chain_key = str(meta.get("chain_id") or key).strip().lower()
+            self._registry[chain_key] = adapter
+            adapter_key = str(meta.get("adapter_name") or "").strip().lower()
+            if adapter_key:
+                self._registry.setdefault(adapter_key, adapter)
+            return adapter
+        except Exception as exc:
+            logger.warning(
+                "Unsupported store chain '%s'. Supported chains: %s. Proceeding without circular deals. (%s)",
+                store_chain,
+                self.supported_chains(),
+                exc,
+            )
+            return None
 
     def register_adapter(self, store_chain: str, adapter: BaseDealAdapter) -> None:
         """Registers or overrides an adapter for a given store chain key."""
@@ -78,79 +142,3 @@ class DealAdapterFactory:
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         await self.close()
 
-    async def fetch_and_persist(
-        self,
-        store_chain: str,
-        store_id: str,
-        postal_code: str,
-        storage: Any
-    ) -> dict[str, Any]:
-        adapter = self.get_adapter(store_chain)
-        if adapter is None:
-            return {
-                "store_chain": store_chain,
-                "store_id": store_id,
-                "deal_count": 0,
-                "partitions": [],
-                "status": "unsupported_chain",
-            }
-
-        try:
-            valid_from, valid_to, deals = await adapter.get_normalized_deals(
-                postal_code=postal_code,
-                store_id=store_id,
-                merchant_name=store_chain
-            )
-            if not deals:
-                return {
-                    "store_chain": store_chain,
-                    "store_id": store_id,
-                    "deal_count": 0,
-                    "partitions": [],
-                    "status": "no_deals_found",
-                }
-
-            deal_dicts = [d.model_dump() if hasattr(d, "model_dump") else d for d in deals]
-            written_paths = await storage.save_deals(store_id, deal_dicts, valid_from, valid_to)
-
-            return {
-                "store_chain": store_chain,
-                "store_id": store_id,
-                "deal_count": len(deals),
-                "partitions": written_paths,
-                "status": "success",
-            }
-        except Exception as exc:
-            logger.error(
-                "Failed to fetch circular deals for '%s' (store %s): %s",
-                store_chain,
-                store_id,
-                exc,
-                exc_info=True,
-            )
-            return {
-                "store_chain": store_chain,
-                "store_id": store_id,
-                "deal_count": 0,
-                "partitions": [],
-                "status": "error",
-            }
-
-
-async def fetch_and_persist(
-    store_chain: str,
-    store_id: str,
-    postal_code: str,
-    storage: PartitionedDealStorage,
-    client: Optional[httpx.AsyncClient] = None,
-) -> dict[str, Any]:
-    """
-    Module-level convenience function to fetch and persist deals using DealAdapterFactory.
-    """
-    factory = DealAdapterFactory(client=client)
-    return await factory.fetch_and_persist(
-        store_chain=store_chain,
-        store_id=store_id,
-        postal_code=postal_code,
-        storage=storage,
-    )

@@ -29,7 +29,9 @@ async def test_live_aldi_ingestion() -> None:
 
             # 2 & 3. Target postal code "90260" with store_chain "aldi" and store_id "aldi-90260"
             # Retrieve the adapter from the factory and call get_normalized_deals
-            adapter = factory.get_adapter(store_chain)
+            adapter = await factory.get_or_load_adapter(store_chain)
+            if adapter is None:
+                raise ValueError(f"No adapter configured for chain: {store_chain}")
 
             # Discover flyer ID for logging / reporting
             flyers = []

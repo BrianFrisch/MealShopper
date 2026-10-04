@@ -1,5 +1,6 @@
-from typing import List, Optional
-from pydantic import BaseModel, Field
+from datetime import datetime
+from typing import Any, List, Optional
+from pydantic import AliasChoices, BaseModel, Field
 
 
 class Store(BaseModel):
@@ -12,6 +13,8 @@ class Store(BaseModel):
     latitude: float
     longitude: float
     distance_miles: Optional[float] = None
+    chain_id: Optional[str] = None
+    adapter_name: Optional[str] = None
 
 
 class StoreDiscoveryRequest(BaseModel):
@@ -25,6 +28,13 @@ class StoreDiscoveryRequest(BaseModel):
 class StoreDiscoveryResponse(BaseModel):
     stores: List[Store]
     total_found: int
+
+
+class LegacyStoreRequest(BaseModel):
+    latitude: float = 33.894893
+    longitude: float = -118.362658
+    radius_miles: float = 5.0
+    max_stores: int = 3
 
 
 class Deal(BaseModel):
@@ -50,6 +60,52 @@ class DealScoringResponse(BaseModel):
     deals: List[Deal]
     total_scored: int
 
+
+class LegacyDealsRequest(BaseModel):
+    store_ids: List[str] = Field(default_factory=list)
+    avoid_ingredients: List[str] = Field(default_factory=list)
+
+
+class DealItemDto(BaseModel):
+    product_name: str
+    clean_name: str
+    category: str
+    sale_price: float
+    pricing_unit: str
+    raw_promotion_text: str
+
+
+class StoreCircularIngestRequest(BaseModel):
+    store_id: str
+    store_chain: str
+    valid_from: datetime
+    valid_to: datetime
+    deals: List[DealItemDto]
+
+
+class EvaluateTopDealsRequest(BaseModel):
+    store_ids: List[str] = Field(default_factory=list)
+    limit: int = Field(default=30, ge=1, le=100)
+    tier: str = Field(default="primary", description="primary (meat/seafood), secondary, or all")
+
+
+class LookupIngredientsRequest(BaseModel):
+    store_ids: List[str] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("store_ids", "storeIds", "StoreIds"),
+    )
+    missing_ingredients: List[Any] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices(
+            "missing_ingredients",
+            "missingIngredients",
+            "MissingIngredients",
+            "items",
+            "Items",
+        ),
+    )
+
+
 class IngredientMatchRequest(BaseModel):
     store_ids: List[str]
     missing_ingredients: List[str]
@@ -70,3 +126,9 @@ class MatchedIngredientDeal(BaseModel):
 class IngredientMatchResponse(BaseModel):
     matches: List[MatchedIngredientDeal]
     total_matched: int
+
+
+class AdminStoreImportRequest(BaseModel):
+    chain_id: str = Field(..., description="Target chain identifier (e.g. ralphs, aldi, vons)")
+    region: str = Field(default="California", description="State or region name for Overpass query")
+    all_brands: bool = Field(default=False, description="If true, imports all banners for the chain; otherwise filters by primary banner only")

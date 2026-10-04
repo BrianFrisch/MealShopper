@@ -1,5 +1,12 @@
 import os
 import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    force=True,
+)
+
 from fastapi import FastAPI #, Depends, HTTPException, status
 
 from src.models import MealPlanRequest#, MealPlanResponse
@@ -51,7 +58,7 @@ async def generate_plan(request: MealPlanRequest) -> MealPlanResponse:
         except Exception as ex:
             logger.error("Gemini live generation failed (%s). Falling back to mock synthesis.", ex)
 
-    logger.info("Using mock meal plan generator.")
+    logger.info("Using mock meal plan generator. use_mock=%s", use_mock)
     return await mock_planner_service.generate_mock_plan(request)
 
 if __name__ == "__main__":

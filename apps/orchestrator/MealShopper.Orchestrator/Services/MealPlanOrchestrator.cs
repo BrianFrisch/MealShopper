@@ -280,6 +280,10 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
         }
 
         _logger.LogInformation("Discovered {StoreCount} stores for Job {JobId}.", stores.Count, job.JobId);
+        foreach(StoreDto store in stores)
+        {
+            _logger.LogInformation("Store: {StoreId} - {StoreName} ({PostalCode})", store.Id, store.Name, store.PostalCode);
+        }
         return stores;
     }
 

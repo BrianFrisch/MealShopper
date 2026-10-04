@@ -1,14 +1,11 @@
-from datetime import datetime, timezone, timedelta
 import logging
 import re
 from typing import Any, Optional
 import httpx
 
 try:
-    from src.ingestion.models import NormalizedDealItem
     from src.ingestion.adapters.flipp_adapter import FlippAdapter, DEFAULT_TIMEOUT
 except ImportError:
-    from ..models import NormalizedDealItem
     from .flipp_adapter import FlippAdapter, DEFAULT_TIMEOUT
 
 logger = logging.getLogger(__name__)
@@ -17,8 +14,8 @@ logger = logging.getLogger(__name__)
 class AldiAdapter(FlippAdapter):
     """
     Asynchronous adapter for querying ALDI circulars & promotions via Flipp API.
-    Handles Aldi-specific conventions including 'Fresh Meat Special', produce pricing,
-    category inferences (e.g. Aldi Finds, Fresh Meat, Produce, Pantry), and clean fallbacks.
+    Inherits HTTP fetching and circular resolution from FlippAdapter, overriding
+    only Aldi-specific data extraction for pricing, units, and category mappings.
     """
 
     DEFAULT_MERCHANT: str = "ALDI"
@@ -54,16 +51,29 @@ class AldiAdapter(FlippAdapter):
 
         return any(term in name_candidate for term in self.MERCHANT_SEARCH_TERMS)
 
-    async def fetch_flyers_by_postal_code(
-        self, postal_code: str, merchant_name: Optional[str] = None
-    ) -> list[dict[str, Any]]:
+    # --- Aldi Data Extraction Overrides ---
+
+    def extract_pricing(
+        self, item: dict[str, Any]
+    ) -> tuple[Optional[float], Optional[float], str]:
         """
-        Fetch active flyers for postal code with ALDI as default merchant.
+        Extracts (sale_price, original_price, unit) tailored for Aldi data:
+        1. Handles Aldi text pricing formats like "79¢" or "cents" and multi-buys.
+        2. Handles Aldi's omission of original_price (everyday low price model).
+        3. Identifies pricing unit ("lb" vs "each") scanning for "Fresh Meat Special" and produce patterns.
         """
-        target_merchant = merchant_name if merchant_name is not None else self.DEFAULT_MERCHANT
-        return await super().fetch_flyers_by_postal_code(
-            postal_code=postal_code, merchant_name=target_merchant
-        )
+        sale_price = self._extract_sale_price(item)
+        original_price = self._extract_regular_price(item)
+        unit = self._determine_pricing_unit(item)
+        return sale_price, original_price, unit
+
+    def extract_raw_category(self, item: dict[str, Any]) -> str:
+        """
+        Maps Aldi-specific flyer sections and category hints (e.g. 'Aldi Finds',
+        'Fresh Meat Special', 'Weekly Fresh', produce, pantry) to raw categories
+        before base class normalization.
+        """
+        return self._extract_category(item)
 
     def _determine_pricing_unit(self, item: dict[str, Any]) -> str:
         """
@@ -102,12 +112,13 @@ class AldiAdapter(FlippAdapter):
         if "fresh meat special" in combined:
             if any(k in combined for k in ["per lb", "/lb", "pound", "lb"]):
                 return "lb"
+            return "lb"
 
         return "each"
 
     def _extract_sale_price(self, item: dict[str, Any]) -> Optional[float]:
         """
-        Extracts sale price handling standard numbers, multi-buys, cents notations (e.g. 79¢),
+        Extracts sale price handling standard numbers, multi-buys, cents notations (e.g. 79¢, 49 cents),
         and Aldi text representations.
         """
         current_price = item.get("current_price") if item.get("current_price") is not None else item.get("price")
@@ -230,12 +241,13 @@ class AldiAdapter(FlippAdapter):
         ):
             return "Aldi Finds"
 
-        # 2. Fresh Meat / Seafood / Poultry / Beef / Pork
+        # 2. Fresh Meat / Seafood / Poultry / Beef / Pork / Weekly Fresh
         if any(
             term in combined_text
             for term in [
                 "fresh meat special",
                 "fresh meat",
+                "weekly fresh",
                 "meat special",
                 "beef",
                 "chicken",
@@ -484,98 +496,3 @@ class AldiAdapter(FlippAdapter):
             return raw_category
 
         return "Grocery"
-
-    async def get_normalized_deals(
-        self,
-        postal_code: str,
-        store_id: str,
-        merchant_name: Optional[str] = None,
-        **kwargs: Any,
-    ) -> tuple[datetime, datetime, list[NormalizedDealItem]]:
-        """
-        Resolves the active weekly circular for Aldi in the given postal code
-        and returns normalized deals.
-
-        Includes proper logging and exception handling when no active circulars exist.
-        """
-        target_merchant = merchant_name if merchant_name is not None else self.DEFAULT_MERCHANT
-        now = datetime.now(timezone.utc)
-        default_valid_from = now
-        default_valid_to = now + timedelta(days=7)
-
-        try:
-            flyers = await self.fetch_flyers_by_postal_code(
-                postal_code=postal_code, merchant_name=target_merchant
-            )
-        except Exception as exc:
-            logger.error(
-                "Error fetching ALDI circulars for postal_code=%s (store_id=%s): %s",
-                postal_code,
-                store_id,
-                exc,
-                exc_info=True,
-            )
-            return default_valid_from, default_valid_to, []
-
-        if not flyers:
-            logger.warning(
-                "No active ALDI circular found for postal_code=%s (store_id=%s)",
-                postal_code,
-                store_id,
-            )
-            return default_valid_from, default_valid_to, []
-
-        flyers = self.prioritize_flyers(flyers)
-        flyer = flyers[0]
-
-        valid_from = self._parse_datetime(
-            flyer.get("valid_from") or flyer.get("available_from"),
-            default=default_valid_from,
-        )
-        valid_to = self._parse_datetime(
-            flyer.get("valid_to") or flyer.get("available_to"),
-            default=default_valid_to,
-        )
-
-        flyer_id = flyer.get("id") or flyer.get("flyer_id")
-        if not flyer_id:
-            logger.warning(
-                "ALDI flyer found without valid ID for postal_code=%s (store_id=%s)",
-                postal_code,
-                store_id,
-            )
-            return valid_from, valid_to, []
-
-        try:
-            items = await self.fetch_promotions_for_flyer(int(flyer_id))
-        except Exception as exc:
-            logger.error(
-                "Error fetching ALDI promotions for flyer_id=%s (store_id=%s): %s",
-                flyer_id,
-                store_id,
-                exc,
-                exc_info=True,
-            )
-            return valid_from, valid_to, []
-
-        normalized_deals: list[NormalizedDealItem] = []
-        for item in items:
-            deal_item = self._parse_deal_item(
-                item,
-                valid_from=valid_from,
-                valid_to=valid_to,
-                flyer_context=flyer,
-                store_id=store_id,
-                store_name=target_merchant,
-            )
-            if deal_item is not None:
-                normalized_deals.append(deal_item)
-
-        logger.info(
-            "Successfully normalized %d ALDI deals for store %s from flyer %s in postal code %s",
-            len(normalized_deals),
-            store_id,
-            flyer_id,
-            postal_code,
-        )
-        return valid_from, valid_to, normalized_deals
