@@ -9,3 +9,6 @@ __pycache__/
 
 # Environment secrets
 .env
+
+# Local data files
+apps/shopper-domain/data/deals/
