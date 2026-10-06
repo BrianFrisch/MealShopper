@@ -4,6 +4,7 @@ using MealShopper.Orchestrator.Exceptions;
 using MealShopper.Orchestrator.Models;
 using MealShopper.Orchestrator.Models.Domain;
 using MealShopper.Orchestrator.Models.DTOs;
+using MealShopper.Orchestrator.Models.Planner;
 using MealShopper.Orchestrator.Services;
 using MealShopper.Orchestrator.Tests.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -344,13 +345,14 @@ public class MealPlanOrchestratorTests
             return await _inner.UpdateJobStatusAsync(jobId, status, errorMessage, stageDescription, cancellationToken);
         }
 
-        public async Task<JobRecord?> CompleteJobAsync(
+        public async Task<JobRecord?> CompleteJobAsync<T>(
             Guid jobId,
-            MealPlanResultDto result,
+            T result,
+            string? stageDescription = "Completed successfully.",
             CancellationToken cancellationToken = default)
         {
-            _onStatusRecorded((JobStatus.Completed, "Meal plan generated successfully."));
-            return await _inner.CompleteJobAsync(jobId, result, cancellationToken);
+            _onStatusRecorded((JobStatus.Completed, stageDescription));
+            return await _inner.CompleteJobAsync(jobId, result, stageDescription, cancellationToken);
         }
     }
 
@@ -641,4 +643,299 @@ public class MealPlanOrchestratorTests
             }
         }
     }
+
+    #region ProcessDiscoveryJobAsync Tests
+
+    [Fact]
+    public async Task ProcessDiscoveryJobAsync_ProgressesThroughStagesAndCompletesWithoutPlanning()
+    {
+        // Arrange
+        var underlyingStore = new InMemoryJobTracker();
+        var recordedTransitions = new List<(JobStatus Status, string? StageDescription)>();
+
+        var jobStore = new TrackingJobStateStore(underlyingStore, transition =>
+        {
+            recordedTransitions.Add(transition);
+        });
+
+        var mockHandler = new MockHttpMessageHandler();
+
+        var shopperHttpClient = new HttpClient(mockHandler)
+        {
+            BaseAddress = new Uri("http://localhost:8001/")
+        };
+        var shopperClient = new ShopperClient(shopperHttpClient, NullLogger<ShopperClient>.Instance);
+
+        var mockPlanningClient = new Mock<IPlanningClient>();
+
+        var orchestrator = new MealPlanOrchestrator(
+            shopperClient,
+            Mock.Of<IPlannerClient>(),
+            mockPlanningClient.Object,
+            jobStore,
+            NullLogger<MealPlanOrchestrator>.Instance);
+
+        var jobId = Guid.NewGuid();
+        var initialJob = new JobRecord
+        {
+            JobId = jobId,
+            JobType = JobType.StoreDiscovery,
+            Status = JobStatus.Pending,
+            RequestPayload = new CreateMealPlanRequest
+            {
+                Address = new AddressDto
+                {
+                    ZipCode = "90250",
+                    Latitude = 33.8958,
+                    Longitude = -118.3531
+                },
+                SearchRadiusMiles = 5,
+                MaxStores = 2
+            }
+        };
+
+        await jobStore.CreateJobAsync(initialJob);
+
+        // Act
+        await orchestrator.ProcessDiscoveryJobAsync(jobId);
+
+        // Assert
+        var finalJob = await jobStore.GetJobAsync(jobId);
+        finalJob.Should().NotBeNull();
+        finalJob!.Status.Should().Be(JobStatus.Completed);
+        finalJob.StageDescription.Should().Be("Deals discovered successfully.");
+        finalJob.ErrorMessage.Should().BeNull();
+        finalJob.Result.Should().BeNull(); // Meal plan result should NOT be generated
+
+        var discoveryResult = finalJob.GetResult<DiscoveryResultDto>();
+        discoveryResult.Should().NotBeNull();
+        discoveryResult!.Stores.Should().NotBeEmpty();
+        discoveryResult.Deals.Should().NotBeEmpty();
+        discoveryResult.Deals.Should().AllSatisfy(d => d.StoreId.Should().NotBeNullOrWhiteSpace());
+
+        // Verify status progression: Pending -> DiscoveringStores -> FetchingDeals -> Completed
+        var statuses = recordedTransitions.Select(t => t.Status).ToList();
+        statuses.Should().ContainInOrder(
+            JobStatus.Pending,
+            JobStatus.DiscoveringStores,
+            JobStatus.FetchingDeals,
+            JobStatus.Completed);
+
+        // Verify planner was never called
+        mockPlanningClient.Verify(p => p.GenerateMealPlanAsync(It.IsAny<GenerateMealPlanRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        // Verify that shopper requests were captured (discovery and deals), but no planner / lookup calls
+        mockHandler.CapturedRequests.Should().HaveCount(3);
+        mockHandler.CapturedRequests[0].RequestUri!.ToString().Should().Contain("v1/shopper/stores");
+        mockHandler.CapturedRequests.Should().Contain(r => r.RequestUri!.ToString().Contains("v1/deals/stores/store_vons_1"));
+        mockHandler.CapturedRequests.Should().Contain(r => r.RequestUri!.ToString().Contains("v1/deals/stores/store_grocoutlet_1"));
+        mockHandler.CapturedRequests.Should().NotContain(r => r.RequestUri!.ToString().Contains("v1/planner"));
+        mockHandler.CapturedRequests.Should().NotContain(r => r.RequestUri!.ToString().Contains("v1/shopper/lookup-ingredients"));
+    }
+
+    [Fact]
+    public async Task ProcessDiscoveryJobAsync_WhenShopperServiceFails_UpdatesStatusToFailed()
+    {
+        // Arrange
+        var jobStore = new InMemoryJobTracker();
+        var mockHandler = new MockHttpMessageHandler();
+        mockHandler.SetServerError("Shopper store discovery service unavailable");
+
+        var shopperHttpClient = new HttpClient(mockHandler)
+        {
+            BaseAddress = new Uri("http://localhost:8001/")
+        };
+        var shopperClient = new ShopperClient(shopperHttpClient, NullLogger<ShopperClient>.Instance);
+
+        var orchestrator = new MealPlanOrchestrator(
+            shopperClient,
+            Mock.Of<IPlannerClient>(),
+            Mock.Of<IPlanningClient>(),
+            jobStore,
+            NullLogger<MealPlanOrchestrator>.Instance);
+
+        var jobId = Guid.NewGuid();
+        var initialJob = new JobRecord
+        {
+            JobId = jobId,
+            Status = JobStatus.Pending,
+            RequestPayload = new CreateMealPlanRequest
+            {
+                Address = new AddressDto { ZipCode = "90250" }
+            }
+        };
+
+        await jobStore.CreateJobAsync(initialJob);
+
+        // Act
+        await orchestrator.ProcessDiscoveryJobAsync(jobId);
+
+        // Assert
+        var finalJob = await jobStore.GetJobAsync(jobId);
+        finalJob.Should().NotBeNull();
+        finalJob!.Status.Should().Be(JobStatus.Failed);
+        finalJob.ErrorMessage.Should().Contain("Shopper store discovery service unavailable");
+        finalJob.StageDescription.Should().Be("Deal discovery workflow failed.");
+    }
+
+    [Fact]
+    public async Task ProcessDiscoveryJobAsync_WhenNoStoresFound_CompletesGracefullyWithoutFetchingDeals()
+    {
+        // Arrange
+        var underlyingStore = new InMemoryJobTracker();
+        var recordedTransitions = new List<(JobStatus Status, string? StageDescription)>();
+
+        var jobStore = new TrackingJobStateStore(underlyingStore, transition =>
+        {
+            recordedTransitions.Add(transition);
+        });
+
+        var mockHandler = new MockHttpMessageHandler
+        {
+            CustomHandler = req =>
+            {
+                if (req.RequestUri != null && req.RequestUri.ToString().Contains("v1/shopper/stores"))
+                {
+                    return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                    {
+                        Content = new StringContent("{\"stores\": [], \"total_found\": 0}", System.Text.Encoding.UTF8, "application/json")
+                    };
+                }
+                return null;
+            }
+        };
+
+        var shopperHttpClient = new HttpClient(mockHandler)
+        {
+            BaseAddress = new Uri("http://localhost:8001/")
+        };
+        var shopperClient = new ShopperClient(shopperHttpClient, NullLogger<ShopperClient>.Instance);
+
+        var orchestrator = new MealPlanOrchestrator(
+            shopperClient,
+            Mock.Of<IPlannerClient>(),
+            Mock.Of<IPlanningClient>(),
+            jobStore,
+            NullLogger<MealPlanOrchestrator>.Instance);
+
+        var jobId = Guid.NewGuid();
+        var initialJob = new JobRecord
+        {
+            JobId = jobId,
+            JobType = JobType.StoreDiscovery,
+            Status = JobStatus.Pending,
+            RequestPayload = new CreateMealPlanRequest
+            {
+                Address = new AddressDto
+                {
+                    ZipCode = "90250",
+                    Latitude = 33.8958,
+                    Longitude = -118.3531
+                },
+                SearchRadiusMiles = 1,
+                MaxStores = 2
+            }
+        };
+
+        await jobStore.CreateJobAsync(initialJob);
+
+        // Act
+        await orchestrator.ProcessDiscoveryJobAsync(jobId);
+
+        // Assert
+        var finalJob = await jobStore.GetJobAsync(jobId);
+        finalJob.Should().NotBeNull();
+        finalJob!.Status.Should().Be(JobStatus.Completed);
+        finalJob.StageDescription.Should().Be("No stores found within search radius.");
+        finalJob.ErrorMessage.Should().BeNull();
+        finalJob.Result.Should().BeNull();
+
+        // Status transitions should only be Pending -> DiscoveringStores -> Completed (No FetchingDeals)
+        var statuses = recordedTransitions.Select(t => t.Status).ToList();
+        statuses.Should().ContainInOrder(
+            JobStatus.Pending,
+            JobStatus.DiscoveringStores,
+            JobStatus.Completed);
+        statuses.Should().NotContain(JobStatus.FetchingDeals);
+
+        // Verify that only the store discovery request was made, no deal fetching calls
+        mockHandler.CapturedRequests.Should().HaveCount(1);
+        mockHandler.CapturedRequests[0].RequestUri!.ToString().Should().Contain("v1/shopper/stores");
+        mockHandler.CapturedRequests.Should().NotContain(r => r.RequestUri!.ToString().Contains("v1/deals"));
+    }
+
+    #endregion
+
+    #region ProcessGenerationJobAsync Tests
+
+    [Fact]
+    public async Task ProcessGenerationJobAsync_PopulatesTopDealsViaBatchLookupAndCompletes()
+    {
+        // Arrange
+        var underlyingStore = new InMemoryJobTracker();
+        var recordedTransitions = new List<(JobStatus Status, string? StageDescription)>();
+
+        var jobStore = new TrackingJobStateStore(underlyingStore, transition =>
+        {
+            recordedTransitions.Add(transition);
+        });
+
+        var mockHandler = new MockHttpMessageHandler();
+
+        var shopperHttpClient = new HttpClient(mockHandler)
+        {
+            BaseAddress = new Uri("http://localhost:8001/")
+        };
+        var shopperClient = new ShopperClient(shopperHttpClient, NullLogger<ShopperClient>.Instance);
+
+        var plannerHttpClient = new HttpClient(mockHandler)
+        {
+            BaseAddress = new Uri("http://localhost:8002/")
+        };
+        var planningClient = new PlanningClient(plannerHttpClient, NullLogger<PlanningClient>.Instance);
+
+        var orchestrator = new MealPlanOrchestrator(
+            shopperClient,
+            Mock.Of<IPlannerClient>(),
+            planningClient,
+            jobStore,
+            NullLogger<MealPlanOrchestrator>.Instance);
+
+        var jobId = Guid.NewGuid();
+        var genRequest = new MealPlanGenerationRequest
+        {
+            SelectedStoreIds = ["store-ralphs-101", "store-sprouts-305"],
+            SelectedDealIds = ["deal-chicken-breast-001", "deal-bell-peppers-002"],
+            Cuisines = ["Mexican"],
+            AvoidIngredients = ["peanuts"],
+            DaysCount = 3
+        };
+
+        var initialJob = new JobRecord
+        {
+            JobId = jobId,
+            JobType = JobType.PlanGeneration,
+            Status = JobStatus.Pending,
+            RequestPayloadJson = System.Text.Json.JsonSerializer.Serialize(genRequest)
+        };
+
+        await jobStore.CreateJobAsync(initialJob);
+
+        // Act
+        await orchestrator.ProcessGenerationJobAsync(jobId);
+
+        // Assert
+        var finalJob = await jobStore.GetJobAsync(jobId);
+        finalJob.Should().NotBeNull();
+        finalJob!.Status.Should().Be(JobStatus.Completed);
+        finalJob.ErrorMessage.Should().BeNull();
+        finalJob.Result.Should().NotBeNull();
+        finalJob.Result!.Recipes.Should().NotBeEmpty();
+
+        // Verify batch lookup was called and planner received top deals
+        mockHandler.CapturedRequests.Should().Contain(r => r.RequestUri!.ToString().Contains("v1/shopper/deals/batch-lookup"));
+        mockHandler.CapturedRequests.Should().Contain(r => r.RequestUri!.ToString().Contains("v1/planner/generate"));
+    }
+
+    #endregion
 }

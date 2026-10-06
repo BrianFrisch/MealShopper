@@ -82,7 +82,7 @@ public class RedisJobStateStore : IJobStateStore, IJobTracker
         {
             JobId = Guid.NewGuid(),
             Status = JobStatus.Pending,
-            RequestPayload = payload,
+            RequestPayloadJson = JsonSerializer.Serialize(payload, SerializerOptions),
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -168,9 +168,10 @@ public class RedisJobStateStore : IJobStateStore, IJobTracker
     }
 
     /// <inheritdoc />
-    public async Task<JobRecord?> CompleteJobAsync(
+    public async Task<JobRecord?> CompleteJobAsync<T>(
         Guid jobId,
-        MealPlanResultDto result,
+        T result,
+        string? stageDescription = "Completed successfully.",
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(result);
@@ -192,12 +193,16 @@ public class RedisJobStateStore : IJobStateStore, IJobTracker
                 return null;
             }
 
+            var jsonResult = result is string rawJson
+                ? rawJson
+                : JsonSerializer.Serialize(result, SerializerOptions);
+
             var updatedJob = existingJob with
             {
                 Status = JobStatus.Completed,
-                StageDescription = "Meal plan generated successfully.",
+                StageDescription = stageDescription ?? "Completed successfully.",
                 UpdatedAt = DateTimeOffset.UtcNow,
-                Result = result,
+                ResultPayloadJson = jsonResult,
                 ErrorMessage = null
             };
 

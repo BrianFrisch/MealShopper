@@ -123,6 +123,29 @@ class MatchedIngredientDeal(BaseModel):
     similarity_score: float
 
 
+class DealLookupItem(BaseModel):
+    deal_id: str = Field(
+        ...,
+        validation_alias=AliasChoices("deal_id", "dealId", "DealId"),
+    )
+    store_id: str = Field(
+        ...,
+        validation_alias=AliasChoices("store_id", "storeId", "StoreId"),
+    )
+
+
+class DealBatchLookupRequest(BaseModel):
+    items: List[DealLookupItem] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("items", "deals", "deal_lookups", "dealLookups"),
+    )
+
+
+class DealBatchLookupResponse(BaseModel):
+    deals: List[Deal]
+    total_found: int
+
+
 class IngredientMatchResponse(BaseModel):
     matches: List[MatchedIngredientDeal]
     total_matched: int

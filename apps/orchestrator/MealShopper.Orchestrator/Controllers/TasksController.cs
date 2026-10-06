@@ -34,7 +34,7 @@ public class TasksController : ControllerBase
             stageDescription = job.StageDescription,
             createdAt = job.CreatedAt,
             updatedAt = job.UpdatedAt,
-            result = job.Result,
+            result = job.GetResultObject(),
             errorMessage = job.ErrorMessage
         });
     }

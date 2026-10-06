@@ -38,6 +38,21 @@ public interface IShopperClient
     /// </summary>
     Task<IngredientMatchResponseDto> MatchIngredientsAsync(IngredientMatchRequestDto req, CancellationToken ct = default);
 
+    /// <summary>
+    /// Looks up full deal information by batch deal IDs and store IDs.
+    /// </summary>
+    Task<TopDealsResponse> BatchLookupDealsAsync(
+        IEnumerable<string> dealIds,
+        IEnumerable<string> storeIds,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Looks up full deal information for specific composite deal/store items.
+    /// </summary>
+    Task<DealBatchLookupResponse> BatchLookupDealsAsync(
+        DealBatchLookupRequest req,
+        CancellationToken ct = default);
+
     #region Legacy Overloads (For backward compatibility)
 
     /// <summary>

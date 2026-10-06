@@ -86,3 +86,10 @@ class DealRepository:
                 matches.append(best_match)
 
         return matches
+
+    def get_deals_by_keys(
+        self,
+        deal_store_pairs: List[tuple[str, str]],
+    ) -> List[Deal]:
+        lookup_set = {(deal_id.strip(), store_id.strip()) for deal_id, store_id in deal_store_pairs if deal_id and store_id}
+        return [d for d in self._deals if (d.deal_id, d.store_id) in lookup_set]

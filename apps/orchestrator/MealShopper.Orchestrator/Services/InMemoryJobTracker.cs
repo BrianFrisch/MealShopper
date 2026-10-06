@@ -53,21 +53,26 @@ public class InMemoryJobTracker : IJobTracker, IJobStateStore
     }
 
     /// <inheritdoc />
-    public Task<JobRecord?> CompleteJobAsync(
+    public Task<JobRecord?> CompleteJobAsync<T>(
         Guid jobId,
-        MealPlanResultDto result,
+        T result,
+        string? stageDescription = "Completed successfully.",
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(result);
 
         if (_jobs.TryGetValue(jobId, out var job))
         {
+            var jsonResult = result is string rawJson
+                ? rawJson
+                : System.Text.Json.JsonSerializer.Serialize(result);
+
             var updatedJob = job with
             {
                 Status = JobStatus.Completed,
-                StageDescription = "Meal plan generated successfully.",
+                StageDescription = stageDescription ?? "Completed successfully.",
                 UpdatedAt = DateTimeOffset.UtcNow,
-                Result = result,
+                ResultPayloadJson = jsonResult,
                 ErrorMessage = null
             };
 

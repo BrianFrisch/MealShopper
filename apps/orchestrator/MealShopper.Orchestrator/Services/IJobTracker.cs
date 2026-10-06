@@ -36,11 +36,13 @@ public interface IJobTracker
     Task<JobRecord?> UpdateJobStatusAsync(Guid jobId, JobStatus status, string? errorMessage = null, string? stageDescription = null, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Transitions an existing job to the Completed status with the final compiled meal plan result.
+    /// Transitions an existing job to the Completed status with the final result.
     /// </summary>
+    /// <typeparam name="T">The type of the result payload.</typeparam>
     /// <param name="jobId">The unique job ID.</param>
-    /// <param name="result">The final compiled meal plan result.</param>
+    /// <param name="result">The result payload object or raw JSON string.</param>
+    /// <param name="stageDescription">Optional stage description upon completion.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The updated job record if found; otherwise, null.</returns>
-    Task<JobRecord?> CompleteJobAsync(Guid jobId, MealPlanResultDto result, CancellationToken cancellationToken = default);
+    Task<JobRecord?> CompleteJobAsync<T>(Guid jobId, T result, string? stageDescription = "Completed successfully.", CancellationToken cancellationToken = default);
 }

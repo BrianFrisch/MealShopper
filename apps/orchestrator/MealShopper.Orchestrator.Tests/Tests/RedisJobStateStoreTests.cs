@@ -282,7 +282,7 @@ public class RedisJobStateStoreTests
         };
 
         // Act
-        var result = await store.CompleteJobAsync(jobId, mealPlanResult);
+        var result = await store.CompleteJobAsync(jobId, mealPlanResult, stageDescription: "Meal plan generated successfully.");
 
         // Assert
         result.Should().NotBeNull();
@@ -291,6 +291,63 @@ public class RedisJobStateStoreTests
         result.Result.Should().NotBeNull();
         result.Result!.MealPlanId.Should().Be("plan-123");
         result.Result.EstimatedTotalTripCost.Should().Be(45.50m);
+    }
+
+    [Fact]
+    public async Task CompleteJobAsync_Generic_WhenKeyExists_SetsCompletedStatusAndCustomResult()
+    {
+        // Arrange
+        var store = new RedisJobStateStore(_redisMock.Object, _config, _loggerMock.Object);
+        var jobId = Guid.NewGuid();
+        var initialJob = new JobRecord
+        {
+            JobId = jobId,
+            JobType = JobType.StoreDiscovery,
+            Status = JobStatus.FetchingDeals,
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-2),
+            UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-2)
+        };
+
+        var initialJson = JsonSerializer.Serialize(initialJob, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+
+        _dbMock.Setup(db => db.StringGetAsync((RedisKey)$"mealshopper:jobs:{jobId}", It.IsAny<CommandFlags>()))
+            .ReturnsAsync((RedisValue)initialJson);
+
+        _dbMock.Setup(db => db.StringSetAsync(
+            (RedisKey)$"mealshopper:jobs:{jobId}",
+            It.IsAny<RedisValue>(),
+            TimeSpan.FromHours(24),
+            It.IsAny<bool>(),
+            It.IsAny<When>(),
+            It.IsAny<CommandFlags>()))
+            .ReturnsAsync(true);
+
+        var discoveryResult = new DiscoveryResultDto
+        {
+            Stores = new List<MealShopper.Orchestrator.Models.Domain.StoreDto>
+            {
+                new() { Id = "store-1", Name = "Ralphs", ZipCode = "90260" }
+            },
+            Deals = new List<MealShopper.Orchestrator.Models.Shopper.DealItemDto>
+            {
+                new() { DealId = "deal-1", StoreId = "store-1", ItemName = "Organic Milk", DealPrice = 3.99m }
+            }
+        };
+
+        // Act
+        var result = await store.CompleteJobAsync(jobId, discoveryResult, stageDescription: "Deals discovered successfully.");
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.Status.Should().Be(JobStatus.Completed);
+        result.StageDescription.Should().Be("Deals discovered successfully.");
+        var deserializedResult = result.GetResult<DiscoveryResultDto>();
+        deserializedResult.Should().NotBeNull();
+        deserializedResult!.Stores.Should().HaveCount(1);
+        deserializedResult.Stores[0].Name.Should().Be("Ralphs");
+        deserializedResult.Deals.Should().HaveCount(1);
+        deserializedResult.Deals[0].StoreId.Should().Be("store-1");
+        deserializedResult.Deals[0].ItemName.Should().Be("Organic Milk");
     }
 
     [Fact]

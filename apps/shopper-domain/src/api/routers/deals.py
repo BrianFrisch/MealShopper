@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends
 from deal_service import DealRepository
 from dependencies import get_deal_repository
 from models import (
+    DealBatchLookupRequest,
+    DealBatchLookupResponse,
     DealScoringRequest,
     DealScoringResponse,
     IngredientMatchRequest,
@@ -121,3 +123,17 @@ def match_missing_ingredients(
         matches=results,
         total_matched=len(results),
     )
+
+
+@router.post("/deals/batch-lookup", response_model=DealBatchLookupResponse)
+def batch_lookup_deals(
+    payload: DealBatchLookupRequest,
+    deal_repo: DealRepository = Depends(get_deal_repository),
+) -> DealBatchLookupResponse:
+    pairs = [(item.deal_id, item.store_id) for item in payload.items]
+    deals = deal_repo.get_deals_by_keys(pairs)
+    return DealBatchLookupResponse(
+        deals=deals,
+        total_found=len(deals),
+    )
+

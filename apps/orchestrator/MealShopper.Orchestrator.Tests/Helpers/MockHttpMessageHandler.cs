@@ -224,6 +224,46 @@ public class MockHttpMessageHandler : HttpMessageHandler
             return Task.FromResult(response);
         }
 
+        if (url.Contains("v1/shopper/deals/batch-lookup", StringComparison.OrdinalIgnoreCase))
+        {
+            var batchLookupJson = """
+            {
+              "deals": [
+                {
+                  "deal_id": "deal-chicken-breast-001",
+                  "store_id": "store-ralphs-101",
+                  "store_name": "Ralphs",
+                  "item_name": "Boneless Skinless Chicken Breast",
+                  "category": "Meat",
+                  "price": 2.99,
+                  "unit": "lb",
+                  "discount_percentage": 40.0,
+                  "primary_ingredient": "Chicken Breast",
+                  "deal_score": 9.2
+                },
+                {
+                  "deal_id": "deal-bell-peppers-002",
+                  "store_id": "store-sprouts-305",
+                  "store_name": "Sprouts Farmers Market",
+                  "item_name": "Organic Red Bell Peppers",
+                  "category": "Produce",
+                  "price": 1.99,
+                  "unit": "each",
+                  "discount_percentage": 30.0,
+                  "primary_ingredient": "Bell Peppers",
+                  "deal_score": 8.5
+                }
+              ],
+              "total_found": 2
+            }
+            """;
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(batchLookupJson, Encoding.UTF8, "application/json")
+            };
+            return Task.FromResult(response);
+        }
+
         if (url.Contains("v1/shopper/deals", StringComparison.OrdinalIgnoreCase))
         {
             string dealsJson;

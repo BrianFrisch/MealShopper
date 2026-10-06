@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 
 using MealShopper.Common.Security;
 using MealShopper.Orchestrator.Models;
@@ -28,6 +29,8 @@ public class MealPlansController : ControllerBase
         _userContext = userContext ?? throw new ArgumentNullException(nameof(userContext));
     }
 
+
+
     /// <summary>
     /// Accepts a meal plan generation request and initiates the asynchronous planning workflow.
     /// </summary>
@@ -51,8 +54,9 @@ public class MealPlansController : ControllerBase
         var job = new JobRecord
         {
             JobId = jobId,
+            JobType = JobType.StoreDiscoveryAndPlanGeneration,
             Status = JobStatus.Pending,
-            RequestPayload = request,
+            RequestPayloadJson = JsonSerializer.Serialize(request),
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -71,6 +75,127 @@ public class MealPlansController : ControllerBase
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Background orchestration processing failed for JobId: {JobId}", jobId);
+            }
+        });
+
+        var locationUri = $"/v1/tasks/{job.JobId}";
+        Response.Headers.Location = locationUri;
+
+        var response = new CreateMealPlanResponse
+        {
+            JobId = job.JobId,
+            Status = "Pending",
+            CreatedAt = job.CreatedAt
+        };
+
+        return Accepted(locationUri, response);
+    }
+
+    /// <summary>
+    /// Accepts a deal discovery request and initiates the asynchronous store and deal discovery workflow.
+    /// </summary>
+    /// <param name="request">User preferences, address, and search radius constraints.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>HTTP 202 Accepted with the job tracking details and Location header.</returns>
+    [HttpPost("discovery")]
+    [ProducesResponseType(typeof(CreateMealPlanResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [RequireGatewayUser]
+    public async Task<IActionResult> DiscoverDeals([FromBody] MealPlanDiscoveryRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var jobId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        var job = new JobRecord
+        {
+            JobId = jobId,
+            JobType = JobType.StoreDiscovery,
+            Status = JobStatus.Pending,
+            RequestPayloadJson = JsonSerializer.Serialize(request),
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        await _jobStateStore.CreateJobAsync(job, cancellationToken);
+
+        _logger.LogInformation("Accepted deal discovery request for {userId} ({roles}). JobId: {JobId}", _userContext.UserId, _userContext.Roles, job.JobId);
+
+        // Trigger workflow execution asynchronously in background
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _orchestrator.ProcessDiscoveryJobAsync(jobId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Background discovery orchestration processing failed for JobId: {JobId}", jobId);
+            }
+        });
+
+        var locationUri = $"/v1/tasks/{job.JobId}";
+        Response.Headers.Location = locationUri;
+
+        var response = new CreateMealPlanResponse
+        {
+            JobId = job.JobId,
+            Status = "Pending",
+            CreatedAt = job.CreatedAt
+        };
+
+        return Accepted(locationUri, response);
+    }
+
+
+        /// <summary>
+    /// Accepts a meal plan generation request and initiates the asynchronous meal plan generation workflow.
+    /// </summary>
+    /// <param name="request">User preferences and deal information.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>HTTP 202 Accepted with the job tracking details and Location header.</returns>
+    [HttpPost("generation")]
+    [ProducesResponseType(typeof(CreateMealPlanResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [RequireGatewayUser]
+    public async Task<IActionResult> GenerateMealPlanFromDeals([FromBody] MealPlanGenerationRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var jobId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        var job = new JobRecord
+        {
+            JobId = jobId,
+            JobType = JobType.PlanGeneration,
+            Status = JobStatus.Pending,
+            RequestPayloadJson = JsonSerializer.Serialize(request),
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        await _jobStateStore.CreateJobAsync(job, cancellationToken);
+
+        _logger.LogInformation("Accepted meal plan generation request for {userId} ({roles}). JobId: {JobId}", _userContext.UserId, _userContext.Roles, job.JobId);
+
+        // Trigger workflow execution asynchronously in background
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _orchestrator.ProcessGenerationJobAsync(jobId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Background meal plan generation orchestration processing failed for JobId: {JobId}", jobId);
             }
         });
 

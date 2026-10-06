@@ -48,4 +48,15 @@ public interface IMealPlanOrchestrator
     /// <param name="jobId">The unique job identifier.</param>
     /// <param name="ct">Cancellation token.</param>
     Task ProcessJobAsync(Guid jobId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Processes a deal discovery job through store discovery and deal evaluation without generating a meal plan.
+    /// </summary>
+    /// <param name="jobId">The unique job identifier.</param>
+    /// <param name="request">The discovery request containing location and preference details.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task ProcessDiscoveryJobAsync(Guid jobId, CancellationToken ct = default);
+
+    Task ProcessGenerationJobAsync(Guid jobId, CancellationToken ct = default);
+
 }

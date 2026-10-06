@@ -276,6 +276,106 @@ public class ShopperClient : IShopperClient
         }
     }
 
+    /// <inheritdoc />
+    public async Task<DealBatchLookupResponse> BatchLookupDealsAsync(
+        DealBatchLookupRequest req,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(req);
+
+        _logger.LogInformation(
+            "Sending batch deal lookup request for {ItemCount} deal/store pairs",
+            req.Items.Count);
+
+        try
+        {
+            using var response = await _httpClient.PostAsJsonAsync("v1/shopper/deals/batch-lookup", req, JsonOptions, ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(ct);
+                _logger.LogError(
+                    "Batch deal lookup failed with status {StatusCode}. Response: {ResponseBody}",
+                    response.StatusCode, errorBody);
+
+                throw new HttpRequestException(
+                    $"Batch deal lookup failed with status code {(int)response.StatusCode} ({response.StatusCode}): {errorBody}",
+                    null,
+                    response.StatusCode);
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<DealBatchLookupResponse>(JsonOptions, ct);
+            return result ?? new DealBatchLookupResponse();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HTTP request error occurred during batch deal lookup.");
+            throw;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<TopDealsResponse> BatchLookupDealsAsync(
+        IEnumerable<string> dealIds,
+        IEnumerable<string> storeIds,
+        CancellationToken ct = default)
+    {
+        var dealList = dealIds?
+            .Where(d => !string.IsNullOrWhiteSpace(d))
+            .Distinct()
+            .ToList() ?? [];
+
+        var storeList = storeIds?
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct()
+            .ToList() ?? [];
+
+        if (dealList.Count == 0 || storeList.Count == 0)
+        {
+            return new TopDealsResponse
+            {
+                Timestamp = DateTimeOffset.UtcNow,
+                RegionContext = new RegionContextDto { StoreIds = storeList },
+                Deals = []
+            };
+        }
+
+        var items = (from storeId in storeList
+                     from dealId in dealList
+                     select new DealLookupItemDto { DealId = dealId, StoreId = storeId }).ToList();
+
+        var batchReq = new DealBatchLookupRequest { Items = items };
+        var batchRes = await BatchLookupDealsAsync(batchReq, ct);
+
+        var dealItems = (batchRes?.Deals ?? []).Select(d => new DealItemDto
+        {
+            DealId = d.DealId,
+            StoreId = d.StoreId,
+            StoreName = d.StoreName,
+            ItemName = d.ItemName,
+            CleanName = d.ItemName,
+            NormalizedCategory = d.Category,
+            DealPrice = d.Price,
+            Unit = d.Unit,
+            ValueScore = d.DealScore ?? 0.0
+        }).ToList();
+
+        return new TopDealsResponse
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            RegionContext = new RegionContextDto
+            {
+                Coordinates = new CoordinatesDto
+                {
+                    Latitude = 33.8895,
+                    Longitude = -118.3533
+                },
+                StoreIds = storeList
+            },
+            Deals = dealItems
+        };
+    }
+
     #region Legacy Methods
 
     /// <inheritdoc />

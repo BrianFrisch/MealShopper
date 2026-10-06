@@ -325,4 +325,33 @@ public class ShopperClientTests
         result.Deals.Should().BeEmpty();
         result.RegionContext.StoreIds.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task BatchLookupDealsAsync_WithDealIdsAndStoreIds_ReturnsMappedTopDealsResponse()
+    {
+        // Act
+        var result = await _client.BatchLookupDealsAsync(["deal-chicken-breast-001"], ["store-ralphs-101"]);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Deals.Should().NotBeEmpty();
+        var deal = result.Deals.First();
+        deal.DealId.Should().Be("deal-chicken-breast-001");
+        deal.StoreName.Should().Be("Ralphs");
+        deal.ItemName.Should().Be("Boneless Skinless Chicken Breast");
+        deal.DealPrice.Should().Be(2.99m);
+        deal.Unit.Should().Be("lb");
+    }
+
+    [Fact]
+    public async Task BatchLookupDealsAsync_EmptyInputs_ReturnsEmptyWithoutHttpCall()
+    {
+        // Act
+        var result = await _client.BatchLookupDealsAsync([], []);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Deals.Should().BeEmpty();
+        _mockHandler.CapturedRequests.Should().BeEmpty();
+    }
 }

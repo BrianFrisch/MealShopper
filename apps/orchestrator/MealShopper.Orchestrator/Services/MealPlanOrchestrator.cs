@@ -222,7 +222,8 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                 return;
             }
 
-            var draft = await GenerateMealPlanStageAsync(job.JobId, job.RequestPayload, topDeals, ct);
+            var payload = job.GetPayload<CreateMealPlanRequest>()!;
+            var draft = await GenerateMealPlanStageAsync(job.JobId, payload.Cuisines, payload.AvoidIngredients, topDeals, ct);
 
             // 4. Phase 6 Loop-Back: Resolve missing primary ingredients
             var candidateStoreIds = candidateStores.Select(s => s.Id).ToList();
@@ -232,7 +233,141 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             var finalResultDto = AssembleFinalResult(draft, topDeals, matchedDeals);
 
             // 6. Transition Job to Completed
-            await _jobStateStore.CompleteJobAsync(jobId, finalResultDto, ct);
+            await _jobStateStore.CompleteJobAsync(
+                jobId,
+                finalResultDto,
+                stageDescription: "Meal plan generated successfully.",
+                cancellationToken: ct);
+
+            _logger.LogInformation(
+                "Completed meal plan generation for Job {JobId}. Total Cost: {TotalCost:C}, Recipes Count: {RecipeCount}, Required Stores: {StoreCount}.",
+                jobId,
+                finalResultDto.EstimatedTotalTripCost,
+                finalResultDto.Recipes.Count,
+                finalResultDto.RequiredStores.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Job {JobId} failed during orchestration execution.", jobId);
+            await _jobStateStore.UpdateJobStatusAsync(
+                jobId,
+                JobStatus.Failed,
+                errorMessage: ex.Message,
+                stageDescription: "Workflow failed.",
+                cancellationToken: ct);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task ProcessDiscoveryJobAsync(Guid jobId, CancellationToken ct = default)
+    {
+        if (_jobStateStore == null)
+        {
+            throw new InvalidOperationException("Job state store is not configured for this orchestrator instance.");
+        }
+
+        try
+        {
+            var job = await _jobStateStore.GetJobAsync(jobId, ct);
+            if (job == null)
+            {
+                _logger.LogWarning("Job {JobId} was not found in state store for processing.", jobId);
+                return;
+            }
+
+            _logger.LogInformation("Starting deal discovery workflow processing for Job {JobId}.", jobId);
+
+            // 1. Discover Stores
+            var stores = await DiscoverStoresStageAsync(job, ct);
+
+            if (stores.Count == 0)
+            {
+                _logger.LogInformation("No stores found within search radius for Job {JobId}. Completing discovery workflow gracefully.", jobId);
+                await _jobStateStore.CompleteJobAsync(
+                    jobId,
+                    new DiscoveryResultDto { Stores = [], Deals = [] },
+                    stageDescription: "No stores found within search radius.",
+                    cancellationToken: ct);
+                return;
+            }
+
+            // 2. Fetch Deals
+            var topDeals = await FetchDealsStageAsync(job.JobId, stores, ct);
+
+            // 3. Assemble Discovery Result
+            var discoveryResult = new DiscoveryResultDto
+            {
+                Stores = stores,
+                Deals = topDeals.Deals
+            };
+
+            // 4. Transition Job to Completed with Discovery Result
+            await _jobStateStore.CompleteJobAsync(
+                jobId,
+                discoveryResult,
+                stageDescription: "Deals discovered successfully.",
+                cancellationToken: ct);
+
+            _logger.LogInformation(
+                "Completed deal discovery for Job {JobId}. Deals Count: {DealCount}, Stores Count: {StoreCount}.",
+                jobId,
+                topDeals.Deals.Count,
+                stores.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Job {JobId} failed during deal discovery orchestration execution.", jobId);
+            await _jobStateStore.UpdateJobStatusAsync(
+                jobId,
+                JobStatus.Failed,
+                errorMessage: ex.Message,
+                stageDescription: "Deal discovery workflow failed.",
+                cancellationToken: ct);
+        }
+    }
+
+    public async Task ProcessGenerationJobAsync(Guid jobId, CancellationToken ct = default)
+    {
+        if (_jobStateStore == null)
+        {
+            throw new InvalidOperationException("Job state store is not configured for this orchestrator instance.");
+        }
+
+        try
+        {
+            var job = await _jobStateStore.GetJobAsync(jobId, ct);
+            if (job == null)
+            {
+                _logger.LogWarning("Job {JobId} was not found in state store for processing.", jobId);
+                return;
+            }
+
+            _logger.LogInformation("Starting workflow processing for Job {JobId}.", jobId);
+
+            // 3. Generate Meal Plan
+            if (_legacyPlanningClient == null)
+            {
+                return;
+            }
+
+            var payload = job.GetPayload<MealPlanGenerationRequest>()!;
+            var topDeals = await _shopperClient.BatchLookupDealsAsync(payload.SelectedDealIds, payload.SelectedStoreIds, ct);
+
+            var draft = await GenerateMealPlanStageAsync(job.JobId, payload.Cuisines, payload.AvoidIngredients, topDeals, ct);
+
+            // 4. Phase 6 Loop-Back: Resolve missing primary ingredients
+            var candidateStoreIds = payload.SelectedStoreIds;
+            var matchedDeals = await ResolveMissingIngredientsStageAsync(job.JobId, draft, candidateStoreIds, ct);
+
+            // 5. Assemble Final Result (MealPlanResultDto)
+            var finalResultDto = AssembleFinalResult(draft, topDeals, matchedDeals);
+
+            // 6. Transition Job to Completed
+            await _jobStateStore.CompleteJobAsync(
+                jobId,
+                finalResultDto,
+                stageDescription: "Meal plan generated successfully.",
+                cancellationToken: ct);
 
             _logger.LogInformation(
                 "Completed meal plan generation for Job {JobId}. Total Cost: {TotalCost:C}, Recipes Count: {RecipeCount}, Required Stores: {StoreCount}.",
@@ -260,12 +395,14 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             JobStatus.DiscoveringStores,
             stageDescription: "Locating grocery stores within radius...",
             cancellationToken: ct);
+        
+        var payload = job.GetPayload<MealPlanDiscoveryRequest>()!;
 
-        var address = job.RequestPayload.Address;
+        var address = payload.Address;
         var lat = address.Latitude ?? 33.894893;
         var lon = address.Longitude ?? -118.362658;
-        var radiusMiles = job.RequestPayload.SearchRadiusMiles;
-        var maxStores = job.RequestPayload.MaxStores;
+        var radiusMiles = payload.SearchRadiusMiles;
+        var maxStores = payload.MaxStores;
 
         var stores = await _shopperClient.DiscoverStoresAsync(lat, lon, radiusMiles, maxStores, ct);
         if (!string.IsNullOrWhiteSpace(address.ZipCode))
@@ -298,8 +435,22 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             stageDescription: "Fetching circulars and scoring top promotional deals...",
             cancellationToken: ct);
 
-        var dealFetchTasks = stores.Select(store =>
-            _shopperClient.GetDealsForStoreAsync(store.Id, store.PostalCode, store.Name, ct));
+        var dealFetchTasks = stores.Select(async store =>
+        {
+            var deals = await _shopperClient.GetDealsForStoreAsync(store.Id, store.PostalCode, store.Name, ct);
+            foreach (var deal in deals)
+            {
+                if (string.IsNullOrWhiteSpace(deal.StoreId))
+                {
+                    deal.StoreId = store.Id;
+                }
+                if (string.IsNullOrWhiteSpace(deal.StoreName))
+                {
+                    deal.StoreName = store.Name;
+                }
+            }
+            return deals;
+        });
         var storeDealsResults = await Task.WhenAll(dealFetchTasks);
 
         var allDeals = storeDealsResults.SelectMany(deals => deals).ToList();
@@ -335,7 +486,8 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
 
     private async Task<MealPlanDraftResponse> GenerateMealPlanStageAsync(
         Guid jobId,
-        CreateMealPlanRequest payload,
+        List<String> cuisines,
+        List<String> avoidIngredients,
         TopDealsResponse topDeals,
         CancellationToken ct)
     {
@@ -347,8 +499,8 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
 
         var generateRequest = new GenerateMealPlanRequest
         {
-            Cuisines = payload.Cuisines ?? [],
-            AvoidIngredients = payload.AvoidIngredients ?? [],
+            Cuisines = cuisines ?? [],
+            AvoidIngredients = avoidIngredients ?? [],
             TopDeals = topDeals.Deals ?? []
         };
 
