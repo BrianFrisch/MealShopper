@@ -1,7 +1,11 @@
 import os
-import asyncpg #type: ignore
 from typing import List, Any, Dict, Optional
 from models import Store
+
+try:
+    import asyncpg  # type: ignore
+except ImportError:
+    asyncpg = None
 
 
 EARTH_RADIUS_MILES = 3958.8

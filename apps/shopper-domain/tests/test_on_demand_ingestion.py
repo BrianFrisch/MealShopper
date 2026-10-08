@@ -20,9 +20,12 @@ from src.ingestion.models import NormalizedDealItem
 from src.storage.deal_storage import PartitionedDealStorage
 
 
+import pytest
+
 class MockRedis:
     def __init__(self):
         self._store: dict[str, str] = {}
+        self._zsets: dict[str, dict[str, float]] = {}
         self.lock_attempts = []
         self.deleted_keys = []
 
@@ -39,12 +42,31 @@ class MockRedis:
     async def mget(self, keys: list[str]) -> list[Optional[str]]:
         return [self._store.get(k) for k in keys]
 
+    async def zadd(self, key: str, mapping: dict[str, float]) -> int:
+        if key not in self._zsets:
+            self._zsets[key] = {}
+        self._zsets[key].update(mapping)
+        return len(mapping)
+
+    async def zrangebyscore(self, key: str, min: float = 0.0, max: float = float("inf")) -> list[str]:
+        if key not in self._zsets:
+            return []
+        items = [(member, score) for member, score in self._zsets[key].items() if min <= score <= max]
+        items.sort(key=lambda x: x[1])
+        return [member for member, score in items]
+
+    async def expire(self, key: str, ttl: int) -> bool:
+        return True
+
     async def delete(self, *keys: str) -> int:
         count = 0
         for k in keys:
             self.deleted_keys.append(k)
             if k in self._store:
                 del self._store[k]
+                count += 1
+            if k in self._zsets:
+                del self._zsets[k]
                 count += 1
         return count
 
@@ -85,6 +107,7 @@ class MockAdapter(BaseDealAdapter):
         return now, now + timedelta(days=7), self.deals
 
 
+@pytest.mark.anyio
 async def test_ingest_store_on_demand_lock_acquired():
     mock_redis = MockRedis()
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -138,6 +161,7 @@ async def test_ingest_store_on_demand_lock_acquired():
     print("test_ingest_store_on_demand_lock_acquired passed!")
 
 
+@pytest.mark.anyio
 async def test_ingest_store_on_demand_lock_held_by_another():
     mock_redis = MockRedis()
     with tempfile.TemporaryDirectory() as temp_dir:

@@ -18,7 +18,11 @@ async def ingest_store_on_demand(
     factory: DealAdapterFactory,
     tier: str = "primary",
 ) -> list[dict[str, Any]]:
-    lock_key = f"lock:ingest:{store_id}"
+ 
+    # lock_key = f"lock:ingest:{store_id}"
+    clean_chain = chain.strip().lower().replace(" ", "")
+    lock_key = f"lock:ingest:{clean_chain}:{postal_code}"
+ 
     redis_client = storage.redis
     lock_ttl_seconds = 20
 
@@ -27,8 +31,8 @@ async def ingest_store_on_demand(
 
     if not acquired:
         logger.info("Store %s is currently being ingested by another request. Awaiting result...", store_id)
-        # Poll up to 6 seconds (12 x 500ms) for the scraping worker to complete
-        for _ in range(12):
+        # Poll up to 25 seconds (50 x 500ms) for the scraping worker to complete
+        for _ in range(50):
             await asyncio.sleep(0.5)
             flyer_id = await storage.get_flyer_id_for_postal(postal_code, chain)
             target_ids: list[str] = []
@@ -37,12 +41,17 @@ async def ingest_store_on_demand(
             if store_id:
                 target_ids.append(store_id)
             for fid in target_ids:
-                deals = await storage.get_deals_by_flyer_id(fid, tier="all")
+                deals = await storage.get_deals_by_flyer_id(fid, tier)
                 if deals:
                     return deals
             # If lock cleared, worker finished or released
             lock_val = await redis_client.get(lock_key)
             if not lock_val:
+                # Lock released; give a quick second for keys to settle and check once more
+                await asyncio.sleep(0.5)
+                deals = await storage.get_deals_by_flyer_id(store_id, tier)
+                if deals:
+                    return deals
                 break
 
         # Final fallback check
@@ -53,7 +62,7 @@ async def ingest_store_on_demand(
         if store_id:
             target_ids.append(store_id)
         for fid in target_ids:
-            deals = await storage.get_deals_by_flyer_id(fid, tier="all")
+            deals = await storage.get_deals_by_flyer_id(fid, tier)
             if deals:
                 return deals
         return []

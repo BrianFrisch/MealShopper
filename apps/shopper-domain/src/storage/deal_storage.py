@@ -20,7 +20,40 @@ DEFAULT_DATA_DIR = os.getenv(
     str(Path(__file__).resolve().parent.parent.parent / "data" / "deals"),
 )
 
-PRIMARY_CATEGORIES = {"meat", "seafood"}
+PRIMARY_CATEGORIES = {
+    "meat",
+    "fresh meat",
+    "poultry",
+    "beef",
+    "pork",
+    "chicken",
+    "meat & poultry",
+    "meat and poultry",
+    "seafood",
+    "fresh seafood",
+    "fish",
+    "shellfish",
+}
+
+
+def normalize_category_key(category: str) -> str:
+    """Normalizes category string to lowercase standard slug."""
+    cat = category.strip().lower()
+    if cat in {"meat", "meat & poultry", "meat and poultry", "poultry", "beef", "pork", "chicken"}:
+        return "meat_and_poultry"
+    if cat in {"seafood", "fish", "shellfish"}:
+        return "seafood"
+    if cat in {"produce", "fruits", "fruit", "vegetables", "vegetable"}:
+        return "produce"
+    if cat in {"dairy", "dairy & eggs", "dairy and eggs", "milk", "cheese", "eggs"}:
+        return "dairy_and_eggs"
+    if cat in {"bakery", "bread"}:
+        return "bakery"
+    if cat in {"frozen", "frozen foods"}:
+        return "frozen"
+    if cat in {"beverages", "drinks", "beverage", "soda"}:
+        return "beverages"
+    return "pantry"
 
 
 def is_primary_deal(deal: dict[str, Any]) -> bool:
@@ -125,7 +158,72 @@ class PartitionedDealStorage:
             cache_key = f"deals:flyer:{target_id}:{bucket_name}"
             await self.redis.set(cache_key, serialized, ex=ttl_seconds)
 
+        # 3. Index deals by category in Redis sorted sets and deal hashes
+        # Hash mapping: deals:data:{deal_id} -> JSON string
+        # Sorted set / Set indexing by store & category: deals:store:{store_id}:cat:{category_slug} -> deal_id (score = deal_price)
+        # Store all deals index: deals:store:{store_id}:all -> deal_id (score = deal_price)
+        for deal in deals:
+            d_id = str(deal.get("deal_id") or "")
+            s_id = str(deal.get("store_id") or target_id)
+            if not d_id:
+                continue
+
+            deal_json = json.dumps(deal, default=str)
+            deal_data_key = f"deals:data:{d_id}"
+            await self.redis.set(deal_data_key, deal_json, ex=ttl_seconds)
+
+            norm_cat = str(deal.get("normalized_category") or deal.get("category") or "Pantry")
+            cat_slug = normalize_category_key(norm_cat)
+            price = float(deal.get("deal_price") or 0.0)
+
+            # Add to store-category sorted set
+            store_cat_key = f"deals:store:{s_id}:cat:{cat_slug}"
+            try:
+                await self.redis.zadd(store_cat_key, {d_id: price})
+                await self.redis.expire(store_cat_key, ttl_seconds)
+            except Exception:
+                pass
+
+            # Add to store all deals sorted set
+            store_all_key = f"deals:store:{s_id}:all"
+            try:
+                await self.redis.zadd(store_all_key, {d_id: price})
+                await self.redis.expire(store_all_key, ttl_seconds)
+            except Exception:
+                pass
+
         return written_paths
+
+    async def get_deals_by_category(
+        self,
+        store_id: str,
+        category: str,
+        min_price: float = 0.0,
+        max_price: float = float("inf"),
+    ) -> list[dict[str, Any]]:
+        """
+        Query deals for a store filtered by normalized category without cross-contamination.
+        """
+        cat_slug = normalize_category_key(category)
+        store_cat_key = f"deals:store:{store_id}:cat:{cat_slug}"
+        deal_ids = await self.redis.zrangebyscore(store_cat_key, min=min_price, max=max_price)
+
+        if not deal_ids:
+            return []
+
+        # Convert byte responses if any
+        decoded_ids = [did.decode("utf-8") if isinstance(did, bytes) else str(did) for did in deal_ids]
+        data_keys = [f"deals:data:{did}" for did in decoded_ids]
+        cached_deals = await self.redis.mget(data_keys)
+
+        results: list[dict[str, Any]] = []
+        for raw in cached_deals:
+            if raw:
+                try:
+                    results.append(json.loads(raw))
+                except Exception:
+                    pass
+        return results
 
     async def get_deals_by_flyer_id(
         self,
@@ -180,7 +278,7 @@ class PartitionedDealStorage:
         tier: str = "primary",  # "primary", "secondary", or "all"
     ) -> dict[str, list[dict[str, Any]]]:
         # First check flyer keys (where target_id was store_id or flyer_id)
-        results = await self.get_deals_for_flyers(store_ids, tier=tier)
+        results = await self.get_deals_for_flyers(store_ids, tier)
 
         # Check for any remaining missing stores in store context mappings or legacy store keys or disk
         missing_sids = [sid for sid in store_ids if not results.get(sid)]

@@ -14,7 +14,13 @@ try:
 except ImportError:
     from ..circuit_breaker import UpstreamCircuitBreaker, CircuitBreakerOpenException
 
-from src.services.grocery_chain_service import GroceryChainService
+try:
+    from src.services.grocery_chain_service import GroceryChainService
+except ImportError:
+    try:
+        from ...services.grocery_chain_service import GroceryChainService
+    except ImportError:
+        GroceryChainService = None
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +46,9 @@ class FlippAdapter(BaseDealAdapter):
         client: Optional[httpx.AsyncClient] = None,
         timeout: float = DEFAULT_TIMEOUT,
         merchant_name: str = "Ralphs",
+        gemini_client: Optional[Any] = None,
     ) -> None:
+        super().__init__(gemini_client=gemini_client)
         self._external_client = client is not None
         self._timeout = httpx.Timeout(timeout)
         self._client = client
@@ -138,16 +146,17 @@ class FlippAdapter(BaseDealAdapter):
         """
         Fetch promotional items array for a specific flyer ID.
         """
-        url = f"{FLIPP_BASE_URL}/flyers/{flyer_id}/items"
+        #url = f"{FLIPP_BASE_URL}/flyers/{flyer_id}/items"
+        url = f"{FLIPP_BASE_URL}/flyers/{flyer_id}"
 
         async def _do_request() -> list[dict[str, Any]]:
             client = await self._get_client()
             logger.info("Fetching promotions for flyer_id=%s", flyer_id)
             response = await client.get(url)
-            if response.status_code == 404:
-                # Fallback to flyer endpoint which contains items
-                fallback_url = f"{FLIPP_BASE_URL}/flyers/{flyer_id}"
-                response = await client.get(fallback_url)
+            # if response.status_code == 404:
+            #     # Fallback to flyer endpoint which contains items
+            #     fallback_url = f"{FLIPP_BASE_URL}/flyers/{flyer_id}"
+            #     response = await client.get(fallback_url)
             response.raise_for_status()
             data = response.json()
 
@@ -384,10 +393,14 @@ class FlippAdapter(BaseDealAdapter):
         """
 
         target_chain_id = chain_id if chain_id is not None else self.default_merchant 
-        chain_obj = await GroceryChainService().get_chain_metadata(target_chain_id)  # Ensure chain is loaded in DB for future lookups
-        target_merchant = str(chain_obj.get("display_name")).strip().lower()
+        target_merchant = str(target_chain_id).strip().lower()
+        if GroceryChainService is not None:
+            try:
+                chain_obj = await GroceryChainService().get_chain_metadata(target_chain_id)  # Ensure chain is loaded in DB for future lookups
+                target_merchant = str(chain_obj.get("display_name")).strip().lower()
+            except Exception:
+                pass
 
-        # target_merchant = chain_id if chain_id is not None else self.default_merchant
         now = datetime.now(timezone.utc)
         default_valid_from = now
         default_valid_to = now + timedelta(days=7)
@@ -446,3 +459,18 @@ class FlippAdapter(BaseDealAdapter):
         Extracts raw category string from Wishabi/Flipp item structure.
         """
         return self._extract_category(item)
+
+    def extract_brand(self, item: dict[str, Any]) -> Optional[str]:
+        """
+        Extracts raw brand string from Wishabi/Flipp item structure.
+        """
+        raw_brand = (
+            item.get("brand")
+            or item.get("brand_name")
+            or item.get("merchant_brand")
+        )
+        if raw_brand is not None:
+            brand_str = str(raw_brand).strip()
+            return brand_str if brand_str else None
+        return None
+

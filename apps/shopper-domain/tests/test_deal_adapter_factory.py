@@ -37,6 +37,9 @@ class DummyRedis:
         pass
 
 
+import pytest
+
+@pytest.mark.anyio
 async def test_factory_registry_and_lookup():
     chain_metadata = [
         {"chain_id": "ralphs", "display_name": "Ralphs", "adapter_name": "ralphs"},

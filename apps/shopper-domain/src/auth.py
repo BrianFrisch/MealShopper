@@ -3,7 +3,11 @@ import logging
 from typing import Any, Dict
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-import jwt
+
+try:
+    import jwt
+except ImportError:
+    jwt = None
 
 logger = logging.getLogger(__name__)
 security = HTTPBearer()

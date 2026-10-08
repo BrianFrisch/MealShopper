@@ -70,6 +70,7 @@ class NormalizedDealItem(BaseModel):
     store_name: str
     item_name: str
     clean_name: str
+    brand: Optional[str] = None
     normalized_category: str = "Pantry"
     deal_price: float
     original_price: Optional[float] = None

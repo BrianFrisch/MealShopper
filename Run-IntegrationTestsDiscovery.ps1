@@ -133,79 +133,86 @@ if (-not $JobCompleted) {
 }
 
 Write-Host "PASS: Job completed successfully. Final payload received." -ForegroundColor Green
-Write-Host "`nFinal Payload:`n$($FinalResult | ConvertTo-Json -Depth 5)" -ForegroundColor Yellow
+# Write-Host "`nFinal Payload:`n$($FinalResult | ConvertTo-Json -Depth 5)" -ForegroundColor Yellow
 
-# # Assertions on Final Payload
-# try {
-#     if ($FinalResult.recipes.Count -lt 1) { throw "No recipes generated." }
-#     if ($null -eq $FinalResult.estimatedTotalTripCost) { throw "Missing trip cost computation." }
+# ---------------------------------------------------------
+# TEST 4: Polling Job Status & Payload Assertion
+# ---------------------------------------------------------
+Write-Host "`n[4/4] Polling Redis Job Store for AI Completion..."
+$MaxAttempts = 100
+$Attempt = 0
+$JobCompleted = $false
+$FinalResult = $null
 
-#     Write-Host "PASS: Payload assertions passed!" -ForegroundColor Green
-#     Write-Host "`n--- RESULT SUMMARY ---"
-#     Write-Host "Recipes Generated: $($FinalResult.recipes.Count)"
-#     Write-Host "Total Trip Cost  : `$ $($FinalResult.estimatedTotalTripCost)"
-#     Write-Host "Stores Required  : $($FinalResult.requiredStores -join ', ')"
-#     Write-Host "----------------------"
+while ($Attempt -lt $MaxAttempts -and -not $JobCompleted) {
+    $Attempt++
+    Start-Sleep -Seconds 3
 
+    $pollResponse = Invoke-RestMethod -Uri $PollUrl -Method Get -Headers @{ "Authorization" = "Bearer $Token" }
     
-#     Write-Host "`n--------------------------------------------------------" -ForegroundColor DarkGray
-#     Write-Host "REQUIRED STORES" -ForegroundColor Yellow
-#     Write-Host "--------------------------------------------------------" -ForegroundColor DarkGray
-#     foreach ($store in $FinalResult.requiredStores) {
-#         Write-Host "  * $store" -ForegroundColor White
-#     }
+    Write-Host "  Attempt $Attempt - Status: $($pollResponse.status) | Stage: $($pollResponse.stageDescription)"
 
-#     Write-Host "`n--------------------------------------------------------" -ForegroundColor DarkGray
-#     Write-Host "RECIPES & MEAL DETAILS" -ForegroundColor Yellow
-#     Write-Host "--------------------------------------------------------" -ForegroundColor DarkGray
+    if ($pollResponse.status -eq "Completed") {
+        $JobCompleted = $true
+        $FinalResult = $pollResponse.result
+    } elseif ($pollResponse.status -eq "Failed") {
+        Write-Host "FAIL: Orchestrator reported job failure. Error: $($pollResponse.errorMessage)" -ForegroundColor Red
+        exit 1
+    }
+}
 
+if (-not $JobCompleted) {
+    Write-Host "FAIL: Job timed out after 300 seconds." -ForegroundColor Red
+    exit 1
+}
 
-#     $mealIndex = 1
-#     foreach ($recipe in $FinalResult.recipes) {
-#         Write-Host "`n[$mealIndex] $($recipe.recipeTitle)" -ForegroundColor Green
-#         Write-Host "    Description: $($recipe.description)" -ForegroundColor Gray
+Write-Host "`nPASS: Job completed successfully. Discovered stores and deals received.`n" -ForegroundColor Green
 
-#         # Promotional / Deal Ingredients
-#         Write-Host "    Ingredients with Deals:" -ForegroundColor Cyan
-#         if ($recipe.ingredientsWithDeals -and $recipe.ingredientsWithDeals.Count -gt 0) {
-#             foreach ($dealIng in $recipe.ingredientsWithDeals) {
-#                 $priceText = if ([string]::IsNullOrWhiteSpace($dealIng.dealPriceDescription)) { "" } else { " ($($dealIng.dealPriceDescription))" }
-#                 $storeText = if ([string]::IsNullOrWhiteSpace($dealIng.storeName)) { "" } else { " @ $($dealIng.storeName)" }
-#                 Write-Host "      + $($dealIng.amountDescription) $($dealIng.name)$priceText$storeText" -ForegroundColor White
-#             }
-#         } else {
-#             Write-Host "      (None)" -ForegroundColor DarkGray
-#         }
+# ---------------------------------------------------------
+# Formatted Stores and Deals Presentation
+# ---------------------------------------------------------
+if ($FinalResult.stores) {
+    # Index stores by ID for fast lookup
+    $storeLookup = @{}
+    foreach ($store in $FinalResult.stores) {
+        $storeLookup[$store.id] = $store
+    }
 
-#         # Pantry Staples
-#         Write-Host "    Pantry Ingredients:" -ForegroundColor DarkYellow
-#         if ($recipe.pantryIngredients -and $recipe.pantryIngredients.Count -gt 0) {
-#             foreach ($pantryIng in $recipe.pantryIngredients) {
-#                 Write-Host "      - $($pantryIng.amountDescription) $($pantryIng.name)" -ForegroundColor DarkGray
-#             }
-#         } else {
-#             Write-Host "      (None)" -ForegroundColor DarkGray
-#         }
+    # Group deals by store_id
+    $dealsByStore = @{}
+    if ($FinalResult.deals) {
+        foreach ($deal in $FinalResult.deals) {
+            if (-not $dealsByStore.ContainsKey($deal.store_id)) {
+                $dealsByStore[$deal.store_id] = [System.Collections.Generic.List[psobject]]::new()
+            }
+            $dealsByStore[$deal.store_id].Add($deal)
+        }
+    }
 
-#         # Preparation Instructions
-#         Write-Host "    Instructions:" -ForegroundColor Magenta
-#         if ($recipe.instructions -and $recipe.instructions.Count -gt 0) {
-#             $stepIndex = 1
-#             foreach ($step in $recipe.instructions) {
-#                 Write-Host "      $stepIndex.$step" -ForegroundColor Gray
-#                 $stepIndex++
-#             }
-#         } else {
-#             Write-Host "      (No instructions provided)" -ForegroundColor DarkGray
-#         }
+    # Iterate through all discovered stores
+    foreach ($store in $FinalResult.stores) {
+        $storeDeals = if ($dealsByStore.ContainsKey($store.store_id)) { $dealsByStore[$store.store_id] } else { @() }
+        $dealCount = $storeDeals.Count
+        
+        Write-Host "==========================================================================================" -ForegroundColor DarkGray
+        Write-Host " STORE: $($store.name) ($($store.store_id))" -ForegroundColor Cyan
+        Write-Host " Address:  $($store.address)" -ForegroundColor Gray
+        Write-Host " Distance: $($store.distance_miles) miles" -ForegroundColor Gray
+        Write-Host " Deals:    $dealCount found" -ForegroundColor $(if ($dealCount -gt 0) { "Yellow" } else { "DarkYellow" })
+        Write-Host "==========================================================================================" -ForegroundColor DarkGray
 
-#         $mealIndex++
-#     }
-
-# } catch {
-#     Write-Host "FAIL: Final result payload invalid. $($_.Exception.Message)" -ForegroundColor Red
-#     exit 1
-# }
-
-# Write-Host "`nALL TESTS PASSED SUCCESSFULLY!" -ForegroundColor Cyan
-# exit 0
+        if ($dealCount -gt 0) {
+            $storeDeals | Select-Object `
+                @{Name = "DealId"; Expression = { $_.deal_id }}, `
+                @{Name = "Price"; Expression = { "$($_.currency) $($_.deal_price.ToString('F2')) / $($_.unit)" }}, `
+                @{Name = "Category"; Expression = { $_.normalized_category }}, `
+                @{Name = "Item"; Expression = { $_.item_name }} | `
+                Format-Table -AutoSize | Out-String | Write-Host
+        } else {
+            Write-Host "  (No promotional circular deals found for this location)`n" -ForegroundColor DarkGray
+            Write-Host "Store deals: $($store | ConvertTo-Json -Depth 5)" -ForegroundColor DarkGray
+        }
+    }
+} else {
+    Write-Host "No stores returned in final payload." -ForegroundColor Yellow
+}

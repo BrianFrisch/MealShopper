@@ -2,7 +2,11 @@
 import logging
 import os
 from typing import Any, Dict, List, Optional, cast
-import asyncpg  # type: ignore
+
+try:
+    import asyncpg  # type: ignore
+except ImportError:
+    asyncpg = None
 
 logger = logging.getLogger(__name__)
 

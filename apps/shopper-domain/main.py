@@ -1,6 +1,13 @@
 import logging
+import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Dict
+
+# Ensure shopper-domain root directory is in sys.path
+_root = str(Path(__file__).resolve().parent)
+if _root not in sys.path:
+    sys.path.insert(0, _root)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -65,6 +72,8 @@ app.include_router(admin_router)
 # Compatibility exports
 __all__ = [
     "app",
+    "lifespan",
+    "health_check",
     "ingest_store_on_demand",
     "get_store_deals",
     "get_deal_storage",
@@ -74,3 +83,8 @@ __all__ = [
     "store_repo",
     "deal_repo",
 ]
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)

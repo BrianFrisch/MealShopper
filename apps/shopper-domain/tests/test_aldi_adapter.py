@@ -1,11 +1,19 @@
 import asyncio
 from datetime import datetime, timezone
+from pathlib import Path
+import sys
 import httpx
+import pytest
+
+_shopper_domain_dir = str(Path(__file__).resolve().parent.parent)
+if _shopper_domain_dir not in sys.path:
+    sys.path.insert(0, _shopper_domain_dir)
 
 from src.ingestion.adapters.aldi_adapter import AldiAdapter
 from src.ingestion.models import NormalizedDealItem
 
 
+@pytest.mark.anyio
 async def test_aldi_adapter():
     def mock_handler(request: httpx.Request) -> httpx.Response:
         url_str = str(request.url)

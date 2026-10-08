@@ -1,12 +1,21 @@
 import asyncio
 from datetime import datetime, timezone
+from pathlib import Path
+import sys
 import httpx
+import pytest
 import redis.asyncio as redis
+
+# Ensure apps/shopper-domain is in sys.path
+shopper_dir = str(Path(__file__).resolve().parent.parent)
+if shopper_dir not in sys.path:
+    sys.path.insert(0, shopper_dir)
 
 from src.ingestion.adapters.flipp_adapter import FlippAdapter
 from src.storage.deal_storage import PartitionedDealStorage
 
 
+@pytest.mark.anyio
 async def test_live_flipp_ingestion() -> None:
     postal_code = "90260"
     merchant_name = "Ralphs"

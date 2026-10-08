@@ -51,7 +51,9 @@ async def get_store_deals(
 ) -> Dict[str, Any]:
     # 1. Lookup store context (postal_code, chain_id)
     eff_postal = postal_code
-    eff_chain = chain
+    # eff_chain = chain
+    store_context = await store_repo.get_store_context(store_id)
+    eff_chain = (store_context.chain_id if store_context else None)
 
     # Fast-path: Check cached store context in Redis
     if not eff_postal or not eff_chain:

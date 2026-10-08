@@ -96,9 +96,12 @@ services:
       context: ./apps/shopper-domain
       dockerfile: Dockerfile
     container_name: mealshopper-shopper-domain
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
     environment:
       - REDIS_URL=redis://redis:6379
       - DEAL_DATA_DIR=/app/data/deals
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL_NAME=gemini-3.5-flash-lite
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_DB=mealshopper_shopper

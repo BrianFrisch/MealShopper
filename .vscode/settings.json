@@ -30,7 +30,10 @@
             "approve": true,
             "matchCommandLine": true
         },
-        "&": true
+        "&": true,
+        ".\\.venv\\Scripts\\pip.exe": true,
+        ".\\.venv\\Scripts\\python.exe": true,
+        ".\\.venv\\Scripts\\pytest.exe": true
     },
     "python.analysis.diagnosticSeverityOverrides": {
         "reportUnknownMemberType": "none",

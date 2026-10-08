@@ -3,8 +3,15 @@ import json
 import logging
 import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple, TypedDict
-import asyncpg # type: ignore
 import httpx
+
+try:
+    import asyncpg  # type: ignore
+except ImportError:
+    class _AsyncpgPlaceholder:  # type: ignore
+        async def connect(self, *args: Any, **kwargs: Any) -> Any:
+            raise NotImplementedError("asyncpg is not installed")
+    asyncpg = _AsyncpgPlaceholder()  # type: ignore
 
 try:
     from src.services.grocery_chain_service import GroceryChainService

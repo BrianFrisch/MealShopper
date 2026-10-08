@@ -48,6 +48,7 @@ public class ShopperClient : IShopperClient
         {
             var uri = $"v1/deals/stores/{Uri.EscapeDataString(storeId)}";
             var queryParams = new List<string>();
+            queryParams.Add("tier=primary"); // Always exclude inactive deals
 
             if (!string.IsNullOrWhiteSpace(postalCode))
             {

@@ -25,8 +25,14 @@ class AldiAdapter(FlippAdapter):
         self,
         client: Optional[httpx.AsyncClient] = None,
         timeout: float = DEFAULT_TIMEOUT,
+        gemini_client: Optional[Any] = None,
     ) -> None:
-        super().__init__(client=client, timeout=timeout, merchant_name=self.DEFAULT_MERCHANT)
+        super().__init__(
+            client=client,
+            timeout=timeout,
+            merchant_name=self.DEFAULT_MERCHANT,
+            gemini_client=gemini_client,
+        )
 
     def is_merchant_match(
         self, flyer: dict[str, Any], merchant_name: str = DEFAULT_MERCHANT

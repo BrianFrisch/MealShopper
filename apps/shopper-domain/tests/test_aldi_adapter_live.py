@@ -2,14 +2,23 @@ import asyncio
 from datetime import datetime, timezone
 import json
 import os
+from pathlib import Path
+import sys
 import httpx
+import pytest
 import redis.asyncio as redis
+
+# Ensure apps/shopper-domain is in sys.path
+shopper_dir = str(Path(__file__).resolve().parent.parent)
+if shopper_dir not in sys.path:
+    sys.path.insert(0, shopper_dir)
 
 from src.ingestion.adapters.aldi_adapter import AldiAdapter
 from src.ingestion.factory import DealAdapterFactory
 from src.storage.deal_storage import PartitionedDealStorage
 
 
+@pytest.mark.anyio
 async def test_live_aldi_ingestion() -> None:
     postal_code = "90260"
     store_chain = "aldi"
