@@ -1,0 +1,14 @@
+npm run dev
+
+ls .\apps\shopper-domain\data\deals\*.json -Recurse
+rm .\apps\shopper-domain\data\deals\2026-*
+
+docker exec -it mealshopper-redis redis-cli keys "deals:store:*"
+
+docker exec mealshopper-redis sh -c 'redis-cli --scan --pattern "deals:*" | xargs -r redis-cli del'
+
+docker exec -it mealshopper-postgres psql -U postgres -d mealshopper_shopper -c "SELECT * FROM grocery_chain;"
+
+
+docker logs mealshopper-shopper-domain --tail 150
+docker compose up -d --build shopper-domain
