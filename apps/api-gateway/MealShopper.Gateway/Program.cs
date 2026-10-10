@@ -5,6 +5,24 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// 1. Define policy name
+const string AllowLocalFrontendPolicy = "AllowLocalFrontend";
+
+// 2. Register CORS service
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(AllowLocalFrontendPolicy, policy =>
+    {
+        policy.WithOrigins(
+                "http://localhost:5173",  // Vite standard local dev server
+                "http://127.0.0.1:5173"
+            )
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials(); // Required if sending cookies/authorization credentials
+    });
+});
+
 // Add services to the container.
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -87,6 +105,9 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseRouting();
+
+// UseCors MUST come immediately after UseRouting and before Authentication/Authorization
+app.UseCors(AllowLocalFrontendPolicy);
 
 app.UseAuthentication();
 app.UseSecurityHeadersContext();

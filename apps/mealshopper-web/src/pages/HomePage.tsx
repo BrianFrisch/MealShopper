@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import { Header } from '../components/Header';
+import { LoginModal } from '../components/LoginModal';
 import type { MealPlanDiscoveryRequest, Store, Deal } from '../types/discovery';
 import { mealPlanApi } from '../services/mealPlanApi';
+import { authApi } from '../services/authApi';
 import { MapPin, Utensils, Store as StoreIcon, Loader2, Tag } from 'lucide-react';
 
 const COMMON_CUISINES = [
   'American', 'Mexican', 'Italian', 'Chinese', 'Thai', 
   'Indian', 'Mediterranean', 'Japanese', 'Korean', 'Greek'
 ];
-
-
 
 export const HomePage: React.FC = () => {
   const [address, setAddress] = useState({
@@ -28,6 +28,9 @@ export const HomePage: React.FC = () => {
   const [stageDescription, setStageDescription] = useState<string | null>(null);
   const [discoveredStores, setDiscoveredStores] = useState<Store[]>([]);
   const [discoveredDeals, setDiscoveredDeals] = useState<Deal[]>([]);
+  
+  // Auth state
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
 
   const toggleCuisine = (cuisine: string) => {
     setSelectedCuisines(prev => 
@@ -50,6 +53,12 @@ export const HomePage: React.FC = () => {
   };
 
   const handleStartDiscovery = async () => {
+    const token = authApi.getToken();
+    if (!token) {
+      setIsLoginOpen(true);
+      return;
+    }
+
     setLoading(true);
     setStageDescription('Submitting discovery request...');
     setDiscoveredStores([]);
@@ -64,12 +73,9 @@ export const HomePage: React.FC = () => {
         avoidIngredients
       };
 
-      // Uses existing bearer token acquisition flow
-      const token = localStorage.getItem('access_token') || '';
       const { jobId } = await mealPlanApi.startDiscovery(payload, token);
 
-      // Poll until completed
-      const pollInterval = setInterval(async () => {
+      const pollInterval = window.setInterval(async () => {
         try {
           const statusRes = await mealPlanApi.pollTaskStatus(jobId, token);
           setStageDescription(statusRes.stageDescription || 'Processing flyer deals...');
@@ -86,26 +92,41 @@ export const HomePage: React.FC = () => {
             setLoading(false);
             setStageDescription(null);
           }
-        } catch (err) {
+        } catch (err: any) {
           clearInterval(pollInterval);
           setLoading(false);
-          console.error(err);
+          if (err?.response?.status === 401) {
+            authApi.logout();
+            setIsLoginOpen(true);
+          }
         }
       }, 2500);
-    } catch (err) {
+    } catch (err: any) {
       setLoading(false);
       setStageDescription(null);
-      alert('Failed to initiate discovery. Check Gateway status.');
-      console.error(err);
+      if (err?.response?.status === 401) {
+        authApi.logout();
+        setIsLoginOpen(true);
+      } else {
+        alert('Failed to initiate discovery. Check Gateway status.');
+      }
     }
   };
 
   return (
     <div className="min-h-screen bg-[#FDFDF9] text-stone-900">
-      <Header />
+      <Header onUserClick={() => setIsLoginOpen(true)} />
+
+      <LoginModal 
+        isOpen={isLoginOpen} 
+        onClose={() => setIsLoginOpen(false)} 
+        onSuccess={() => {
+          setIsLoginOpen(false);
+          handleStartDiscovery();
+        }} 
+      />
 
       <main className="max-w-6xl mx-auto px-4 py-8">
-        {/* Intro */}
         <div className="text-center max-w-2xl mx-auto mb-10">
           <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl text-stone-900">
             Find Local Deals, <span className="text-[#1E7538]">Plan Healthy Meals</span>
@@ -115,10 +136,8 @@ export const HomePage: React.FC = () => {
           </p>
         </div>
 
-        {/* Two-Column Intake Form */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-          
-          {/* Left Column: Shopper & Location Preferences */}
+          {/* Left Column: Location */}
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-200">
             <div className="flex items-center gap-2 mb-4 pb-2 border-b border-stone-100">
               <MapPin className="w-5 h-5 text-[#1E7538]" />
@@ -132,7 +151,7 @@ export const HomePage: React.FC = () => {
                   type="text" 
                   value={address.street}
                   onChange={e => setAddress({ ...address, street: e.target.value })}
-                  className="w-full px-3 py-2 border border-stone-200 rounded-lg focus:ring-2 focus:ring-[#1E7538] focus:border-transparent outline-none transition"
+                  className="w-full px-3 py-2 border border-stone-200 rounded-lg focus:ring-2 focus:ring-[#1E7538] outline-none"
                 />
               </div>
 
@@ -195,7 +214,7 @@ export const HomePage: React.FC = () => {
             </div>
           </div>
 
-          {/* Right Column: Meal Preferences */}
+          {/* Right Column: Preferences */}
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-200">
             <div className="flex items-center gap-2 mb-4 pb-2 border-b border-stone-100">
               <Utensils className="w-5 h-5 text-[#E66E1D]" />
@@ -277,7 +296,7 @@ export const HomePage: React.FC = () => {
           )}
         </div>
 
-        {/* Results Presentation View */}
+        {/* Results */}
         {discoveredStores.length > 0 && (
           <div className="mt-12 space-y-8">
             <h2 className="text-2xl font-bold text-stone-900 border-b border-stone-200 pb-2">
@@ -285,56 +304,74 @@ export const HomePage: React.FC = () => {
             </h2>
 
             {discoveredStores.map(store => {
-              const storeDeals = discoveredDeals.filter(d => d.storeId === store.id);
-              return (
-                <div key={store.id} className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
-                  {/* Store Header */}
-                  <div className="bg-stone-50 p-5 border-b border-stone-200 flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2.5 bg-[#1E7538]/10 text-[#1E7538] rounded-xl">
-                        <StoreIcon className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-stone-900 text-lg">{store.name}</h3>
-                        <p className="text-xs text-stone-500">{store.address} &bull; {store.distanceMiles} miles away</p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-semibold px-3 py-1 bg-amber-100 text-[#E66E1D] rounded-full">
-                      {storeDeals.length} Deals Found
-                    </span>
-                  </div>
+            const currentStoreId = store.id || store.store_id || '';
+            
+            // Resilient check across snake_case and camelCase
+            const storeDeals = discoveredDeals.filter(d => 
+              (d.store_id || d.storeId) === currentStoreId
+            );
 
-                  {/* Deals Grid */}
-                  <div className="p-5">
-                    {storeDeals.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {storeDeals.map(deal => (
+            return (
+              <div key={currentStoreId} className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
+                {/* Store Header */}
+                <div className="bg-stone-50 p-5 border-b border-stone-200 flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-[#1E7538]/10 text-[#1E7538] rounded-xl">
+                      <StoreIcon className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-stone-900 text-lg">{store.name}</h3>
+                      <p className="text-xs text-stone-500">
+                        {store.address} &bull; {(store.distance_miles ?? store.distanceMiles ?? 0)} miles away
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold px-3 py-1 bg-amber-100 text-[#E66E1D] rounded-full">
+                    {storeDeals.length} Deals Found
+                  </span>
+                </div>
+
+                {/* Deals Grid */}
+                <div className="p-5">
+                  {storeDeals.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {storeDeals.map(deal => {
+                        const dId = deal.deal_id || deal.dealId || '';
+                        const category = deal.normalized_category || deal.normalizedCategory || 'Grocery';
+                        const price = Number(deal.deal_price ?? deal.dealPrice ?? 0);
+                        const title = deal.item_name || deal.itemName || deal.clean_name || '';
+                        const unit = deal.unit || 'each';
+
+                        return (
                           <div 
-                            key={deal.dealId} 
+                            key={dId} 
                             className="p-4 rounded-xl border border-stone-100 bg-stone-50/50 hover:bg-stone-50 hover:border-stone-200 transition flex flex-col justify-between"
                           >
                             <div>
                               <div className="flex items-center justify-between gap-2 mb-1.5">
                                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#1E7538] bg-green-50 px-2 py-0.5 rounded">
                                   <Tag className="w-3 h-3" />
-                                  {deal.normalizedCategory}
+                                  {category}
                                 </span>
                                 <span className="font-black text-stone-900 text-sm">
-                                  ${deal.dealPrice.toFixed(2)} <span className="text-xs font-normal text-stone-500">/ {deal.unit}</span>
+                                  ${price.toFixed(2)} <span className="text-xs font-normal text-stone-500">/ {unit}</span>
                                 </span>
                               </div>
-                              <p className="font-semibold text-stone-800 text-sm line-clamp-2">{deal.itemName}</p>
+                              <p className="font-semibold text-stone-800 text-sm line-clamp-2">{title}</p>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-stone-400 italic py-2">No promotional circular items retrieved for this location.</p>
-                    )}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-stone-400 italic py-2">
+                      No promotional circular items retrieved for this location.
+                    </p>
+                  )}
                 </div>
-              );
-            })}
+              </div>
+            );
+          })}
           </div>
         )}
       </main>
