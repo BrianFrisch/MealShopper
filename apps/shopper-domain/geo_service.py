@@ -2,10 +2,7 @@ import os
 from typing import List, Any, Dict, Optional
 from models import Store
 
-try:
-    import asyncpg  # type: ignore
-except ImportError:
-    asyncpg = None
+import asyncpg  # type: ignore
 
 
 EARTH_RADIUS_MILES = 3958.8
@@ -40,17 +37,15 @@ class StoreRepository:
         self,
         latitude: float,
         longitude: float,
-        radius_miles: float = 10.0,
-        max_stores: int = 15,
+        radius_miles: float = 10.0
     ) -> List[Store]:
         conn = await asyncpg.connect(self.db_url)
         try:
             records = await conn.fetch(
-                "SELECT * FROM fn_find_nearby_stores($1, $2, $3, $4);",
+                "SELECT * FROM fn_find_nearby_stores_v2($1, $2, $3);",
                 longitude,
                 latitude,
-                float(radius_miles),
-                int(max_stores),
+                float(radius_miles)
             )
             return [self._row_to_store(record) for record in records]
         finally:

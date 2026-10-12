@@ -12,7 +12,4 @@ public class StoreDiscoveryRequest
 
     [JsonPropertyName("radius_miles")]
     public double RadiusMiles { get; set; }
-
-    [JsonPropertyName("max_stores")]
-    public int MaxStores { get; set; }
 }

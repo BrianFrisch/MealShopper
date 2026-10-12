@@ -20,11 +20,6 @@ public class MealPlanDiscoveryRequest : IValidatableObject
     /// </summary>
     public int SearchRadiusMiles { get; set; } = 5;
 
-    /// <summary>
-    /// Maximum number of stores to visit for discovering deals. Allowed range: 1 to 4 (default 2).
-    /// </summary>
-    [Range(1, 4, ErrorMessage = "MaxStores must be between 1 and 4.")]
-    public int MaxStores { get; set; } = 2;
 
     public virtual IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {

@@ -19,19 +19,22 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
     private readonly ILogger<MealPlanOrchestrator> _logger;
     private readonly IJobStateStore? _jobStateStore;
     private readonly IPlanningClient? _legacyPlanningClient;
+    private readonly IGeocodingService _geocodingService;
 
     public MealPlanOrchestrator(
         IShopperClient shopperClient,
         IPlannerClient plannerClient,
         IPlanningClient planningClient,
         IJobStateStore jobStateStore,
-        ILogger<MealPlanOrchestrator> logger)
+        ILogger<MealPlanOrchestrator> logger,
+        IGeocodingService geocodingService)
     {
         _shopperClient = shopperClient ?? throw new ArgumentNullException(nameof(shopperClient));
         _plannerClient = plannerClient ?? throw new ArgumentNullException(nameof(plannerClient));
         _legacyPlanningClient = planningClient ?? throw new ArgumentNullException(nameof(planningClient));
         _jobStateStore = jobStateStore ?? throw new ArgumentNullException(nameof(jobStateStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _geocodingService = geocodingService ?? throw new ArgumentNullException(nameof(geocodingService));
     }
 
 
@@ -74,8 +77,7 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
         {
             Latitude = request.Latitude,
             Longitude = request.Longitude,
-            RadiusMiles = request.RadiusMiles,
-            MaxStores = request.MaxStores
+            RadiusMiles = request.RadiusMiles
         };
 
         var discoveryRes = await _shopperClient.DiscoverStoresAsync(discoveryReq, ct);
@@ -397,21 +399,43 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             cancellationToken: ct);
         
         var payload = job.GetPayload<MealPlanDiscoveryRequest>()!;
-
         var address = payload.Address;
         var lat = address.Latitude ?? 33.894893;
         var lon = address.Longitude ?? -118.362658;
-        var radiusMiles = payload.SearchRadiusMiles;
-        var maxStores = payload.MaxStores;
 
-        var stores = await _shopperClient.DiscoverStoresAsync(lat, lon, radiusMiles, maxStores, ct);
+        if(address.Latitude.HasValue && address.Longitude.HasValue)
+        {
+            _logger.LogInformation(
+                "Using provided coordinates ({Latitude}, {Longitude}) for store discovery.",
+                address.Latitude.Value, address.Longitude.Value);
+            lat = address.Latitude.Value;
+            lon = address.Longitude.Value;
+        }
+        else
+        {
+            _logger.LogInformation(
+                "No coordinates provided. Resolving coordinates for address: {Street}, {City}, {State} {ZipCode}.",
+                address.Street, address.City, address.State, address.ZipCode);
+
+            (lat, lon) = await _geocodingService.ResolveCoordinatesAsync(address, ct);
+
+            _logger.LogInformation(
+                "Resolved coordinates: ({Latitude}, {Longitude}) for store discovery.",
+                lat, lon);
+        }
+
+
+        var radiusMiles = payload.SearchRadiusMiles;
+
+        var stores = await _shopperClient.DiscoverStoresAsync(lat, lon, radiusMiles, ct);
         if (!string.IsNullOrWhiteSpace(address.ZipCode))
         {
             foreach (var store in stores)
             {
                 if (string.IsNullOrWhiteSpace(store.PostalCode))
                 {
-                    store.PostalCode = address.ZipCode;
+                    _logger.LogWarning("Store {StoreId} ({StoreName}) is missing postal code. Assigning from request address: {PostalCode}.", store.Id, store.Name, address.ZipCode);
+                    // store.PostalCode = address.ZipCode;
                 }
             }
         }
@@ -437,33 +461,37 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
 
         var dealFetchTasks = stores.Select(async store =>
         {
-            var deals = await _shopperClient.GetDealsForStoreAsync(store.Id, store.PostalCode, store.Name, ct);
-            foreach (var deal in deals)
-            {
-                if (string.IsNullOrWhiteSpace(deal.StoreId))
+            var rawDeals = await _shopperClient.GetDealsForStoreAsync(store.Id, store.PostalCode, store.Name, ct);
+            
+            // Deduplicate deals per-store so each physical store retains its own inventory
+            return rawDeals
+                .GroupBy(d => !string.IsNullOrWhiteSpace(d.CleanName)
+                    ? d.CleanName.Trim().ToLowerInvariant()
+                    : d.ItemName.Trim().ToLowerInvariant())
+                .Where(g => !string.IsNullOrWhiteSpace(g.Key))
+                .Select(g => 
                 {
-                    deal.StoreId = store.Id;
-                }
-                if (string.IsNullOrWhiteSpace(deal.StoreName))
-                {
-                    deal.StoreName = store.Name;
-                }
-            }
-            return deals;
+                    var best = g.OrderBy(d => d.DealPrice).ThenByDescending(d => d.ValueScore).First();
+                    return new DealItemDto
+                    {
+                        DealId = $"{store.Id}_{best.DealId}", // unique per store instance
+                        StoreId = store.Id,                  // bind strictly to this store
+                        StoreName = store.Name,
+                        ItemName = best.ItemName,
+                        CleanName = best.CleanName,
+                        NormalizedCategory = best.NormalizedCategory,
+                        DealPrice = best.DealPrice,
+                        OriginalPrice = best.OriginalPrice,
+                        Currency = best.Currency,
+                        Unit = best.Unit,
+                        ValueScore = best.ValueScore
+                    };
+                })
+                .ToList();
         });
+
         var storeDealsResults = await Task.WhenAll(dealFetchTasks);
-
         var allDeals = storeDealsResults.SelectMany(deals => deals).ToList();
-
-        // Deduplicate items by ItemName or CleanName keeping the best price/value score
-        var dedupedDeals = allDeals
-            .GroupBy(d => !string.IsNullOrWhiteSpace(d.CleanName)
-                ? d.CleanName.Trim().ToLowerInvariant()
-                : d.ItemName.Trim().ToLowerInvariant())
-            .Where(g => !string.IsNullOrWhiteSpace(g.Key))
-            .Select(g => g.OrderBy(d => d.DealPrice).ThenByDescending(d => d.ValueScore).First())
-            .OrderByDescending(d => d.ValueScore)
-            .ToList();
 
         var topDeals = new TopDealsResponse
         {
@@ -477,7 +505,7 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                 },
                 StoreIds = stores.Select(s => s.Id).ToList()
             },
-            Deals = dedupedDeals
+            Deals = allDeals
         };
 
         _logger.LogInformation("Retrieved {DealCount} deals for job {JobId}.", topDeals.Deals.Count, jobId);

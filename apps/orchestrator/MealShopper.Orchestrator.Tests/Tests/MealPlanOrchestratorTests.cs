@@ -84,13 +84,13 @@ public class MealPlanOrchestratorTests
             mockPlanner.Object,
             Mock.Of<IPlanningClient>(),
             Mock.Of<IJobStateStore>(),
-            NullLogger<MealPlanOrchestrator>.Instance);
+            NullLogger<MealPlanOrchestrator>.Instance,
+            Mock.Of<IGeocodingService>());
 
         var request = new PlanGenerationWorkflowRequest(
             Latitude: 34.0522,
             Longitude: -118.2437,
             RadiusMiles: 5.0,
-            MaxStores: 2,
             HouseholdSize: 4,
             TargetMealCount: 3,
             PreferredCuisines: new List<string> { "Mexican", "Asian" },
@@ -114,7 +114,7 @@ public class MealPlanOrchestratorTests
         result.EstimatedTotalSpend.Should().Be(14.50m);
         result.GeneratedAt.Should().BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromSeconds(5));
 
-        mockShopper.Verify(s => s.DiscoverStoresAsync(It.Is<StoreDiscoveryRequest>(r => r.Latitude == 34.0522 && r.MaxStores == 2), It.IsAny<CancellationToken>()), Times.Once);
+        mockShopper.Verify(s => s.DiscoverStoresAsync(It.Is<StoreDiscoveryRequest>(r => r.Latitude == 34.0522), It.IsAny<CancellationToken>()), Times.Once);
         mockShopper.Verify(s => s.ScoreDealsAsync(It.Is<DealScoringRequest>(r => r.AvoidIngredients.Contains("Peanuts")), It.IsAny<CancellationToken>()), Times.Once);
         mockPlanner.Verify(p => p.GeneratePlanAsync(It.Is<MealPlanRequestDto>(r => r.PreferredCuisines.Contains("Mexican") && r.DietaryRestrictions.Contains("Nut-Free")), It.IsAny<CancellationToken>()), Times.Once);
         mockShopper.Verify(s => s.MatchIngredientsAsync(It.Is<IngredientMatchRequestDto>(r => r.MissingIngredients.Contains("Rice")), It.IsAny<CancellationToken>()), Times.Once);
@@ -136,13 +136,13 @@ public class MealPlanOrchestratorTests
             mockPlanner.Object,
             Mock.Of<IPlanningClient>(),
             Mock.Of<IJobStateStore>(),
-            NullLogger<MealPlanOrchestrator>.Instance);
+            NullLogger<MealPlanOrchestrator>.Instance,
+            Mock.Of<IGeocodingService>());
 
         var request = new PlanGenerationWorkflowRequest(
             Latitude: 34.0522,
             Longitude: -118.2437,
             RadiusMiles: 2.0,
-            MaxStores: 2,
             HouseholdSize: 2,
             TargetMealCount: 3,
             PreferredCuisines: new List<string>(),
@@ -195,13 +195,13 @@ public class MealPlanOrchestratorTests
             mockPlanner.Object,
             Mock.Of<IPlanningClient>(),
             Mock.Of<IJobStateStore>(),
-            NullLogger<MealPlanOrchestrator>.Instance);
+            NullLogger<MealPlanOrchestrator>.Instance,
+            Mock.Of<IGeocodingService>());
 
         var request = new PlanGenerationWorkflowRequest(
             Latitude: 34.0,
             Longitude: -118.0,
             RadiusMiles: 5.0,
-            MaxStores: 1,
             HouseholdSize: 2,
             TargetMealCount: 2,
             PreferredCuisines: new List<string>(),
@@ -253,7 +253,8 @@ public class MealPlanOrchestratorTests
             Mock.Of<IPlannerClient>(),
             planningClient,
             jobStore,
-            NullLogger<MealPlanOrchestrator>.Instance);
+            NullLogger<MealPlanOrchestrator>.Instance,
+            Mock.Of<IGeocodingService>());
 
         var jobId = Guid.NewGuid();
         var initialJob = new JobRecord
@@ -270,8 +271,7 @@ public class MealPlanOrchestratorTests
                     Latitude = 33.8958,
                     Longitude = -118.3531
                 },
-                SearchRadiusMiles = 5,
-                MaxStores = 2
+                SearchRadiusMiles = 5
             }
         };
 
@@ -381,7 +381,8 @@ public class MealPlanOrchestratorTests
             Mock.Of<IPlannerClient>(),
             planningClient,
             jobStore,
-            NullLogger<MealPlanOrchestrator>.Instance);
+            NullLogger<MealPlanOrchestrator>.Instance,
+            Mock.Of<IGeocodingService>()    );
 
         var jobId = Guid.NewGuid();
         var initialJob = new JobRecord
@@ -447,7 +448,8 @@ public class MealPlanOrchestratorTests
             Mock.Of<IPlannerClient>(),
             planningClient,
             jobStore,
-            NullLogger<MealPlanOrchestrator>.Instance);
+            NullLogger<MealPlanOrchestrator>.Instance,
+            Mock.Of<IGeocodingService>());
 
         var jobId = Guid.NewGuid();
         var initialJob = new JobRecord
@@ -501,7 +503,8 @@ public class MealPlanOrchestratorTests
             Mock.Of<IPlannerClient>(),
             planningClient,
             jobStore,
-            NullLogger<MealPlanOrchestrator>.Instance);
+            NullLogger<MealPlanOrchestrator>.Instance,
+            Mock.Of<IGeocodingService>());
 
         var jobId = Guid.NewGuid();
         var initialJob = new JobRecord
@@ -573,7 +576,8 @@ public class MealPlanOrchestratorTests
             Mock.Of<IPlannerClient>(),
             planningClient,
             jobStore,
-            NullLogger<MealPlanOrchestrator>.Instance);
+            NullLogger<MealPlanOrchestrator>.Instance,
+            Mock.Of<IGeocodingService>());
 
         var jobId = Guid.NewGuid();
         var pendingJob = new JobRecord
@@ -590,8 +594,7 @@ public class MealPlanOrchestratorTests
                     Latitude = 34.053625,
                     Longitude = -118.243007
                 },
-                SearchRadiusMiles = 5,
-                MaxStores = 2
+                SearchRadiusMiles = 5
             }
         };
 
@@ -673,7 +676,8 @@ public class MealPlanOrchestratorTests
             Mock.Of<IPlannerClient>(),
             mockPlanningClient.Object,
             jobStore,
-            NullLogger<MealPlanOrchestrator>.Instance);
+            NullLogger<MealPlanOrchestrator>.Instance,
+            Mock.Of<IGeocodingService>());
 
         var jobId = Guid.NewGuid();
         var initialJob = new JobRecord
@@ -689,8 +693,7 @@ public class MealPlanOrchestratorTests
                     Latitude = 33.8958,
                     Longitude = -118.3531
                 },
-                SearchRadiusMiles = 5,
-                MaxStores = 2
+                SearchRadiusMiles = 5
             }
         };
 
@@ -752,7 +755,8 @@ public class MealPlanOrchestratorTests
             Mock.Of<IPlannerClient>(),
             Mock.Of<IPlanningClient>(),
             jobStore,
-            NullLogger<MealPlanOrchestrator>.Instance);
+            NullLogger<MealPlanOrchestrator>.Instance,
+            Mock.Of<IGeocodingService>());
 
         var jobId = Guid.NewGuid();
         var initialJob = new JobRecord
@@ -816,7 +820,8 @@ public class MealPlanOrchestratorTests
             Mock.Of<IPlannerClient>(),
             Mock.Of<IPlanningClient>(),
             jobStore,
-            NullLogger<MealPlanOrchestrator>.Instance);
+            NullLogger<MealPlanOrchestrator>.Instance,
+            Mock.Of<IGeocodingService>());
 
         var jobId = Guid.NewGuid();
         var initialJob = new JobRecord
@@ -832,8 +837,7 @@ public class MealPlanOrchestratorTests
                     Latitude = 33.8958,
                     Longitude = -118.3531
                 },
-                SearchRadiusMiles = 1,
-                MaxStores = 2
+                SearchRadiusMiles = 1
             }
         };
 
@@ -899,7 +903,8 @@ public class MealPlanOrchestratorTests
             Mock.Of<IPlannerClient>(),
             planningClient,
             jobStore,
-            NullLogger<MealPlanOrchestrator>.Instance);
+            NullLogger<MealPlanOrchestrator>.Instance,
+            Mock.Of<IGeocodingService>());
 
         var jobId = Guid.NewGuid();
         var genRequest = new MealPlanGenerationRequest

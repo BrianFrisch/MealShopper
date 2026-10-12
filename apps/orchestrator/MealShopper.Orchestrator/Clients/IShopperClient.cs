@@ -58,7 +58,7 @@ public interface IShopperClient
     /// <summary>
     /// Discovers grocery stores within the specified radius and coordinates (legacy overload).
     /// </summary>
-    Task<List<StoreDto>> DiscoverStoresAsync(double lat, double lon, int radiusMiles, int maxStores, CancellationToken ct = default);
+    Task<List<StoreDto>> DiscoverStoresAsync(double lat, double lon, int radiusMiles, CancellationToken ct = default);
 
     /// <summary>
     /// Fetches top evaluated deals for the specified stores and ingredient exclusions (legacy overload).

@@ -9,7 +9,6 @@ public record PlanGenerationWorkflowRequest(
     double Latitude,
     double Longitude,
     double RadiusMiles,
-    int MaxStores,
     int HouseholdSize,
     int TargetMealCount,
     List<string> PreferredCuisines,

@@ -7,7 +7,6 @@ public class UserPreferencesDto
     public decimal Latitude { get; set;}
     public decimal Longitude { get; set;}
     public int SearchRadiusMiles { get; set; }
-    public int MaxStores { get; set; }
     public int HouseholdSize { get; set; }
     public int TargetMealCount { get; set; }
     public List<string> PreferredCuisines { get; set;} = [];

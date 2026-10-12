@@ -67,7 +67,6 @@ try {
     # $payload = @{
     #     Address = @{ Latitude = 33.894893; Longitude = -118.362658 }
     #     SearchRadiusMiles = 10
-    #     MaxStores = 3
     #     HouseholdSize = 4
     #     TargetMealCount = 3
     #     Cuisines = @("Mediterranean", "Mexican")
@@ -77,13 +76,12 @@ try {
         cuisines          = @("Chinese", "Thai")
         avoidIngredients  = @("peanuts")
         address           = @{
-            street  = "123 Hawthorne Blvd"
-            city    = "Lawndale"
-            state   = "CA"
-            zipCode = "90260"
+            street  = "10945 SW 108th Ave"
+            city    = "Tigard"
+            state   = "OR"
+            zipCode = "97223"
         }
         searchRadiusMiles = 10
-        maxStores         = 4
     } | ConvertTo-Json
 
     $response = Invoke-WebRequest -Uri "$GatewayUrl/v1/meal-plans/discovery" -Method Post -Headers $headers -Body $payload -ContentType "application/json"
@@ -197,6 +195,7 @@ if ($FinalResult.stores) {
         Write-Host "==========================================================================================" -ForegroundColor DarkGray
         Write-Host " STORE: $($store.name) ($($store.store_id))" -ForegroundColor Cyan
         Write-Host " Address:  $($store.address)" -ForegroundColor Gray
+        Write-Host " City, State, Zip:     $($store.city), $($store.state) $($store.zip_code)" -ForegroundColor Gray
         Write-Host " Distance: $($store.distance_miles) miles" -ForegroundColor Gray
         Write-Host " Deals:    $dealCount found" -ForegroundColor $(if ($dealCount -gt 0) { "Yellow" } else { "DarkYellow" })
         Write-Host "==========================================================================================" -ForegroundColor DarkGray

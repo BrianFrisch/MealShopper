@@ -171,8 +171,8 @@ public class ShopperClient : IShopperClient
         ArgumentNullException.ThrowIfNull(req);
 
         _logger.LogInformation(
-            "Sending store discovery request. Lat: {Latitude}, Lon: {Longitude}, Radius: {RadiusMiles}, MaxStores: {MaxStores}",
-            req.Latitude, req.Longitude, req.RadiusMiles, req.MaxStores);
+            "Sending store discovery request. Lat: {Latitude}, Lon: {Longitude}, Radius: {RadiusMiles}",
+            req.Latitude, req.Longitude, req.RadiusMiles);
 
         try
         {
@@ -384,20 +384,18 @@ public class ShopperClient : IShopperClient
         double lat,
         double lon,
         int radiusMiles,
-        int maxStores,
         CancellationToken ct = default)
     {
         var request = new StoreDiscoveryRequest
         {
             Latitude = lat,
             Longitude = lon,
-            RadiusMiles = radiusMiles,
-            MaxStores = maxStores
+            RadiusMiles = radiusMiles
         };
 
         _logger.LogInformation(
-            "Sending store discovery request to Shopper Domain. Lat: {Latitude}, Lon: {Longitude}, Radius: {RadiusMiles}, MaxStores: {MaxStores}",
-            lat, lon, radiusMiles, maxStores);
+            "Sending store discovery request to Shopper Domain. Lat: {Latitude}, Lon: {Longitude}, Radius: {RadiusMiles}",
+            lat, lon, radiusMiles);
 
         try
         {

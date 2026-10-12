@@ -67,7 +67,6 @@ try {
     # $payload = @{
     #     Address = @{ Latitude = 33.894893; Longitude = -118.362658 }
     #     SearchRadiusMiles = 10
-    #     MaxStores = 3
     #     HouseholdSize = 4
     #     TargetMealCount = 3
     #     Cuisines = @("Mediterranean", "Mexican")
@@ -83,7 +82,6 @@ try {
             zipCode = "90260"
         }
         searchRadiusMiles = 10
-        maxStores         = 4
     } | ConvertTo-Json
 
     $response = Invoke-WebRequest -Uri "$GatewayUrl/v1/meal-plans" -Method Post -Headers $headers -Body $payload -ContentType "application/json"

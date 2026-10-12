@@ -22,8 +22,6 @@ class StoreDiscoveryRequest(BaseModel):
     latitude: float = Field(..., description="User's starting latitude")
     longitude: float = Field(..., description="User's starting longitude")
     radius_miles: float = Field(default=5.0, description="Search radius (1, 2, 5, 7, 10)")
-    max_stores: int = Field(default=2, ge=1, le=4, description="Store cap (1 to 4)")
-
 
 class StoreDiscoveryResponse(BaseModel):
     stores: List[Store]

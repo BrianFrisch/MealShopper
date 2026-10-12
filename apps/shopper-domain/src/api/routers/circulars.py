@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-import json
 from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -43,62 +42,49 @@ async def ingest_store_deals(
 async def get_store_deals(
     store_id: str,
     tier: str = "primary",  # "primary", "secondary", or "all"
-    postal_code: Optional[str] = None,
-    chain: Optional[str] = None,
     storage: PartitionedDealStorage = Depends(get_deal_storage),
     factory: DealAdapterFactory = Depends(get_deal_adapter_factory),
     store_repo: StoreRepository = Depends(get_store_repository),
 ) -> Dict[str, Any]:
     # 1. Lookup store context (postal_code, chain_id)
-    eff_postal = postal_code
     # eff_chain = chain
-    store_context = await store_repo.get_store_context(store_id)
-    eff_chain = (store_context.chain_id if store_context else None)
+    eff_chain: Optional[str] = None
+    eff_postal: Optional[str] = None
 
-    # Fast-path: Check cached store context in Redis
-    if not eff_postal or not eff_chain:
-        try:
-            cached_ctx_raw = await storage.redis.get(f"deals:store:{store_id}:context")
-            if cached_ctx_raw:
-                cached_ctx = json.loads(cached_ctx_raw)
-                eff_postal = eff_postal or cached_ctx.get("postal_code")
-                eff_chain = eff_chain or cached_ctx.get("chain_id")
-        except Exception:
-            pass
+    # # Fast-path: Check cached store context in Redis
+    # try:
+    #     cached_ctx_raw = await storage.redis.get(f"deals:store:{store_id}:context")
+    #     if cached_ctx_raw:
+    #         cached_ctx = json.loads(cached_ctx_raw)
+    #         eff_postal = eff_postal or cached_ctx.get("postal_code")
+    #         eff_chain = eff_chain or cached_ctx.get("chain_id")
+    # except Exception:
+    #     pass
 
     # Fallback to database store context lookup
     if not eff_postal or not eff_chain:
-        try:
-            ctx = await store_repo.get_store_context(store_id)
-            if ctx:
-                eff_postal = eff_postal or ctx.zip_code
-                eff_chain = eff_chain or ctx.chain_id or ctx.adapter_name
-        except Exception:
-            pass
+        ctx = await store_repo.get_store_context(store_id)
+        if ctx:
+            eff_postal = eff_postal or ctx.zip_code
+            eff_chain = eff_chain or ctx.chain_id or ctx.adapter_name
 
     deals: list[dict[str, Any]] = []
-    flyer_id: Optional[str] = None
+    flyer_id: Optional[str] = await storage.get_flyer_id_for_postal(eff_postal or "", eff_chain or "")
 
-    # 2. Check if we have a cached flyer_id for that postal_code/chain
-    if eff_postal and eff_chain:
-        flyer_id = await storage.get_flyer_id_for_postal(eff_postal, eff_chain)
-
-    # 3. If yes, fetch the deals directly using that flyer_id
     if flyer_id:
         deals = await storage.get_deals_by_flyer_id(flyer_id, tier=tier)
 
     # 4. If no flyer_id is cached, or the deals are missing, call the adapter to fetch the metadata,
     #    cache the routing key, process the deals, and save them by flyer_id.
-    if not flyer_id or not deals:
-        if eff_postal and eff_chain:
-            deals = await ingest_store_on_demand(
-                store_id=store_id,
-                chain=eff_chain,
-                postal_code=eff_postal,
-                storage=storage,
-                factory=factory,
-                tier=tier,
-            )
+    if not deals and eff_postal and eff_chain:
+        deals = await ingest_store_on_demand(
+            store_id=store_id,
+            chain=eff_chain,
+            postal_code=eff_postal,
+            storage=storage,
+            factory=factory,
+            tier=tier,
+        )
 
     if not deals:
         raise HTTPException(

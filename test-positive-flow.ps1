@@ -47,7 +47,6 @@ $intakePayload = @{
         zipCode = "90260"
     }
     searchRadiusMiles = 10
-    maxStores         = 3
 } | ConvertTo-Json
 
 try {

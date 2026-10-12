@@ -16,6 +16,9 @@ public class DealDto
     [JsonPropertyName("item_name")]
     public string ItemName { get; set; } = string.Empty;
 
+    [JsonPropertyName("clean_item_name")]
+    public string CleanItemName { get; set; } = string.Empty;
+
     [JsonPropertyName("category")]
     public string Category { get; set; } = string.Empty;
 

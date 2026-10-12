@@ -68,8 +68,7 @@ public class MealPlansControllerTests
                 Latitude = 33.8958,
                 Longitude = -118.3531
             },
-            SearchRadiusMiles = 5,
-            MaxStores = 3
+            SearchRadiusMiles = 5
         };
 
         JobRecord? savedJob = null;
@@ -97,6 +96,5 @@ public class MealPlansControllerTests
         savedJob.Status.Should().Be(JobStatus.Pending);
         savedJob.RequestPayload.Address.ZipCode.Should().Be("90250");
         savedJob.RequestPayload.SearchRadiusMiles.Should().Be(5);
-        savedJob.RequestPayload.MaxStores.Should().Be(3);
     }
 }

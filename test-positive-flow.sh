@@ -71,8 +71,7 @@ intake_payload=$(cat <<'EOF'
     "state": "CA",
     "zipCode": "90260"
   },
-  "searchRadiusMiles": 10,
-  "maxStores": 3
+  "searchRadiusMiles": 10
 }
 EOF
 )

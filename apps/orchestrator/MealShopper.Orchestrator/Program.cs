@@ -176,6 +176,7 @@ builder.Services.AddSingleton<IJobTracker>(sp => sp.GetRequiredService<RedisJobS
 // Register workflow orchestrator
 builder.Services.AddScoped<IMealPlanOrchestrator, MealPlanOrchestrator>();
 
+builder.Services.AddHttpClient<IGeocodingService, CensusGeocodingService>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

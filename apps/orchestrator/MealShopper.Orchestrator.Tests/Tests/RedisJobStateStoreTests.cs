@@ -103,8 +103,7 @@ public class RedisJobStateStoreTests
         var payload = new CreateMealPlanRequest
         {
             Cuisines = new List<string> { "Italian" },
-            SearchRadiusMiles = 5,
-            MaxStores = 2
+            SearchRadiusMiles = 5
         };
 
         _dbMock.Setup(db => db.StringSetAsync(

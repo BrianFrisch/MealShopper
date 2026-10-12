@@ -20,8 +20,7 @@ async def discover_stores_v1(
     matched_stores = await store_repo.find_nearby(
         latitude=payload.latitude,
         longitude=payload.longitude,
-        radius_miles=payload.radius_miles,
-        max_stores=payload.max_stores,
+        radius_miles=payload.radius_miles
     )
     return StoreDiscoveryResponse(
         stores=matched_stores,
@@ -39,7 +38,6 @@ async def discover_stores_legacy(
         latitude=payload.latitude,
         longitude=payload.longitude,
         radius_miles=payload.radius_miles,
-        max_stores=payload.max_stores,
     )
     return {
         "stores": [
@@ -47,7 +45,12 @@ async def discover_stores_legacy(
                 "id": s.id,
                 "store_id": s.id,
                 "name": s.name,
-                "address": f"{s.street}, {s.city}",
+                "address": s.street,
+                "street": s.street,
+                "city": s.city,
+                "state": s.state,
+                "zip_code": s.zip_code,
+                "postal_code": s.zip_code,
                 "distance_miles": s.distance_miles or 0.0,
             }
             for s in matched
