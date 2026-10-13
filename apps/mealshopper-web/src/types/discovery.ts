@@ -13,7 +13,7 @@ export interface MealPlanDiscoveryRequest {
   avoidIngredients: string[];
 }
 
-export interface Store {
+export interface StoreDto {
   id?: string;
   store_id?: string;
   name: string;
@@ -27,7 +27,18 @@ export interface Store {
   distanceMiles?: number;
 }
 
-export interface Deal {
+export type Store = StoreDto;
+
+export type ProteinSubtype =
+  | 'Beef'
+  | 'Chicken'
+  | 'Pork'
+  | 'Turkey'
+  | 'Seafood'
+  | 'Lamb'
+  | 'Other';
+
+export interface DealItemDto {
   deal_id?: string;
   dealId?: string;
   store_id?: string;
@@ -46,12 +57,18 @@ export interface Deal {
   unit?: string;
   value_score?: number;
   valueScore?: number;
+  protein_subtype?: ProteinSubtype;
+  image_url?: string | null;
 }
 
-export interface DiscoveryJobResult {
-  stores: Store[];
-  deals: Deal[];
+export type Deal = DealItemDto;
+
+export interface DiscoveryResultDto {
+  stores: StoreDto[];
+  deals: DealItemDto[];
 }
+
+export type DiscoveryJobResult = DiscoveryResultDto;
 
 export interface TaskStatusResponse<T> {
   jobId: string;

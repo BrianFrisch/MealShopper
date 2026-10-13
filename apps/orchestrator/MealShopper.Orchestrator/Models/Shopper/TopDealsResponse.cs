@@ -80,6 +80,18 @@ public class DealItemDto
     public string NormalizedCategory { get; set; } = string.Empty;
 
     /// <summary>
+    /// Protein subtype for meat, poultry, or seafood items (e.g., Chicken, Beef, Salmon).
+    /// </summary>
+    [JsonPropertyName("protein_subtype")]
+    public string ProteinSubtype { get; set; } = string.Empty;
+
+    /// <summary>
+    /// URL to the product image if available.
+    /// </summary>
+    [JsonPropertyName("image_url")]
+    public string ImageUrl { get; set; } = string.Empty;
+
+    /// <summary>
     /// Current promotional deal price.
     /// </summary>
     [JsonPropertyName("deal_price")]

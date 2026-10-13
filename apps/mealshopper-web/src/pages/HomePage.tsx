@@ -1,380 +1,258 @@
+// apps/mealshopper-web/src/pages/HomePage.tsx
 import React, { useState } from 'react';
-import { Header } from '../components/Header';
-import { LoginModal } from '../components/LoginModal';
-import type { MealPlanDiscoveryRequest, Store, Deal } from '../types/discovery';
-import { mealPlanApi } from '../services/mealPlanApi';
 import { authApi } from '../services/authApi';
-import { MapPin, Utensils, Store as StoreIcon, Loader2, Tag } from 'lucide-react';
 
-const COMMON_CUISINES = [
-  'American', 'Mexican', 'Italian', 'Chinese', 'Thai', 
-  'Indian', 'Mediterranean', 'Japanese', 'Korean', 'Greek'
-];
+interface HomePageProps {
+  onLoginSuccess?: (token: string) => void;
+}
 
-export const HomePage: React.FC = () => {
-  const [address, setAddress] = useState({
-    street: '123 Hawthorne Blvd',
-    city: 'Lawndale',
-    state: 'CA',
-    zipCode: '90260'
-  });
-  const [searchRadiusMiles, setSearchRadiusMiles] = useState(5);
-  const [maxStores, setMaxStores] = useState(2);
-  const [selectedCuisines, setSelectedCuisines] = useState<string[]>(['Mediterranean', 'Mexican']);
-  const [avoidIngredientInput, setAvoidIngredientInput] = useState('');
-  const [avoidIngredients, setAvoidIngredients] = useState<string[]>(['Pork']);
+export const HomePage: React.FC<HomePageProps> = ({ onLoginSuccess }) => {
+  const navigate = (path: string) => window.location.assign(path);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const [loading, setLoading] = useState(false);
-  const [stageDescription, setStageDescription] = useState<string | null>(null);
-  const [discoveredStores, setDiscoveredStores] = useState<Store[]>([]);
-  const [discoveredDeals, setDiscoveredDeals] = useState<Deal[]>([]);
-  
-  // Auth state
-  const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
 
-  const toggleCuisine = (cuisine: string) => {
-    setSelectedCuisines(prev => 
-      prev.includes(cuisine) ? prev.filter(c => c !== cuisine) : [...prev, cuisine]
-    );
-  };
-
-  const addAvoidIngredient = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && avoidIngredientInput.trim()) {
-      e.preventDefault();
-      if (!avoidIngredients.includes(avoidIngredientInput.trim())) {
-        setAvoidIngredients(prev => [...prev, avoidIngredientInput.trim()]);
-      }
-      setAvoidIngredientInput('');
-    }
-  };
-
-  const removeAvoidIngredient = (ingredient: string) => {
-    setAvoidIngredients(prev => prev.filter(i => i !== ingredient));
-  };
-
-  const handleStartDiscovery = async () => {
-    const token = authApi.getToken();
-    if (!token) {
-      setIsLoginOpen(true);
+    if (authMode === 'signup' && password !== confirmPassword) {
+      setErrorMessage('Passwords do not match.');
       return;
     }
 
-    setLoading(true);
-    setStageDescription('Submitting discovery request...');
-    setDiscoveredStores([]);
-    setDiscoveredDeals([]);
-
+    setIsLoading(true);
     try {
-      const payload: MealPlanDiscoveryRequest = {
-        address,
-        searchRadiusMiles,
-        maxStores,
-        cuisines: selectedCuisines,
-        avoidIngredients
-      };
-
-      const { jobId } = await mealPlanApi.startDiscovery(payload, token);
-
-      const pollInterval = window.setInterval(async () => {
-        try {
-          const statusRes = await mealPlanApi.pollTaskStatus(jobId, token);
-          setStageDescription(statusRes.stageDescription || 'Processing flyer deals...');
-
-          if (statusRes.status === 'Completed' && statusRes.result) {
-            clearInterval(pollInterval);
-            setDiscoveredStores(statusRes.result.stores || []);
-            setDiscoveredDeals(statusRes.result.deals || []);
-            setLoading(false);
-            setStageDescription(null);
-          } else if (statusRes.status === 'Failed') {
-            clearInterval(pollInterval);
-            alert(`Discovery failed: ${statusRes.errorMessage || 'Unknown error'}`);
-            setLoading(false);
-            setStageDescription(null);
-          }
-        } catch (err: any) {
-          clearInterval(pollInterval);
-          setLoading(false);
-          if (err?.response?.status === 401) {
-            authApi.logout();
-            setIsLoginOpen(true);
-          }
-        }
-      }, 2500);
-    } catch (err: any) {
-      setLoading(false);
-      setStageDescription(null);
-      if (err?.response?.status === 401) {
-        authApi.logout();
-        setIsLoginOpen(true);
-      } else {
-        alert('Failed to initiate discovery. Check Gateway status.');
+      if (authMode === 'login') {
+        const token = await authApi.login(email, password);
+        onLoginSuccess?.(token);
+        navigate('/discover');
+        return;
       }
+
+      await authApi.register(email, password);
+      navigate('/discover');
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Authentication failed.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFDF9] text-stone-900">
-      <Header onUserClick={() => setIsLoginOpen(true)} />
-
-      <LoginModal 
-        isOpen={isLoginOpen} 
-        onClose={() => setIsLoginOpen(false)} 
-        onSuccess={() => {
-          setIsLoginOpen(false);
-          handleStartDiscovery();
-        }} 
-      />
-
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        <div className="text-center max-w-2xl mx-auto mb-10">
-          <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl text-stone-900">
-            Find Local Deals, <span className="text-[#1E7538]">Plan Healthy Meals</span>
-          </h1>
-          <p className="mt-3 text-stone-600">
-            Discover active grocery circular promotions nearby and synthesize budget-optimized recipes.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-          {/* Left Column: Location */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-200">
-            <div className="flex items-center gap-2 mb-4 pb-2 border-b border-stone-100">
-              <MapPin className="w-5 h-5 text-[#1E7538]" />
-              <h2 className="text-lg font-bold text-stone-800">Store & Location</h2>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-1">Street Address</label>
-                <input 
-                  type="text" 
-                  value={address.street}
-                  onChange={e => setAddress({ ...address, street: e.target.value })}
-                  className="w-full px-3 py-2 border border-stone-200 rounded-lg focus:ring-2 focus:ring-[#1E7538] outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-1">City</label>
-                  <input 
-                    type="text" 
-                    value={address.city}
-                    onChange={e => setAddress({ ...address, city: e.target.value })}
-                    className="w-full px-3 py-2 border border-stone-200 rounded-lg focus:ring-2 focus:ring-[#1E7538] outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-1">State</label>
-                  <input 
-                    type="text" 
-                    value={address.state}
-                    onChange={e => setAddress({ ...address, state: e.target.value })}
-                    className="w-full px-3 py-2 border border-stone-200 rounded-lg focus:ring-2 focus:ring-[#1E7538] outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-1">Zip Code</label>
-                  <input 
-                    type="text" 
-                    value={address.zipCode}
-                    onChange={e => setAddress({ ...address, zipCode: e.target.value })}
-                    className="w-full px-3 py-2 border border-stone-200 rounded-lg focus:ring-2 focus:ring-[#1E7538] outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 pt-2">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-1">Search Radius</label>
-                  <select 
-                    value={searchRadiusMiles}
-                    onChange={e => setSearchRadiusMiles(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-stone-200 rounded-lg focus:ring-2 focus:ring-[#1E7538] bg-white outline-none"
-                  >
-                    {[1, 2, 5, 7, 10].map(mi => (
-                      <option key={mi} value={mi}>{mi} Miles</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-1">Max Stores</label>
-                  <select 
-                    value={maxStores}
-                    onChange={e => setMaxStores(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-stone-200 rounded-lg focus:ring-2 focus:ring-[#1E7538] bg-white outline-none"
-                  >
-                    {[1, 2, 3, 4].map(s => (
-                      <option key={s} value={s}>{s} Stores</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column: Preferences */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-200">
-            <div className="flex items-center gap-2 mb-4 pb-2 border-b border-stone-100">
-              <Utensils className="w-5 h-5 text-[#E66E1D]" />
-              <h2 className="text-lg font-bold text-stone-800">Diet & Cuisines</h2>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-2">Preferred Cuisines</label>
-                <div className="flex flex-wrap gap-2">
-                  {COMMON_CUISINES.map(c => {
-                    const active = selectedCuisines.includes(c);
-                    return (
-                      <button
-                        type="button"
-                        key={c}
-                        onClick={() => toggleCuisine(c)}
-                        className={`text-xs font-medium px-3 py-1.5 rounded-full transition ${
-                          active 
-                            ? 'bg-[#1E7538] text-white shadow-sm' 
-                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                        }`}
-                      >
-                        {c}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-1">Avoid Ingredients / Allergies</label>
-                <input 
-                  type="text"
-                  placeholder="Type an ingredient and press Enter"
-                  value={avoidIngredientInput}
-                  onChange={e => setAvoidIngredientInput(e.target.value)}
-                  onKeyDown={addAvoidIngredient}
-                  className="w-full px-3 py-2 border border-stone-200 rounded-lg focus:ring-2 focus:ring-[#E66E1D] outline-none"
-                />
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {avoidIngredients.map(item => (
-                    <span 
-                      key={item} 
-                      className="inline-flex items-center gap-1 text-xs bg-amber-50 text-[#E66E1D] border border-amber-200 px-2 py-0.5 rounded-full"
-                    >
-                      {item}
-                      <button type="button" onClick={() => removeAvoidIngredient(item)} className="hover:text-stone-900">&times;</button>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Action Button */}
-        <div className="flex flex-col items-center justify-center">
+    <div className="min-h-screen bg-[#FDFDF9] text-stone-900 flex flex-col justify-between">
+      {/* 1. SITE HEADER */}
+      <header className="border-b border-stone-200 bg-white/80 backdrop-blur sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between">
           <button
-            type="button"
-            disabled={loading}
-            onClick={handleStartDiscovery}
-            className="flex items-center gap-2 bg-[#E66E1D] hover:bg-[#d25f12] text-white font-bold px-8 py-3.5 rounded-full shadow-md hover:shadow-lg transition disabled:opacity-50 text-base"
+            aria-label="Menu"
+            className="p-2 text-stone-600 hover:text-stone-900 rounded-lg hover:bg-stone-100 transition"
           >
-            {loading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Searching Circulars...</span>
-              </>
-            ) : (
-              <span>Discover Local Deals</span>
-            )}
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-6 h-6"
+            >
+              <path d="M4 5h16" />
+              <path d="M4 12h16" />
+              <path d="M4 19h16" />
+            </svg>
           </button>
 
-          {stageDescription && (
-            <p className="mt-3 text-sm text-stone-500 animate-pulse">
-              {stageDescription}
-            </p>
-          )}
+          <div
+            className="flex items-center justify-center cursor-pointer"
+            onClick={() => navigate('/')}
+          >
+            <img
+              src="/logo.png"
+              alt="MealShopper"
+              className="h-12 w-auto object-contain"
+            />
+          </div>
+
+          <button
+            aria-label="Find Deals Directly"
+            onClick={() => navigate('/profile')}
+            className="text-xs font-bold text-[#1E7538] hover:text-[#165a2b] transition px-3 py-1.5 rounded-full border border-stone-200 hover:bg-stone-50"
+          >
+            Account &rarr;
+          </button>
         </div>
+      </header>
 
-        {/* Results */}
-        {discoveredStores.length > 0 && (
-          <div className="mt-12 space-y-8">
-            <h2 className="text-2xl font-bold text-stone-900 border-b border-stone-200 pb-2">
-              Discovered Stores & Deals
-            </h2>
+      {/* 2. HERO & VALUE PROPOSITION */}
+      <main className="max-w-6xl mx-auto px-4 py-12 flex-1 w-full">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+          {/* Left Column: Mission & Concept */}
+          <div className="lg:col-span-7 space-y-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-50 border border-green-200 text-xs font-semibold text-[#1E7538]">
+              <span>Real Circular Deals</span>
+              <span>•</span>
+              <span>Custom Tailored Recipes</span>
+            </div>
 
-            {discoveredStores.map(store => {
-            const currentStoreId = store.id || store.store_id || '';
-            
-            // Resilient check across snake_case and camelCase
-            const storeDeals = discoveredDeals.filter(d => 
-              (d.store_id || d.storeId) === currentStoreId
-            );
+            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-stone-900 leading-tight">
+              Smarter Grocery Deals, <br />
+              <span className="text-[#1E7538]">Grounded in Reality.</span>
+            </h1>
 
-            return (
-              <div key={currentStoreId} className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
-                {/* Store Header */}
-                <div className="bg-stone-50 p-5 border-b border-stone-200 flex flex-wrap items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 bg-[#1E7538]/10 text-[#1E7538] rounded-xl">
-                      <StoreIcon className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-stone-900 text-lg">{store.name}</h3>
-                      <p className="text-xs text-stone-500">
-                        {store.address} &bull; {(store.distance_miles ?? store.distanceMiles ?? 0)} miles away
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold px-3 py-1 bg-amber-100 text-[#E66E1D] rounded-full">
-                    {storeDeals.length} Deals Found
-                  </span>
-                </div>
+            <p className="text-base sm:text-lg text-stone-600 leading-relaxed">
+              Meal planning usually begins in a vacuum—dreaming up recipes first, then facing sticker
+              shock in the checkout aisle. <strong>MealShopper</strong> flips the equation. We ingest
+              active weekly circular promotions from verified grocers in your immediate neighborhood,
+              filtering down to real centerpiece proteins on sale right now.
+            </p>
 
-                {/* Deals Grid */}
-                <div className="p-5">
-                  {storeDeals.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {storeDeals.map(deal => {
-                        const dId = deal.deal_id || deal.dealId || '';
-                        const category = deal.normalized_category || deal.normalizedCategory || 'Grocery';
-                        const price = Number(deal.deal_price ?? deal.dealPrice ?? 0);
-                        const title = deal.item_name || deal.itemName || deal.clean_name || '';
-                        const unit = deal.unit || 'each';
+            <p className="text-base sm:text-lg text-stone-600 leading-relaxed">
+              You choose the meats, seafood, and stores you actually want to visit. Our AI chef then
+              builds practical, high-protein dinners specifically anchored around your discounted
+              cart—complete with exact grocery lists and pantry staples.
+            </p>
 
-                        return (
-                          <div 
-                            key={dId} 
-                            className="p-4 rounded-xl border border-stone-100 bg-stone-50/50 hover:bg-stone-50 hover:border-stone-200 transition flex flex-col justify-between"
-                          >
-                            <div>
-                              <div className="flex items-center justify-between gap-2 mb-1.5">
-                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#1E7538] bg-green-50 px-2 py-0.5 rounded">
-                                  <Tag className="w-3 h-3" />
-                                  {category}
-                                </span>
-                                <span className="font-black text-stone-900 text-sm">
-                                  ${price.toFixed(2)} <span className="text-xs font-normal text-stone-500">/ {unit}</span>
-                                </span>
-                              </div>
-                              <p className="font-semibold text-stone-800 text-sm line-clamp-2">{title}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-stone-400 italic py-2">
-                      No promotional circular items retrieved for this location.
-                    </p>
-                  )}
+            {/* Feature Highlights Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-stone-200/80">
+              <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+                <div className="text-sm font-bold text-stone-900">Zero Hallucinations</div>
+                <div className="text-xs text-stone-500 mt-1">
+                  Recipes generated only from verified, active flyer items from local banners.
                 </div>
               </div>
-            );
-          })}
+              <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+                <div className="text-sm font-bold text-stone-900">Store-Aware Routing</div>
+                <div className="text-xs text-stone-500 mt-1">
+                  Optimize your trip across 1 or 2 nearby stores to prevent wasted travel time.
+                </div>
+              </div>
+            </div>
           </div>
-        )}
+
+          {/* Right Column: Authentication Card */}
+          <div className="lg:col-span-5">
+            <div className="bg-white rounded-2xl p-8 shadow-md border border-stone-200 max-w-md mx-auto">
+              {/* Tab Selector */}
+              <div className="flex rounded-xl bg-stone-100 p-1 mb-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('login');
+                    setErrorMessage(null);
+                  }}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
+                    authMode === 'login'
+                      ? 'bg-white text-stone-900 shadow-sm'
+                      : 'text-stone-500 hover:text-stone-900'
+                  }`}
+                >
+                  Log In
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('signup');
+                    setErrorMessage(null);
+                  }}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
+                    authMode === 'signup'
+                      ? 'bg-white text-stone-900 shadow-sm'
+                      : 'text-stone-500 hover:text-stone-900'
+                  }`}
+                >
+                  Create Account
+                </button>
+              </div>
+
+              {errorMessage && (
+                <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-xs text-red-700 font-medium">
+                  {errorMessage}
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="w-full px-3 py-2.5 border border-stone-200 rounded-lg focus:ring-2 focus:ring-[#1E7538] outline-none text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-1">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full px-3 py-2.5 border border-stone-200 rounded-lg focus:ring-2 focus:ring-[#1E7538] outline-none text-sm"
+                  />
+                </div>
+
+                {authMode === 'signup' && (
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-1">
+                      Confirm Password
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full px-3 py-2.5 border border-stone-200 rounded-lg focus:ring-2 focus:ring-[#1E7538] outline-none text-sm"
+                    />
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full mt-2 bg-[#E66E1D] hover:bg-[#d25f12] text-white font-bold py-3 rounded-full shadow transition disabled:opacity-50 text-sm cursor-pointer"
+                >
+                  {isLoading
+                    ? 'Processing...'
+                    : authMode === 'login'
+                    ? 'Sign In to MealShopper'
+                    : 'Start Meal Planning'}
+                </button>
+              </form>
+
+              <div className="mt-6 pt-4 border-t border-stone-100 text-center">
+                <button
+                  type="button"
+                  onClick={() => navigate('/discover')}
+                  className="text-xs font-semibold text-[#1E7538] hover:underline"
+                >
+                  Continue as Guest to Deal Finder &rarr;
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </main>
+
+      {/* 3. FOOTER */}
+      <footer className="border-t border-stone-200 bg-white/60 py-6 text-center text-xs text-stone-400">
+        MealShopper &copy; 2026. Weekly circular ingestion and meal synthesis engine.
+      </footer>
     </div>
   );
 };

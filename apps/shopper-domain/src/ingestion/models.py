@@ -72,6 +72,8 @@ class NormalizedDealItem(BaseModel):
     clean_name: str
     brand: Optional[str] = None
     normalized_category: str = "Pantry"
+    protein_subtype: Optional[str] = None
+    image_url: Optional[str] = None
     deal_price: float
     original_price: Optional[float] = None
     currency: str = "USD"

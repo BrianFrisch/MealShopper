@@ -1,6 +1,10 @@
 @MealShopper.Users_HostAddress = http://localhost:5234
 
-GET {{MealShopper.Users_HostAddress}}/weatherforecast/
-Accept: application/json
+### Create a user
+POST {{MealShopper.Users_HostAddress}}/v1/internal/users
+Content-Type: application/json
 
-###
+{
+  "email": "new.user@mealshopper.local",
+  "password": "SecurePassword123!"
+}

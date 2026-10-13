@@ -15,13 +15,17 @@ public class UserRepository
 
     private NpgsqlConnection CreateConnection() => new(_connectionString);
 
-    public async Task<DbUser?> GetUserByEmailAsync(string email)
+    public async Task<DbUser?> GetUserByEmailAsync(
+        string email,
+        CancellationToken cancellationToken = default)
     {
         using var conn = CreateConnection();
         // Calls the stored function fn_get_user_by_email
         return await conn.QuerySingleOrDefaultAsync<DbUser>(
-            "SELECT * FROM fn_get_user_by_email(@Email)",
-            new { Email = email });
+            new CommandDefinition(
+                "SELECT * FROM fn_get_user_by_email(@Email)",
+                new { Email = email },
+                cancellationToken: cancellationToken));
     }
 
     public async Task RecordLoginFailureAsync(Guid userId, int maxAttempts = 5, int lockoutMinutes = 15)
@@ -42,22 +46,28 @@ public class UserRepository
             new { UserId = userId });
     }
 
-    public async Task CreateUserAsync(
+    public async Task<bool> CreateUserAsync(
         Guid id,
         string email,
         string passwordHash,
-        string[] roles)
+        string[] roles,
+        CancellationToken cancellationToken = default)
     {
         using var conn = CreateConnection();
         // Calls the stored procedure sp_create_user
         await conn.ExecuteAsync(
-            "CALL sp_create_user(@Id, @Email, @Hash, @Roles)",
-            new
-            {
-                Id = id,
-                Email = email,
-                Hash = passwordHash,
-                Roles = roles
-            });
+            new CommandDefinition(
+                "CALL sp_create_user(@Id, @Email, @Hash, @Roles)",
+                new
+                {
+                    Id = id,
+                    Email = email,
+                    Hash = passwordHash,
+                    Roles = roles
+                },
+                cancellationToken: cancellationToken));
+
+        var createdUser = await GetUserByEmailAsync(email, cancellationToken);
+        return createdUser?.Id == id;
     }
 }

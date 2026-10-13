@@ -128,6 +128,32 @@ class BaseDealAdapter(ABC):
             return brand_str if brand_str else None
         return None
 
+    @abstractmethod
+    def extract_image_url(self, item: dict[str, Any]) -> Optional[str]:
+        """Extract the promotional product image URL from the raw item."""
+        pass
+
+    def determine_protein_subtype(self, product_name: str, normalized_category: str) -> Optional[str]:
+        """Resolves specific protein subtype for meat/seafood deals."""
+        if normalized_category not in ("Meat", "Seafood"):
+            return None
+
+        name = product_name.lower()
+        if any(k in name for k in ["shrimp", "salmon", "tilapia", "fish", "tuna", "cod", "flounder", "scallop", "trout", "crab", "lobster", "halibut", "rockfish", "catfish"]):
+            return "Seafood"
+        if any(k in name for k in ["beef", "steak", "roast", "tri-tip", "tri tip", "chuck", "ground beef", "patties", "ribeye", "sirloin", "brisket", "flanken"]):
+            return "Beef"
+        if any(k in name for k in ["chicken", "breast", "breasts", "thigh", "thighs", "wing", "wings", "drumstick", "drumsticks", "tender", "tenders", "poultry"]):
+            return "Chicken"
+        if any(k in name for k in ["pork", "ribs", "chop", "chops", "loin", "bacon", "ham", "sausage", "bratwurst"]):
+            return "Pork"
+        if any(k in name for k in ["turkey"]):
+            return "Turkey"
+        if any(k in name for k in ["lamb"]):
+            return "Lamb"
+
+        return "Other"
+
     def standardize_category(self, raw_category: str, product_name: str = "") -> str:
         """
         Maps raw category strings and product titles to standardized categories:
@@ -304,6 +330,9 @@ class BaseDealAdapter(ABC):
                 if savings > 0.20:
                     value_score = round(min(8.0 + (savings - 0.20) * 5.0, 10.0), 1)
 
+            image_url = self.extract_image_url(item)
+            protein_subtype = self.determine_protein_subtype(product_name, normalized_cat)
+            
             parsed_deals.append(
                 {
                     "deal_id": deal_id,
@@ -314,6 +343,8 @@ class BaseDealAdapter(ABC):
                     "brand": brand,
                     "raw_category": raw_cat,
                     "normalized_category": normalized_cat,
+                    "protein_subtype": protein_subtype,
+                    "image_url": image_url,
                     "deal_price": sale_price,
                     "original_price": original_price,
                     "currency": "USD",

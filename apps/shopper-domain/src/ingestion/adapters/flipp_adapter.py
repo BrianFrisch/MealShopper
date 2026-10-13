@@ -473,4 +473,21 @@ class FlippAdapter(BaseDealAdapter):
             brand_str = str(raw_brand).strip()
             return brand_str if brand_str else None
         return None
+    
+    def extract_image_url(self, item: dict[str, Any]) -> Optional[str]:
+        """
+        Extracts cleanest available product image from Flipp item payload.
+        Prioritizes cutouts over circular clippings.
+        """
+        candidates = [
+            # item.get("clean_image_url"),
+            item.get("cutout_image_url"),
+            # item.get("large_image_url"),
+            # item.get("original_image_url"),
+            # item.get("image_url"),
+        ]
+        for url in candidates:
+            if url and isinstance(url, str) and url.strip().startswith("http"):
+                return url.strip()
+        return None
 

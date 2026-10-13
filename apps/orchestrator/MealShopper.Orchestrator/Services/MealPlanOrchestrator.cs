@@ -480,6 +480,8 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                         ItemName = best.ItemName,
                         CleanName = best.CleanName,
                         NormalizedCategory = best.NormalizedCategory,
+                        ProteinSubtype = best.ProteinSubtype,
+                        ImageUrl = best.ImageUrl,
                         DealPrice = best.DealPrice,
                         OriginalPrice = best.OriginalPrice,
                         Currency = best.Currency,

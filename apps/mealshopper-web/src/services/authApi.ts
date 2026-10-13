@@ -8,6 +8,11 @@ export interface TokenResponse {
   expires_in?: number;
 }
 
+export interface CreateUserResponse {
+  id: string;
+  email: string;
+}
+
 export const authApi = {
   async login(email: string, password: string): Promise<string> {
     const params = new URLSearchParams();
@@ -28,6 +33,14 @@ export const authApi = {
     const token = response.data.access_token;
     localStorage.setItem('access_token', token);
     return token;
+  },
+
+  async register(email: string, password: string): Promise<CreateUserResponse> {
+    const response = await axios.post<CreateUserResponse>(
+      `${GATEWAY_URL}/v1/auth/register`,
+      { email, password }
+    );
+    return response.data;
   },
 
   getToken(): string | null {
