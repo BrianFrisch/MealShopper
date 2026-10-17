@@ -10,7 +10,21 @@ public class UserRepository
 
     public UserRepository(IConfiguration configuration)
     {
-        _connectionString = configuration.GetConnectionString("Postgres") ?? "";
+        var configuredConnectionString = configuration.GetConnectionString("Postgres");
+        if (!string.IsNullOrWhiteSpace(configuredConnectionString))
+        {
+            _connectionString = configuredConnectionString;
+            return;
+        }
+
+        _connectionString = new NpgsqlConnectionStringBuilder
+        {
+            Host = configuration["POSTGRES_HOST"],
+            Port = int.TryParse(configuration["POSTGRES_PORT"], out var port) ? port : 5432,
+            Database = configuration["POSTGRES_DB"],
+            Username = configuration["POSTGRES_USER"],
+            Password = configuration["POSTGRES_PASSWORD"]
+        }.ConnectionString;
     }
 
     private NpgsqlConnection CreateConnection() => new(_connectionString);

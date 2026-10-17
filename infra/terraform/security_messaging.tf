@@ -1,18 +1,60 @@
-resource "google_pubsub_topic" "meal_plan_tasks" {
-  name    = "meal-plan-tasks"
-  project = var.project_id
-
-  depends_on = [google_project_service.required_apis["pubsub.googleapis.com"]]
-}
-
-resource "google_pubsub_subscription" "meal_plan_tasks" {
-  name    = "meal-plan-tasks-pull"
-  topic   = google_pubsub_topic.meal_plan_tasks.id
-  project = var.project_id
-}
-
 resource "google_secret_manager_secret" "db_password" {
   secret_id = "mealshopper-db-password"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.required_apis["secretmanager.googleapis.com"]]
+}
+
+resource "google_secret_manager_secret" "users_db_password" {
+  secret_id = "mealshopper-users-db-password"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.required_apis["secretmanager.googleapis.com"]]
+}
+
+resource "google_secret_manager_secret" "shopper_db_password" {
+  secret_id = "mealshopper-shopper-db-password"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.required_apis["secretmanager.googleapis.com"]]
+}
+
+resource "google_secret_manager_secret" "orchestrator_client_secret" {
+  secret_id = "mealshopper-orchestrator-client-secret"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.required_apis["secretmanager.googleapis.com"]]
+}
+
+resource "google_secret_manager_secret" "jwt_signing_key" {
+  secret_id = "mealshopper-jwt-signing-key"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.required_apis["secretmanager.googleapis.com"]]
+}
+
+resource "google_secret_manager_secret" "gemini_api_key" {
+  secret_id = "mealshopper-gemini-api-key"
   project   = var.project_id
 
   replication {
@@ -28,9 +70,17 @@ resource "google_service_account" "cloud_run" {
   project      = var.project_id
 }
 
-resource "google_secret_manager_secret_iam_member" "db_password_accessor" {
+resource "google_secret_manager_secret_iam_member" "runtime_secrets" {
+  for_each = {
+    users_db_password          = google_secret_manager_secret.users_db_password.secret_id
+    shopper_db_password        = google_secret_manager_secret.shopper_db_password.secret_id
+    orchestrator_client_secret = google_secret_manager_secret.orchestrator_client_secret.secret_id
+    jwt_signing_key            = google_secret_manager_secret.jwt_signing_key.secret_id
+    gemini_api_key             = google_secret_manager_secret.gemini_api_key.secret_id
+  }
+
   project   = var.project_id
-  secret_id = google_secret_manager_secret.db_password.secret_id
+  secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.cloud_run.email}"
 }
@@ -39,20 +89,6 @@ resource "google_project_iam_member" "cloud_sql_client" {
   project = var.project_id
   role    = "roles/cloudsql.client"
   member  = "serviceAccount:${google_service_account.cloud_run.email}"
-}
-
-resource "google_pubsub_topic_iam_member" "meal_plan_tasks_publisher" {
-  project = var.project_id
-  topic   = google_pubsub_topic.meal_plan_tasks.name
-  role    = "roles/pubsub.publisher"
-  member  = "serviceAccount:${google_service_account.cloud_run.email}"
-}
-
-resource "google_pubsub_subscription_iam_member" "meal_plan_tasks_subscriber" {
-  project      = var.project_id
-  subscription = google_pubsub_subscription.meal_plan_tasks.name
-  role         = "roles/pubsub.subscriber"
-  member       = "serviceAccount:${google_service_account.cloud_run.email}"
 }
 
 resource "google_storage_bucket_iam_member" "worker_file_admin" {

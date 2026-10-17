@@ -11,7 +11,7 @@ public class InMemoryClientStore : IClientStore
     private readonly ConcurrentDictionary<string, ClientApplication> _clients = new(StringComparer.OrdinalIgnoreCase);
     private readonly IPasswordHasher _passwordHasher;
 
-    public InMemoryClientStore(IPasswordHasher passwordHasher)
+    public InMemoryClientStore(IPasswordHasher passwordHasher, IConfiguration configuration)
     {
         _passwordHasher = passwordHasher ?? throw new ArgumentNullException(nameof(passwordHasher));
 
@@ -19,7 +19,8 @@ public class InMemoryClientStore : IClientStore
         var orchestratorClient = new ClientApplication
         {
             ClientId = "orchestrator-client",
-            ClientSecretHash = _passwordHasher.HashPassword("OrchestratorSecretKey_99!"),
+            ClientSecretHash = _passwordHasher.HashPassword(
+                configuration["Clients:Orchestrator:ClientSecret"] ?? "OrchestratorSecretKey_99!"),
             ClientName = "MealShopper Orchestrator Service",
             AllowedScopes = ["shopper.read", "shopper.write", "planner.generate"],
             IsActive = true,
@@ -30,7 +31,8 @@ public class InMemoryClientStore : IClientStore
         var shopperClient = new ClientApplication
         {
             ClientId = "shopper-client",
-            ClientSecretHash = _passwordHasher.HashPassword("ShopperServiceSecretKey_88!"),
+            ClientSecretHash = _passwordHasher.HashPassword(
+                configuration["Clients:Shopper:ClientSecret"] ?? "ShopperServiceSecretKey_88!"),
             ClientName = "MealShopper Shopper Service",
             AllowedScopes = ["shopper.read"],
             IsActive = true,

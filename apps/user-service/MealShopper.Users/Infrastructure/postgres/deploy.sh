@@ -15,17 +15,18 @@ DB_HOST="${POSTGRES_HOST:-postgres}"
 DB_PORT="${POSTGRES_PORT:-5432}"
 DB_NAME="${POSTGRES_DB:-mealshopper_users}"
 DB_USER="${POSTGRES_USER:-users_app}"
-export PGPASSWORD="${POSTGRES_PASSWORD:-ShopperApp_Dev_Pwd99!}"
+: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}"
+export PGPASSWORD="$POSTGRES_PASSWORD"
 
-echo "=== [Shopper-Domain] Running Database Migrations on ${DB_NAME} at ${DB_HOST}:${DB_PORT} ==="
+echo "=== [Users-Service] Running Database Migrations on ${DB_NAME} at ${DB_HOST}:${DB_PORT} ==="
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/init"
 
 if [ -d "$SCRIPT_DIR" ]; then
     find "$SCRIPT_DIR" -type f -name "*.sql" | sort | while read -r f; do
-        echo "[Shopper-Domain] Applying $f..."
+        echo "[Users-Service] Applying $f..."
         psql -v ON_ERROR_STOP=1 -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f "$f"
     done
 fi
 
-echo "=== [Shopper-Domain] Migrations successfully completed ==="
+echo "=== [Users-Service] Migrations successfully completed ==="

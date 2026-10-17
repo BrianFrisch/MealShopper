@@ -1,7 +1,7 @@
 using MealShopper.Orchestrator.Clients;
-using MealShopper.Common.Security;
 using MealShopper.Orchestrator.Infrastructure.Security;
 using MealShopper.Orchestrator.Services;
+using MealShopper.Common.Security;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Http.Resilience;
 using Polly;
@@ -14,6 +14,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddTransient<CloudRunIdentityTokenHandler>();
 
 // Register gateway user security context
 builder.Services.AddScoped<GatewayUserContext>();
@@ -21,7 +22,8 @@ builder.Services.AddScoped<IGatewayUserContext>(sp => sp.GetRequiredService<Gate
 
 // Register memory cache and M2M token acquisition service
 builder.Services.AddMemoryCache();
-builder.Services.AddHttpClient("M2MTokenClient");
+builder.Services.AddHttpClient("M2MTokenClient")
+    .AddHttpMessageHandler<CloudRunIdentityTokenHandler>();
 builder.Services.AddSingleton<ITokenAcquisitionService>(sp =>
 {
     var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
@@ -38,8 +40,8 @@ builder.Services.AddSingleton<ITokenAcquisitionService>(sp =>
 // Register typed HTTP clients with Polly resilience pipelines
 builder.Services.AddHttpClient<IShopperClient, ShopperClient>(client =>
 {
-    var shopperUrl = builder.Configuration["Services:ShopperUrl"] 
-        ?? builder.Configuration["Services:ShopperDomainUrl"] 
+    var shopperUrl = builder.Configuration["Services:ShopperUrl"]
+        ?? builder.Configuration["Services:ShopperDomainUrl"]
         ?? "http://localhost:8001";
     client.BaseAddress = new Uri(shopperUrl.TrimEnd('/') + "/");
 })
@@ -49,6 +51,7 @@ builder.Services.AddHttpClient<IShopperClient, ShopperClient>(client =>
     var logger = sp.GetRequiredService<ILogger<M2MAuthenticationHandler>>();
     return new M2MAuthenticationHandler(tokenService, "shopper.read", logger);
 })
+.AddHttpMessageHandler<CloudRunIdentityTokenHandler>()
 .AddResilienceHandler("shopper-pipeline", (pipelineBuilder, context) =>
 {
     var loggerFactory = context.ServiceProvider.GetRequiredService<ILoggerFactory>();
@@ -106,6 +109,7 @@ builder.Services.AddHttpClient<IPlanningClient, PlanningClient>(client =>
     var logger = sp.GetRequiredService<ILogger<M2MAuthenticationHandler>>();
     return new M2MAuthenticationHandler(tokenService, "planner.generate", logger);
 })
+.AddHttpMessageHandler<CloudRunIdentityTokenHandler>()
 .AddResilienceHandler("planning-pipeline", (pipelineBuilder, context) =>
 {
     var loggerFactory = context.ServiceProvider.GetRequiredService<ILoggerFactory>();
@@ -160,11 +164,12 @@ builder.Services.AddHttpClient<IPlannerClient, PlannerClient>(client =>
     var tokenService = sp.GetRequiredService<ITokenAcquisitionService>();
     var logger = sp.GetRequiredService<ILogger<M2MAuthenticationHandler>>();
     return new M2MAuthenticationHandler(tokenService, "planner.generate", logger);
-});
+})
+.AddHttpMessageHandler<CloudRunIdentityTokenHandler>();
 
 // Register Redis connection
-var redisConn = builder.Configuration.GetConnectionString("Redis") 
-    ?? builder.Configuration["Redis:Configuration"] 
+var redisConn = builder.Configuration.GetConnectionString("Redis")
+    ?? builder.Configuration["Redis:Configuration"]
     ?? "localhost:6379";
 builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConn));
 

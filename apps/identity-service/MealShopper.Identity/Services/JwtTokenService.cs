@@ -13,12 +13,17 @@ public class JwtTokenService : ITokenService
     private static readonly TimeSpan DefaultTokenLifetime = TimeSpan.FromMinutes(15);
     private readonly IKeyMaterialService _keyMaterialService;
     private readonly IConfiguration _configuration;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
     private readonly JwtSecurityTokenHandler _tokenHandler;
 
-    public JwtTokenService(IKeyMaterialService keyMaterialService, IConfiguration configuration)
+    public JwtTokenService(
+        IKeyMaterialService keyMaterialService,
+        IConfiguration configuration,
+        IHttpContextAccessor? httpContextAccessor = null)
     {
         _keyMaterialService = keyMaterialService ?? throw new ArgumentNullException(nameof(keyMaterialService));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _httpContextAccessor = httpContextAccessor;
         _tokenHandler = new JwtSecurityTokenHandler();
     }
 
@@ -32,7 +37,7 @@ public class JwtTokenService : ITokenService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(subject);
 
-        var issuer = _configuration["Identity:Issuer"] ?? _configuration["Jwt:Issuer"] ?? "http://localhost:5119";
+        var issuer = IssuerResolver.Resolve(_configuration, _httpContextAccessor?.HttpContext?.Request);
         var audience = _configuration["Identity:Audience"] ?? _configuration["Jwt:Audience"] ?? "mealshopper-api";
         var signingCredentials = _keyMaterialService.GetSigningCredentials();
 
@@ -99,7 +104,7 @@ public class JwtTokenService : ITokenService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
 
-        var issuer = _configuration["Identity:Issuer"] ?? _configuration["Jwt:Issuer"] ?? "http://localhost:5001";
+        var issuer = IssuerResolver.Resolve(_configuration, _httpContextAccessor?.HttpContext?.Request);
         var audience = _configuration["Identity:Audience"] ?? _configuration["Jwt:Audience"] ?? "mealshopper-api";
         var signingCredentials = _keyMaterialService.GetSigningCredentials();
 

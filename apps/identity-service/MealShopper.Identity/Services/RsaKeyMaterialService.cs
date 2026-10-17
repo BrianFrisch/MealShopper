@@ -19,8 +19,16 @@ public class RsaKeyMaterialService : IKeyMaterialService, IDisposable
     {
         var keyId = configuration?["Jwt:KeyId"] ?? DefaultKeyId;
 
-        // Initialize 2048-bit RSA key pair
-        _rsa = RSA.Create(2048);
+        _rsa = RSA.Create();
+        var signingKey = configuration?["Jwt:SigningKey"];
+        if (string.IsNullOrWhiteSpace(signingKey))
+        {
+            _rsa.KeySize = 2048;
+        }
+        else
+        {
+            _rsa.ImportFromPem(signingKey);
+        }
 
         _signingKey = new RsaSecurityKey(_rsa)
         {

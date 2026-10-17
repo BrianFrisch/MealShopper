@@ -28,14 +28,14 @@ public class TokenController : ControllerBase
         IClientStore clientStore,
         ILogger<TokenController> logger,
         IConfiguration configuration,
-        IHttpClientFactory? httpClientFactory = null,
-        HttpClient? httpClient = null)
+        IHttpClientFactory httpClientFactory)
     {
         _tokenService = tokenService ?? throw new ArgumentNullException(nameof(tokenService));
         _refreshTokenStore = refreshTokenStore ?? throw new ArgumentNullException(nameof(refreshTokenStore));
         _clientStore = clientStore ?? throw new ArgumentNullException(nameof(clientStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _httpClient = httpClient ?? httpClientFactory?.CreateClient() ?? new HttpClient();
+        _httpClient = (httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory)))
+            .CreateClient("UserService");
 
         // Resolve user service URL from environment/appsettings with localhost fallback
         _userServiceBaseUrl = configuration["UserService:BaseUrl"] 

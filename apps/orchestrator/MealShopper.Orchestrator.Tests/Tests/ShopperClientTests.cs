@@ -27,7 +27,7 @@ public class ShopperClientTests
     public async Task DiscoverStoresAsync_CorrectlyDeserializesStores_FromMockHandler()
     {
         // Arrange & Act
-        var stores = await _client.DiscoverStoresAsync(34.053625, -118.243007, 5, 2);
+        var stores = await _client.DiscoverStoresAsync(34.053625, -118.243007, 5);
 
         // Assert
         stores.Should().NotBeNull();
@@ -97,7 +97,7 @@ public class ShopperClientTests
         _mockHandler.SetServerError("Database connection failed in Shopper Domain");
 
         // Act
-        var act = () => _client.DiscoverStoresAsync(34.053625, -118.243007, 5, 2);
+        var act = () => _client.DiscoverStoresAsync(34.053625, -118.243007, 5);
 
         // Assert
         var exception = await act.Should().ThrowAsync<ShopperDomainException>();
@@ -214,7 +214,7 @@ public class ShopperClientTests
         deals.Should().NotBeNull();
         deals.Should().HaveCount(2);
         _mockHandler.CapturedRequests.Should().Contain(r =>
-            r.RequestUri!.ToString().Contains("v1/deals/stores/ralphs-101?postal_code=90260&chain=Ralphs"));
+            r.RequestUri!.ToString().Contains("v1/deals/stores/ralphs-101?tier=primary&postal_code=90260&chain=Ralphs"));
     }
 
     [Fact]
@@ -226,7 +226,7 @@ public class ShopperClientTests
         // Assert
         deals.Should().NotBeNull();
         _mockHandler.CapturedRequests.Should().Contain(r =>
-            r.RequestUri!.ToString().Contains("v1/deals/stores/ralphs-101?postal_code=90260") &&
+            r.RequestUri!.ToString().Contains("v1/deals/stores/ralphs-101?tier=primary&postal_code=90260") &&
             !r.RequestUri!.ToString().Contains("chain="));
     }
 
@@ -245,17 +245,18 @@ public class ShopperClientTests
     }
 
     [Fact]
-    public async Task GetDealsForStoreAsync_ReturnsEmptyList_WhenServerError()
+    public async Task GetDealsForStoreAsync_ThrowsShopperDomainException_WhenServerError()
     {
         // Arrange
         _mockHandler.SetServerError("Shopper service down");
 
         // Act
-        var deals = await _client.GetDealsForStoreAsync("ralphs-101");
+        var act = () => _client.GetDealsForStoreAsync("ralphs-101");
 
         // Assert
-        deals.Should().NotBeNull();
-        deals.Should().BeEmpty();
+        var exception = await act.Should().ThrowAsync<ShopperDomainException>();
+        exception.Which.StatusCode.Should().Be(System.Net.HttpStatusCode.InternalServerError);
+        exception.Which.ResponseBody.Should().Contain("Shopper service down");
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:5247';
+const GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL
+  || (import.meta.env.DEV ? 'http://localhost:5247' : '');
 
 export interface TokenResponse {
   access_token: string;

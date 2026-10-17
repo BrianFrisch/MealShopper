@@ -6,7 +6,8 @@ DB_HOST="${POSTGRES_HOST:-postgres}"
 DB_PORT="${POSTGRES_PORT:-5432}"
 DB_NAME="${POSTGRES_DB:-mealshopper_shopper}"
 DB_USER="${POSTGRES_USER:-shopper_app}"
-export PGPASSWORD="${POSTGRES_PASSWORD:-ShopperApp_Dev_Pwd99!}"
+: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}"
+export PGPASSWORD="$POSTGRES_PASSWORD"
 
 echo "=== [Shopper-Domain] Running Database Migrations on ${DB_NAME} at ${DB_HOST}:${DB_PORT} ==="
 

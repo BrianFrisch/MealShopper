@@ -2,7 +2,8 @@ import axios from 'axios';
 import type { MealPlanDiscoveryRequest, DiscoveryJobResult, TaskStatusResponse } from '../types/discovery';
 
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:5247',
+  baseURL: import.meta.env.VITE_API_GATEWAY_URL
+    || (import.meta.env.DEV ? 'http://localhost:5247' : ''),
   headers: {
     'Content-Type': 'application/json',
   },

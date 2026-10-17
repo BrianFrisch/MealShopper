@@ -1,11 +1,15 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-COPY ["MealShopper.Gateway.csproj", "./"]
-RUN dotnet restore "./MealShopper.Gateway.csproj"
+COPY ["apps/api-gateway/MealShopper.Gateway/MealShopper.Gateway.csproj", "apps/api-gateway/MealShopper.Gateway/"]
+COPY ["libs/MealShopper.Common/MealShopper.Common.csproj", "libs/MealShopper.Common/"]
+RUN dotnet restore "apps/api-gateway/MealShopper.Gateway/MealShopper.Gateway.csproj"
 
-COPY . .
-RUN dotnet publish "./MealShopper.Gateway.csproj" -c Release -o /app/publish /p:UseAppHost=false
+COPY ["apps/api-gateway/MealShopper.Gateway/", "apps/api-gateway/MealShopper.Gateway/"]
+COPY ["libs/MealShopper.Common/", "libs/MealShopper.Common/"]
+
+WORKDIR "/src/apps/api-gateway/MealShopper.Gateway"
+RUN dotnet publish "MealShopper.Gateway.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app

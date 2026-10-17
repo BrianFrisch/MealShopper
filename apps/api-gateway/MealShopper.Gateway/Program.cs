@@ -1,7 +1,9 @@
 using System.Security.Claims;
+using MealShopper.Common.Security;
 using MealShopper.Gateway.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Yarp.ReverseProxy.Transforms;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,10 +15,11 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy(AllowLocalFrontendPolicy, policy =>
     {
-        policy.WithOrigins(
-                "http://localhost:5173",  // Vite standard local dev server
-                "http://127.0.0.1:5173"
-            )
+        var allowedOrigins = builder.Configuration
+            .GetSection("Cors:AllowedOrigins")
+            .Get<string[]>() ?? ["http://localhost:5173", "http://127.0.0.1:5173"];
+
+        policy.WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials(); // Required if sending cookies/authorization credentials
@@ -28,7 +31,35 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Add YARP Reverse Proxy
-builder.Services.AddReverseProxy().LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+builder.Services.AddReverseProxy()
+    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
+    .AddTransforms(transformBuilder =>
+    {
+        transformBuilder.AddRequestTransform(async transformContext =>
+        {
+            var destination = new Uri(transformContext.DestinationPrefix, UriKind.Absolute);
+            var logger = transformContext.HttpContext.RequestServices
+                .GetRequiredService<ILogger<Program>>();
+            var token = await CloudRunIdentityToken.GetAsync(
+                destination,
+                transformContext.HttpContext.RequestAborted);
+            if (token is null)
+            {
+                logger.LogWarning(
+                    "No Cloud Run identity token was returned for proxy destination {Destination}.",
+                    destination.GetLeftPart(UriPartial.Authority));
+                return;
+            }
+
+            var headerAdded = CloudRunIdentityToken.AddInvokerAuthorization(
+                    transformContext.ProxyRequest.Headers,
+                    token);
+            logger.LogInformation(
+                "Cloud Run identity token acquired for {Destination}; invoker header added: {HeaderAdded}.",
+                destination.GetLeftPart(UriPartial.Authority),
+                headerAdded);
+        });
+    });
 
 // Add JWT Bearer authentication services
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -57,6 +88,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromSeconds(30)
+        };
+
+        options.BackchannelHttpHandler = new CloudRunIdentityTokenHandler
+        {
+            InnerHandler = new HttpClientHandler()
         };
     });
 

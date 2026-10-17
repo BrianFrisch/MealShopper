@@ -28,7 +28,7 @@ public class DiscoveryController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult GetConfiguration()
     {
-        var baseUrl = (_configuration["Jwt:Issuer"] ?? $"{Request.Scheme}://{Request.Host}").TrimEnd('/');
+        var baseUrl = IssuerResolver.Resolve(_configuration, Request);
 
         var config = new
         {

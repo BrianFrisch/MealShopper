@@ -19,7 +19,6 @@ locals {
     "secretmanager.googleapis.com",
     "sqladmin.googleapis.com",
     "redis.googleapis.com",
-    "pubsub.googleapis.com",
     "firestore.googleapis.com",
     "storage.googleapis.com",
     "artifactregistry.googleapis.com",

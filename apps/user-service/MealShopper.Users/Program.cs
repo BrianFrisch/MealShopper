@@ -20,9 +20,10 @@ builder.Services.AddScoped<IGatewayUserContext>(sp => sp.GetRequiredService<Gate
 
 var app = builder.Build();
 
-// Seed test user via stored procedure on boot
-using (var scope = app.Services.CreateScope())
+if (app.Environment.IsDevelopment())
 {
+    // Seed test users only in development.
+    using var scope = app.Services.CreateScope();
     var repo = scope.ServiceProvider.GetRequiredService<UserRepository>();
     var hasher = scope.ServiceProvider.GetRequiredService<PasswordHasher>();
 

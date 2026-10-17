@@ -1,3 +1,4 @@
+using MealShopper.Common.Security;
 using MealShopper.Identity.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -7,7 +8,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
+builder.Services.AddTransient<CloudRunIdentityTokenHandler>();
+builder.Services.AddHttpClient("UserService")
+    .AddHttpMessageHandler<CloudRunIdentityTokenHandler>();
 
 // Register RSA key material service for JWT signing and JWKS generation
 builder.Services.AddSingleton<IKeyMaterialService, RsaKeyMaterialService>();

@@ -1,7 +1,7 @@
 # apps/shopper-domain/src/services/grocery_chain_service.py
 import logging
-import os
 from typing import Any, Dict, List, Optional, cast
+from config import SHOPPER_DATABASE_URL
 
 try:
     import asyncpg  # type: ignore
@@ -9,11 +9,6 @@ except ImportError:
     asyncpg = None
 
 logger = logging.getLogger(__name__)
-
-SHOPPER_DATABASE_URL = os.getenv(
-    "SHOPPER_DATABASE_URL",
-    "postgresql://shopper_app:ShopperApp_Dev_Pwd99!@postgres:5432/mealshopper_shopper",
-)
 
 
 class GroceryChainService:

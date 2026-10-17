@@ -1,15 +1,11 @@
-import os
 from typing import List, Any, Dict, Optional
+from config import SHOPPER_DATABASE_URL
 from models import Store
 
 import asyncpg  # type: ignore
 
 
 EARTH_RADIUS_MILES = 3958.8
-SHOPPER_DATABASE_URL = os.getenv(
-    "SHOPPER_DATABASE_URL",
-    "postgresql://shopper_app:ShopperApp_Dev_Pwd99!@postgres:5432/mealshopper_shopper",
-)
 
 
 class StoreRepository:

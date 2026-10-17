@@ -79,7 +79,11 @@ public class ShopperClient : IShopperClient
                 _logger.LogError(
                     "Failed to fetch deals for store {StoreId} with status code {StatusCode}. Response: {ResponseBody}",
                     storeId, response.StatusCode, errorBody);
-                return Array.Empty<DealItemDto>();
+
+                throw new ShopperDomainException(
+                    $"Shopper Domain returned status code {(int)response.StatusCode} ({response.StatusCode}): {errorBody}",
+                    response.StatusCode,
+                    errorBody);
             }
 
             var data = await response.Content.ReadFromJsonAsync<TopDealsResponse>(JsonOptions, ct);
@@ -88,12 +92,7 @@ public class ShopperClient : IShopperClient
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "HTTP request error occurred while fetching deals for store {StoreId}.", storeId);
-            return Array.Empty<DealItemDto>();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error occurred while fetching deals for store {StoreId}.", storeId);
-            return Array.Empty<DealItemDto>();
+            throw new ShopperDomainException("Failed to communicate with Shopper Domain service.", ex);
         }
     }
 

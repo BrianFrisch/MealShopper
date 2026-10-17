@@ -2,10 +2,11 @@ resource "google_sql_database_instance" "mealshopper" {
   name                = "mealshopper-postgres"
   database_version    = "POSTGRES_16"
   region              = "us-west1"
-  deletion_protection = true
+  deletion_protection = var.sql_deletion_protection
 
   settings {
-    tier = var.sql_tier
+    edition = "ENTERPRISE"
+    tier    = var.sql_tier
 
     ip_configuration {
       ipv4_enabled    = false
@@ -21,10 +22,32 @@ resource "google_sql_database" "mealshopper" {
   instance = google_sql_database_instance.mealshopper.name
 }
 
+resource "google_sql_database" "user_service" {
+  name     = "mealshopper_users"
+  instance = google_sql_database_instance.mealshopper.name
+}
+
+resource "google_sql_database" "shopper_domain" {
+  name     = "mealshopper_shopper"
+  instance = google_sql_database_instance.mealshopper.name
+}
+
 resource "google_sql_user" "default" {
   name     = "postgres"
   instance = google_sql_database_instance.mealshopper.name
   password = var.sql_password
+}
+
+resource "google_sql_user" "users_app" {
+  name     = "users_app"
+  instance = google_sql_database_instance.mealshopper.name
+  password = var.users_db_password
+}
+
+resource "google_sql_user" "shopper_app" {
+  name     = "shopper_app"
+  instance = google_sql_database_instance.mealshopper.name
+  password = var.shopper_db_password
 }
 
 resource "google_redis_instance" "mealshopper" {
