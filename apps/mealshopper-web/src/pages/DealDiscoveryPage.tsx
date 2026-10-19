@@ -112,7 +112,11 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
             setDiscoveredStores(statusRes.result.stores || []);
             setDiscoveredDeals(statusRes.result.deals || []);
             setLoading(false);
-            setStageDescription(null);
+            setStageDescription(
+              statusRes.stageDescription?.includes('Partial deal results:')
+                ? statusRes.stageDescription
+                : null
+            );
           } else if (statusRes.status === 'Failed') {
             clearInterval(pollInterval);
             alert(`Discovery failed: ${statusRes.errorMessage || 'Unknown error'}`);
@@ -125,6 +129,8 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
           if (err?.response?.status === 401) {
             authApi.logout();
             setIsLoginOpen(true);
+          } else {
+            alert('Unable to check discovery status. Please try again.');
           }
         }
       }, 2500);
@@ -246,7 +252,7 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
           </button>
 
           {stageDescription && (
-            <p className="mt-3 text-sm text-stone-500 animate-pulse">
+            <p className={`mt-3 text-sm text-stone-500 ${loading ? 'animate-pulse' : ''}`}>
               {stageDescription}
             </p>
           )}

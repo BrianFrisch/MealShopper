@@ -92,7 +92,7 @@ builder.Services.AddHttpClient<IShopperClient, ShopperClient>(client =>
 
     pipelineBuilder.AddTimeout(new HttpTimeoutStrategyOptions
     {
-        Timeout = TimeSpan.FromSeconds(10)
+        Timeout = TimeSpan.FromMinutes(2)
     });
 });
 
@@ -148,7 +148,7 @@ builder.Services.AddHttpClient<IPlanningClient, PlanningClient>(client =>
 
     pipelineBuilder.AddTimeout(new HttpTimeoutStrategyOptions
     {
-        Timeout = TimeSpan.FromSeconds(75)
+        Timeout = TimeSpan.FromSeconds(120)
     });
 });
 

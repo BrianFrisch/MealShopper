@@ -723,6 +723,12 @@ public class MealPlanOrchestratorTests
             JobStatus.DiscoveringStores,
             JobStatus.FetchingDeals,
             JobStatus.Completed);
+        recordedTransitions
+            .Where(t => t.Status == JobStatus.FetchingDeals)
+            .Select(t => t.StageDescription)
+            .Should()
+            .Contain("Fetching deals from stores (0/2)")
+            .And.Contain("Fetching deals from stores (2/2)");
 
         // Verify planner was never called
         mockPlanningClient.Verify(p => p.GenerateMealPlanAsync(It.IsAny<GenerateMealPlanRequest>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -734,6 +740,78 @@ public class MealPlanOrchestratorTests
         mockHandler.CapturedRequests.Should().Contain(r => r.RequestUri!.ToString().Contains("v1/deals/stores/store_grocoutlet_1"));
         mockHandler.CapturedRequests.Should().NotContain(r => r.RequestUri!.ToString().Contains("v1/planner"));
         mockHandler.CapturedRequests.Should().NotContain(r => r.RequestUri!.ToString().Contains("v1/shopper/lookup-ingredients"));
+    }
+
+    [Fact]
+    public async Task ProcessDiscoveryJobAsync_WhenStoreDealFetchFails_CompletesWithPartialResultsAndReportsFailure()
+    {
+        var underlyingStore = new InMemoryJobTracker();
+        var recordedTransitions = new List<(JobStatus Status, string? StageDescription)>();
+        var jobStore = new TrackingJobStateStore(underlyingStore, recordedTransitions.Add);
+        var mockHandler = new MockHttpMessageHandler
+        {
+            CustomHandler = request =>
+            {
+                if (request.RequestUri?.ToString().Contains("v1/deals/stores/store_vons_1") == true)
+                {
+                    return new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable)
+                    {
+                        Content = new StringContent("Store deals temporarily unavailable")
+                    };
+                }
+
+                return null;
+            }
+        };
+        var shopperClient = new ShopperClient(
+            new HttpClient(mockHandler) { BaseAddress = new Uri("http://localhost:8001/") },
+            NullLogger<ShopperClient>.Instance);
+        var orchestrator = new MealPlanOrchestrator(
+            shopperClient,
+            Mock.Of<IPlannerClient>(),
+            Mock.Of<IPlanningClient>(),
+            jobStore,
+            NullLogger<MealPlanOrchestrator>.Instance,
+            Mock.Of<IGeocodingService>());
+        var jobId = Guid.NewGuid();
+
+        await jobStore.CreateJobAsync(new JobRecord
+        {
+            JobId = jobId,
+            JobType = JobType.StoreDiscovery,
+            RequestPayload = new CreateMealPlanRequest
+            {
+                Address = new AddressDto
+                {
+                    ZipCode = "90250",
+                    Latitude = 33.8958,
+                    Longitude = -118.3531
+                },
+                SearchRadiusMiles = 5
+            }
+        });
+
+        await orchestrator.ProcessDiscoveryJobAsync(jobId);
+
+        var finalJob = await jobStore.GetJobAsync(jobId);
+        finalJob.Should().NotBeNull();
+        finalJob!.Status.Should().Be(JobStatus.Completed);
+        finalJob.StageDescription.Should().Contain("Partial deal results: 1/2 stores succeeded; 1 failed (store_vons_1).");
+
+        var discoveryResult = finalJob.GetResult<DiscoveryResultDto>();
+        discoveryResult.Should().NotBeNull();
+        discoveryResult!.Deals.Should().NotBeEmpty();
+        discoveryResult.Deals.Should().OnlyContain(deal => deal.StoreId == "store_grocoutlet_1");
+        mockHandler.CapturedRequests.Should().Contain(request =>
+            request.RequestUri!.ToString().Contains("v1/deals/stores/store_vons_1"));
+        mockHandler.CapturedRequests.Should().Contain(request =>
+            request.RequestUri!.ToString().Contains("v1/deals/stores/store_grocoutlet_1"));
+        recordedTransitions
+            .Where(t => t.Status == JobStatus.FetchingDeals)
+            .Select(t => t.StageDescription)
+            .Should()
+            .Contain("Fetching deals from stores (0/2)")
+            .And.Contain("Fetching deals from stores (1/2)");
     }
 
     [Fact]

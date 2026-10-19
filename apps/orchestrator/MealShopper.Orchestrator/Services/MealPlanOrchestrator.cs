@@ -184,6 +184,10 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
     }
 
     private sealed record DealPriceInfo(decimal Price, string Unit);
+    private sealed record DealFetchStageResult(
+        TopDealsResponse Deals,
+        int SuccessfulStoreCount,
+        IReadOnlyList<string> FailedStoreIds);
 
     /// <inheritdoc />
     public async Task ProcessJobAsync(Guid jobId, CancellationToken ct = default)
@@ -216,7 +220,8 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                     new() { Id = "aldi-90260", Name = "ALDI", ZipCode = "90260" }
                 };
 
-            var topDeals = await FetchDealsStageAsync(job.JobId, candidateStores, ct);
+            var dealFetchResult = await FetchDealsStageAsync(job.JobId, candidateStores, ct);
+            var topDeals = dealFetchResult.Deals;
 
             // 3. Generate Meal Plan
             if (_legacyPlanningClient == null)
@@ -238,7 +243,10 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             await _jobStateStore.CompleteJobAsync(
                 jobId,
                 finalResultDto,
-                stageDescription: "Meal plan generated successfully.",
+                stageDescription: GetDealFetchCompletionDescription(
+                    "Meal plan generated successfully.",
+                    dealFetchResult,
+                    candidateStores.Count),
                 cancellationToken: ct);
 
             _logger.LogInformation(
@@ -256,7 +264,7 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                 JobStatus.Failed,
                 errorMessage: ex.Message,
                 stageDescription: "Workflow failed.",
-                cancellationToken: ct);
+                cancellationToken: CancellationToken.None);
         }
     }
 
@@ -294,7 +302,8 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             }
 
             // 2. Fetch Deals
-            var topDeals = await FetchDealsStageAsync(job.JobId, stores, ct);
+            var dealFetchResult = await FetchDealsStageAsync(job.JobId, stores, ct);
+            var topDeals = dealFetchResult.Deals;
 
             // 3. Assemble Discovery Result
             var discoveryResult = new DiscoveryResultDto
@@ -307,7 +316,10 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             await _jobStateStore.CompleteJobAsync(
                 jobId,
                 discoveryResult,
-                stageDescription: "Deals discovered successfully.",
+                stageDescription: GetDealFetchCompletionDescription(
+                    "Deals discovered successfully.",
+                    dealFetchResult,
+                    stores.Count),
                 cancellationToken: ct);
 
             _logger.LogInformation(
@@ -324,7 +336,7 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                 JobStatus.Failed,
                 errorMessage: ex.Message,
                 stageDescription: "Deal discovery workflow failed.",
-                cancellationToken: ct);
+                cancellationToken: CancellationToken.None);
         }
     }
 
@@ -448,52 +460,91 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
         return stores;
     }
 
-    private async Task<TopDealsResponse> FetchDealsStageAsync(
+    private async Task<DealFetchStageResult> FetchDealsStageAsync(
         Guid jobId,
         List<StoreDto> stores,
         CancellationToken ct)
     {
+        var totalStoreCount = stores.Count;
         await _jobStateStore!.UpdateJobStatusAsync(
             jobId,
             JobStatus.FetchingDeals,
-            stageDescription: "Fetching circulars and scoring top promotional deals...",
+            stageDescription: $"Fetching deals from stores (0/{totalStoreCount})",
             cancellationToken: ct);
 
+        using var progressLock = new SemaphoreSlim(1, 1);
+        var successfulStoreCount = 0;
         var dealFetchTasks = stores.Select(async store =>
         {
-            var rawDeals = await _shopperClient.GetDealsForStoreAsync(store.Id, store.PostalCode, store.Name, ct);
-            
-            // Deduplicate deals per-store so each physical store retains its own inventory
-            return rawDeals
-                .GroupBy(d => !string.IsNullOrWhiteSpace(d.CleanName)
-                    ? d.CleanName.Trim().ToLowerInvariant()
-                    : d.ItemName.Trim().ToLowerInvariant())
-                .Where(g => !string.IsNullOrWhiteSpace(g.Key))
-                .Select(g => 
-                {
-                    var best = g.OrderBy(d => d.DealPrice).ThenByDescending(d => d.ValueScore).First();
-                    return new DealItemDto
+            List<DealItemDto> storeDeals = [];
+            Exception? fetchError = null;
+
+            try
+            {
+                var rawDeals = await _shopperClient.GetDealsForStoreAsync(store.Id, store.PostalCode, store.Name, ct);
+
+                // Deduplicate deals per-store so each physical store retains its own inventory.
+                storeDeals = rawDeals
+                    .GroupBy(d => !string.IsNullOrWhiteSpace(d.CleanName)
+                        ? d.CleanName.Trim().ToLowerInvariant()
+                        : d.ItemName.Trim().ToLowerInvariant())
+                    .Where(g => !string.IsNullOrWhiteSpace(g.Key))
+                    .Select(g =>
                     {
-                        DealId = $"{store.Id}_{best.DealId}", // unique per store instance
-                        StoreId = store.Id,                  // bind strictly to this store
-                        StoreName = store.Name,
-                        ItemName = best.ItemName,
-                        CleanName = best.CleanName,
-                        NormalizedCategory = best.NormalizedCategory,
-                        ProteinSubtype = best.ProteinSubtype,
-                        ImageUrl = best.ImageUrl,
-                        DealPrice = best.DealPrice,
-                        OriginalPrice = best.OriginalPrice,
-                        Currency = best.Currency,
-                        Unit = best.Unit,
-                        ValueScore = best.ValueScore
-                    };
-                })
-                .ToList();
+                        var best = g.OrderBy(d => d.DealPrice).ThenByDescending(d => d.ValueScore).First();
+                        return new DealItemDto
+                        {
+                            DealId = $"{store.Id}_{best.DealId}",
+                            StoreId = store.Id,
+                            StoreName = store.Name,
+                            ItemName = best.ItemName,
+                            CleanName = best.CleanName,
+                            NormalizedCategory = best.NormalizedCategory,
+                            ProteinSubtype = best.ProteinSubtype,
+                            ImageUrl = best.ImageUrl,
+                            DealPrice = best.DealPrice,
+                            OriginalPrice = best.OriginalPrice,
+                            Currency = best.Currency,
+                            Unit = best.Unit,
+                            ValueScore = best.ValueScore
+                        };
+                    })
+                    .ToList();
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                fetchError = ex;
+                _logger.LogError(ex, "Failed to fetch deals for store {StoreId} ({StoreName}) in Job {JobId}.", store.Id, store.Name, jobId);
+            }
+
+            await progressLock.WaitAsync(ct);
+            try
+            {
+                if (fetchError == null)
+                {
+                    successfulStoreCount++;
+                }
+
+                await _jobStateStore.UpdateJobStatusAsync(
+                    jobId,
+                    JobStatus.FetchingDeals,
+                    stageDescription: $"Fetching deals from stores ({successfulStoreCount}/{totalStoreCount})",
+                    cancellationToken: ct);
+            }
+            finally
+            {
+                progressLock.Release();
+            }
+
+            return (Deals: storeDeals, Failed: fetchError != null, StoreId: store.Id);
         });
 
         var storeDealsResults = await Task.WhenAll(dealFetchTasks);
-        var allDeals = storeDealsResults.SelectMany(deals => deals).ToList();
+        var allDeals = storeDealsResults.SelectMany(result => result.Deals).ToList();
+        var failedStoreIds = storeDealsResults
+            .Where(result => result.Failed)
+            .Select(result => result.StoreId)
+            .ToList();
 
         var topDeals = new TopDealsResponse
         {
@@ -510,8 +561,32 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             Deals = allDeals
         };
 
+        if (failedStoreIds.Count > 0)
+        {
+            _logger.LogWarning(
+                "Retrieved deals from {SuccessfulStoreCount} of {StoreCount} stores for Job {JobId}; failures: {FailedStoreIds}.",
+                successfulStoreCount,
+                totalStoreCount,
+                jobId,
+                string.Join(", ", failedStoreIds));
+        }
+
         _logger.LogInformation("Retrieved {DealCount} deals for job {JobId}.", topDeals.Deals.Count, jobId);
-        return topDeals;
+        return new DealFetchStageResult(topDeals, successfulStoreCount, failedStoreIds);
+    }
+
+    private static string GetDealFetchCompletionDescription(
+        string successDescription,
+        DealFetchStageResult dealFetchResult,
+        int totalStoreCount)
+    {
+        if (dealFetchResult.FailedStoreIds.Count == 0)
+        {
+            return successDescription;
+        }
+
+        return $"{successDescription} Partial deal results: {dealFetchResult.SuccessfulStoreCount}/{totalStoreCount} stores succeeded; " +
+               $"{dealFetchResult.FailedStoreIds.Count} failed ({string.Join(", ", dealFetchResult.FailedStoreIds)}).";
     }
 
     private async Task<MealPlanDraftResponse> GenerateMealPlanStageAsync(
