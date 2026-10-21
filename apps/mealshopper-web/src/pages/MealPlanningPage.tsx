@@ -10,10 +10,13 @@ import type { Deal } from '../types/discovery';
 import type { MealPlanSynthesisRequest, RecipeCardDto } from '../types/mealPlan';
 
 const SELECTED_DEALS_STORAGE_KEY = 'mealshopper_selected_deals';
-const DIETARY_REQUIREMENTS = ['Keto', 'Gluten Free', 'Paleo', 'Low FODMAP'];
+const DIETARY_REQUIREMENTS = ['Keto', 'Gluten Free', 'Paleo', 'Low FODMAP', 'Mediterranean Diet'];
 const CUISINE_OPTIONS = [
-  'Mexican', 'Thai', 'Comfort Food', 'Southern', 'Classic American', 'Szechuan', 'Japanese', 'Cajun'
+  'American', 'Mexican', 'Italian', 'Chinese', 'Thai', 'Indian', 'Mediterranean',
+  'Japanese', 'Korean', 'Greek', 'Tex-Mex', 'Jamaican', 'Cuban', 'Vietnamese',
+  'Filipino', 'Hawaiian', 'Middle Eastern', 'Spanish', 'French', 'Nordic', 'Barbecue'
 ];
+const COLLAPSED_CUISINE_COUNT = 8;
 
 interface StoredDealsState {
   deals: Deal[];
@@ -69,9 +72,9 @@ export const MealPlanningPage = () => {
   const { deals: selectedDeals } = storedDealsState;
   const [dietaryPreferences, setDietaryPreferences] = useState<string[]>([]);
   const [cuisines, setCuisines] = useState<string[]>([]);
+  const [showAllCuisines, setShowAllCuisines] = useState(false);
   const [avoidIngredients, setAvoidIngredients] = useState<string[]>([]);
   const [ingredientInput, setIngredientInput] = useState('');
-  const [daysCount, setDaysCount] = useState(3);
   const [servingsCount, setServingsCount] = useState(4);
   const [recipes, setRecipes] = useState<RecipeCardDto[]>([]);
   const [estimatedTotalTripCost, setEstimatedTotalTripCost] = useState(0);
@@ -83,6 +86,11 @@ export const MealPlanningPage = () => {
   const storeCount = new Set(selectedDeals.map(getDealStoreKey).filter(Boolean)).size;
   const keptRecipeCount = recipes.filter(recipe => recipe.isKept).length;
   const isGenerating = generationJob !== null;
+  const visibleCuisineOptions = showAllCuisines
+    ? CUISINE_OPTIONS
+    : CUISINE_OPTIONS.filter((option, index) => (
+      index < COLLAPSED_CUISINE_COUNT || cuisines.includes(option)
+    ));
 
   useEffect(() => {
     if (!generationJob) {
@@ -199,7 +207,7 @@ export const MealPlanningPage = () => {
       cuisines,
       dietaryPreferences,
       avoidIngredients,
-      daysCount,
+      daysCount: selectedDeals.length,
       servingsCount
     };
 
@@ -363,7 +371,7 @@ export const MealPlanningPage = () => {
             <fieldset>
               <legend className="mb-3 text-sm font-bold text-stone-800">Cuisines to Include</legend>
               <div className="flex flex-wrap gap-2">
-                {CUISINE_OPTIONS.map(option => (
+                {visibleCuisineOptions.map(option => (
                   <button
                     type="button"
                     key={option}
@@ -379,6 +387,16 @@ export const MealPlanningPage = () => {
                   </button>
                 ))}
               </div>
+              {CUISINE_OPTIONS.length > COLLAPSED_CUISINE_COUNT && (
+                <button
+                  type="button"
+                  aria-expanded={showAllCuisines}
+                  onClick={() => setShowAllCuisines(current => !current)}
+                  className="mt-3 text-sm font-semibold text-[#1E7538] underline hover:text-green-800"
+                >
+                  {showAllCuisines ? 'Show Less' : 'Show More'}
+                </button>
+              )}
             </fieldset>
 
             <div>
@@ -426,33 +444,18 @@ export const MealPlanningPage = () => {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="days-count" className="mb-2 block text-sm font-bold text-stone-800">
-                  Number of Meals
-                </label>
-                <select
-                  id="days-count"
-                  value={daysCount}
-                  onChange={event => setDaysCount(Number(event.target.value))}
-                  className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
-                >
-                  {[1, 2, 3, 4, 5].map(count => <option key={count} value={count}>{count}</option>)}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="servings-count" className="mb-2 block text-sm font-bold text-stone-800">
-                  Servings per Meal
-                </label>
-                <select
-                  id="servings-count"
-                  value={servingsCount}
-                  onChange={event => setServingsCount(Number(event.target.value))}
-                  className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
-                >
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map(count => <option key={count} value={count}>{count}</option>)}
-                </select>
-              </div>
+            <div>
+              <label htmlFor="servings-count" className="mb-2 block text-sm font-bold text-stone-800">
+                Servings per Meal
+              </label>
+              <select
+                id="servings-count"
+                value={servingsCount}
+                onChange={event => setServingsCount(Number(event.target.value))}
+                className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8].map(count => <option key={count} value={count}>{count}</option>)}
+              </select>
             </div>
 
             <button
