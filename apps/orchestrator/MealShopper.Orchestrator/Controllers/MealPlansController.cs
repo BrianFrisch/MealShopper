@@ -54,6 +54,7 @@ public class MealPlansController : ControllerBase
         var job = new JobRecord
         {
             JobId = jobId,
+            UserId = _userContext.UserId,
             JobType = JobType.StoreDiscoveryAndPlanGeneration,
             Status = JobStatus.Pending,
             RequestPayloadJson = JsonSerializer.Serialize(request),
@@ -175,6 +176,7 @@ public class MealPlansController : ControllerBase
         var job = new JobRecord
         {
             JobId = jobId,
+            UserId = _userContext.UserId,
             JobType = JobType.PlanGeneration,
             Status = JobStatus.Pending,
             RequestPayloadJson = JsonSerializer.Serialize(request),
@@ -210,5 +212,67 @@ public class MealPlansController : ControllerBase
         };
 
         return Accepted(locationUri, response);
+    }
+
+    [HttpPost("{jobId:guid}/confirm")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [RequireGatewayUser]
+    public async Task<IActionResult> ConfirmMealPlan(
+        [FromRoute] Guid jobId,
+        [FromBody] ConfirmMealPlanRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid || request.SelectedRecipeIds.Count == 0)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var job = await _jobStateStore.GetJobAsync(jobId, cancellationToken);
+        if (job is null)
+        {
+            return NotFound(new { error = "meal_plan_not_found", message = $"Meal plan task {jobId} does not exist." });
+        }
+
+        if (job.JobType != JobType.PlanGeneration || job.Status != JobStatus.Completed)
+        {
+            return Conflict(new { error = "meal_plan_not_ready", message = "Only completed generated meal plans can be saved." });
+        }
+
+        var result = job.GetResult<MealPlanResultDto>();
+        if (result is null)
+        {
+            return Conflict(new { error = "meal_plan_result_missing", message = "The completed meal plan has no result to save." });
+        }
+
+        var selectedRecipeIds = request.SelectedRecipeIds.ToHashSet(StringComparer.Ordinal);
+        var existingRecipeIds = result.Recipes.Select(recipe => recipe.RecipeId).ToHashSet(StringComparer.Ordinal);
+        if (selectedRecipeIds.Any(recipeId => !existingRecipeIds.Contains(recipeId)))
+        {
+            return BadRequest(new { error = "invalid_recipe_selection", message = "One or more selected recipes are not part of this meal plan." });
+        }
+
+        foreach (var recipe in result.Recipes)
+        {
+            recipe.IsKept = selectedRecipeIds.Contains(recipe.RecipeId);
+        }
+
+        var updatedJob = await _jobStateStore.CompleteJobAsync(
+            jobId,
+            result,
+            stageDescription: "Meal plan saved successfully.",
+            cancellationToken: cancellationToken);
+        if (updatedJob is null)
+        {
+            return NotFound(new { error = "meal_plan_not_found", message = $"Meal plan task {jobId} does not exist." });
+        }
+
+        _logger.LogInformation(
+            "Saved meal plan {MealPlanId} for task {JobId} with {KeptRecipeCount} kept recipes.",
+            result.MealPlanId,
+            jobId,
+            selectedRecipeIds.Count);
+
+        return Ok(new { taskId = jobId, mealPlanId = result.MealPlanId });
     }
 }

@@ -8,9 +8,7 @@ if _parent not in sys.path:
 
 from main import (
     app,
-    deal_repo,
     get_deal_adapter_factory,
-    get_deal_repository,
     get_deal_storage,
     get_store_deals,
     get_store_repository,
@@ -29,9 +27,7 @@ __all__ = [
     "get_deal_storage",
     "get_deal_adapter_factory",
     "get_store_repository",
-    "get_deal_repository",
     "store_repo",
-    "deal_repo",
 ]
 
 if __name__ == "__main__":

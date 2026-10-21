@@ -27,6 +27,12 @@ variable "shopper_db_password" {
   sensitive   = true
 }
 
+variable "planner_db_password" {
+  description = "Password for the Planning service PostgreSQL role; must match the mealshopper-planner-db-password Secret Manager version."
+  type        = string
+  sensitive   = true
+}
+
 variable "sql_tier" {
   description = "Cloud SQL machine tier. db-f1-micro is the lowest-cost shared-core tier, but is not an always-free tier."
   type        = string

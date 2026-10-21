@@ -16,9 +16,7 @@ import redis.asyncio as redis
 from config import REDIS_URL
 import dependencies
 from dependencies import (
-    deal_repo,
     get_deal_adapter_factory,
-    get_deal_repository,
     get_deal_storage,
     get_store_repository,
     store_repo,
@@ -79,9 +77,7 @@ __all__ = [
     "get_deal_storage",
     "get_deal_adapter_factory",
     "get_store_repository",
-    "get_deal_repository",
     "store_repo",
-    "deal_repo",
 ]
 
 if __name__ == "__main__":

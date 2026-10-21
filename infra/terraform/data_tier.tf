@@ -32,6 +32,11 @@ resource "google_sql_database" "shopper_domain" {
   instance = google_sql_database_instance.mealshopper.name
 }
 
+resource "google_sql_database" "planning_domain" {
+  name     = "mealshopper_planner"
+  instance = google_sql_database_instance.mealshopper.name
+}
+
 resource "google_sql_user" "default" {
   name     = "postgres"
   instance = google_sql_database_instance.mealshopper.name
@@ -48,6 +53,12 @@ resource "google_sql_user" "shopper_app" {
   name     = "shopper_app"
   instance = google_sql_database_instance.mealshopper.name
   password = var.shopper_db_password
+}
+
+resource "google_sql_user" "planner_app" {
+  name     = "planner_app"
+  instance = google_sql_database_instance.mealshopper.name
+  password = var.planner_db_password
 }
 
 resource "google_redis_instance" "mealshopper" {

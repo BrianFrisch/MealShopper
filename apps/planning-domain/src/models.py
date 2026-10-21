@@ -1,5 +1,6 @@
 import re
 from typing import List, Optional, Union
+from uuid import UUID
 from pydantic import BaseModel, Field, AliasChoices, field_validator
 
 
@@ -67,6 +68,7 @@ class MissingIngredient(BaseModel):
 
 
 class MealPlanRequest(BaseModel):
+    user_id: UUID
     scored_deals: List[DealInput] = Field(
         ...,
         validation_alias=AliasChoices("scored_deals", "top_deals"),

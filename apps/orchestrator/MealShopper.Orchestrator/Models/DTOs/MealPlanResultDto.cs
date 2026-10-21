@@ -24,6 +24,8 @@ public class DisplayIngredientDto
     /// Formatted deal price description (e.g., "$2.49 / lb"), or null if unavailable.
     /// </summary>
     public string? DealPriceDescription { get; set; }
+
+    public bool IsPromotional { get; set; }
 }
 
 /// <summary>
@@ -31,6 +33,8 @@ public class DisplayIngredientDto
 /// </summary>
 public class RecipeCardDto
 {
+    public string RecipeId { get; set; } = string.Empty;
+
     /// <summary>
     /// Title or display name of the recipe.
     /// </summary>
@@ -40,6 +44,8 @@ public class RecipeCardDto
     /// Short description or summary of the recipe.
     /// </summary>
     public string Description { get; set; } = string.Empty;
+
+    public string? ProteinSubtype { get; set; }
 
     /// <summary>
     /// URL to a thumbnail image for the recipe (placeholder).
@@ -60,6 +66,8 @@ public class RecipeCardDto
     /// Step-by-step cooking preparation instructions.
     /// </summary>
     public List<string> Instructions { get; set; } = [];
+
+    public bool IsKept { get; set; }
 }
 
 /// <summary>

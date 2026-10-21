@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Header } from '../components/Header';
 import { LoginModal } from '../components/LoginModal';
 import { DealImageTooltip } from '../components/DealImageTooltip';
@@ -10,12 +11,14 @@ import { MapPin, Store as StoreIcon, Loader2 } from 'lucide-react';
 const SUBTYPE_FILTERS: Array<'All' | ProteinSubtype> = [
   'All', 'Beef', 'Chicken', 'Pork', 'Turkey', 'Seafood', 'Lamb'
 ];
+const SELECTED_DEALS_STORAGE_KEY = 'mealshopper_selected_deals';
 
 interface DealDiscoveryPageProps {
   onProceedToPlan?: (selectedDeals: Deal[]) => void;
 }
 
 export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedToPlan }) => {
+  const navigate = useNavigate();
   const [address, setAddress] = useState({
     street: '123 Hawthorne Blvd',
     city: 'Lawndale',
@@ -34,6 +37,13 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
   
   // Auth state
   const [isLoginOpen, setIsLoginOpen] = useState(false);
+
+  useEffect(() => {
+    const storedSelectedDeals = localStorage.getItem(SELECTED_DEALS_STORAGE_KEY);
+    if (storedSelectedDeals !== null) {
+      setSelectedDeals(JSON.parse(storedSelectedDeals) as Deal[]);
+    }
+  }, []);
 
   const getDealKey = (deal: Deal) => (
     deal.deal_id || deal.dealId ||
@@ -68,13 +78,31 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
     [store.city, store.state, store.postal_code || store.zip_code].filter(Boolean).join(', ')
   );
 
-  const toggleDealSelection = (deal: Deal) => {
+  const handleToggleDeal = (deal: Deal) => {
     const dealKey = getDealKey(deal);
-    setSelectedDeals(current => (
-      current.some(selected => getDealKey(selected) === dealKey)
-        ? current.filter(selected => getDealKey(selected) !== dealKey)
-        : [...current, deal]
-    ));
+    const nextSelectedDeals = selectedDeals.some(selected => getDealKey(selected) === dealKey)
+      ? selectedDeals.filter(selected => getDealKey(selected) !== dealKey)
+      : [...selectedDeals, deal];
+    setSelectedDeals(nextSelectedDeals);
+    localStorage.setItem(SELECTED_DEALS_STORAGE_KEY, JSON.stringify(nextSelectedDeals));
+  };
+
+  const handleRemoveDeal = (deal: Deal) => {
+    const dealKey = getDealKey(deal);
+    const nextSelectedDeals = selectedDeals.filter(selected => getDealKey(selected) !== dealKey);
+    setSelectedDeals(nextSelectedDeals);
+    localStorage.setItem(SELECTED_DEALS_STORAGE_KEY, JSON.stringify(nextSelectedDeals));
+  };
+
+  const handleClearAll = () => {
+    setSelectedDeals([]);
+    localStorage.setItem(SELECTED_DEALS_STORAGE_KEY, JSON.stringify([]));
+  };
+
+  const handleContinueToPlan = () => {
+    localStorage.setItem(SELECTED_DEALS_STORAGE_KEY, JSON.stringify(selectedDeals));
+    navigate('/plan');
+    onProceedToPlan?.(selectedDeals);
   };
 
   const handleStartDiscovery = async () => {
@@ -89,6 +117,7 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
     setDiscoveredStores([]);
     setDiscoveredDeals([]);
     setSelectedDeals([]);
+    localStorage.setItem(SELECTED_DEALS_STORAGE_KEY, JSON.stringify([]));
     setExpandedStoreId(null);
 
     try {
@@ -268,7 +297,7 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
             </div>
             <button
               type="button"
-              onClick={() => setSelectedDeals([])}
+              onClick={handleClearAll}
               disabled={selectedDeals.length === 0}
               className="text-sm font-semibold text-stone-500 underline hover:text-stone-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -303,7 +332,7 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
                           <button
                             type="button"
                             aria-label={`Remove ${title}`}
-                            onClick={() => toggleDealSelection(deal)}
+                            onClick={() => handleRemoveDeal(deal)}
                             className="rounded px-2 text-lg font-bold leading-none text-rose-600 hover:bg-rose-50"
                           >
                             ×
@@ -343,7 +372,7 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
             <button
               type="button"
               disabled={selectedDeals.length === 0}
-              onClick={() => onProceedToPlan?.(selectedDeals)}
+              onClick={handleContinueToPlan}
               className="rounded-full bg-[#1E7538] px-6 py-3 font-bold text-white shadow-sm transition hover:bg-green-800 disabled:cursor-not-allowed disabled:bg-stone-300 disabled:text-stone-500 disabled:shadow-none"
             >
               Continue to Meal Planning →
@@ -435,7 +464,7 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
                                   return (
                                     <tr
                                       key={dealKey}
-                                      onClick={() => toggleDealSelection(deal)}
+                                      onClick={() => handleToggleDeal(deal)}
                                       className={`cursor-pointer transition ${
                                         isSelected ? 'bg-green-50' : 'hover:bg-stone-50'
                                       }`}
@@ -446,7 +475,7 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
                                           checked={isSelected}
                                           aria-label={`Select ${title}`}
                                           onClick={event => event.stopPropagation()}
-                                          onChange={() => toggleDealSelection(deal)}
+                                          onChange={() => handleToggleDeal(deal)}
                                           className="h-4 w-4 accent-[#1E7538]"
                                         />
                                       </td>

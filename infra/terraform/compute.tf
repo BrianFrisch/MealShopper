@@ -225,12 +225,39 @@ resource "google_cloud_run_v2_service" "planning_domain" {
         name  = "GEMINI_MODEL_NAME"
         value = var.gemini_model_name
       }
+      env {
+        name  = "PLANNER_DB_HOST"
+        value = google_sql_database_instance.mealshopper.private_ip_address
+      }
+      env {
+        name  = "PLANNER_DB_PORT"
+        value = "5432"
+      }
+      env {
+        name  = "PLANNER_DB_NAME"
+        value = google_sql_database.planning_domain.name
+      }
+      env {
+        name  = "PLANNER_DB_USER"
+        value = google_sql_user.planner_app.name
+      }
+      env {
+        name = "PLANNER_DB_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.planner_db_password.secret_id
+            version = "latest"
+          }
+        }
+      }
     }
   }
 
   depends_on = [
     google_project_service.required_apis["run.googleapis.com"],
     google_secret_manager_secret_iam_member.runtime_secrets,
+    google_sql_database.planning_domain,
+    google_sql_user.planner_app,
   ]
 }
 

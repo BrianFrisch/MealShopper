@@ -230,7 +230,8 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             }
 
             var payload = job.GetPayload<CreateMealPlanRequest>()!;
-            var draft = await GenerateMealPlanStageAsync(job.JobId, payload.Cuisines, payload.AvoidIngredients, topDeals, ct);
+            var draft = await GenerateMealPlanStageAsync(
+                job.JobId, payload.Cuisines, payload.AvoidIngredients, topDeals, job.UserId, ct);
 
             // 4. Phase 6 Loop-Back: Resolve missing primary ingredients
             var candidateStoreIds = candidateStores.Select(s => s.Id).ToList();
@@ -365,9 +366,46 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             }
 
             var payload = job.GetPayload<MealPlanGenerationRequest>()!;
-            var topDeals = await _shopperClient.BatchLookupDealsAsync(payload.SelectedDealIds, payload.SelectedStoreIds, ct);
+            var selectedDealLookups = BuildSelectedDealLookups(payload);
+            var batchLookupResponse = await _shopperClient.BatchLookupDealsAsync(selectedDealLookups, ct);
+            if (batchLookupResponse.Deals.Count != selectedDealLookups.Items.Count)
+            {
+                throw new InvalidOperationException(
+                    $"Only {batchLookupResponse.Deals.Count} of {selectedDealLookups.Items.Count} selected deals could be found. " +
+                    "Return to Discover and select current deals again.");
+            }
 
-            var draft = await GenerateMealPlanStageAsync(job.JobId, payload.Cuisines, payload.AvoidIngredients, topDeals, ct);
+            var topDeals = new TopDealsResponse
+            {
+                Timestamp = DateTimeOffset.UtcNow,
+                RegionContext = new RegionContextDto { StoreIds = payload.SelectedStoreIds.Distinct().ToList() },
+                Deals = batchLookupResponse.Deals.Select(deal => new DealItemDto
+                {
+                    DealId = deal.DealId,
+                    StoreId = deal.StoreId,
+                    StoreName = deal.StoreName,
+                    ItemName = deal.ItemName,
+                    CleanName = deal.ItemName,
+                    NormalizedCategory = deal.Category,
+                    PrimaryIngredient = deal.PrimaryIngredient,
+                    DealPrice = deal.Price,
+                    Unit = deal.Unit,
+                    ValueScore = deal.DealScore ?? 0
+                }).ToList()
+            };
+
+            var draft = await GenerateMealPlanStageAsync(
+                job.JobId,
+                payload.Cuisines,
+                payload.AvoidIngredients,
+                topDeals,
+                job.UserId,
+                ct,
+                payload.DietaryPreferences,
+                payload.DaysCount,
+                payload.ServingsCount);
+
+            ApplySelectedDealMatches(draft.Meals, topDeals.Deals);
 
             // 4. Phase 6 Loop-Back: Resolve missing primary ingredients
             var candidateStoreIds = payload.SelectedStoreIds;
@@ -400,6 +438,100 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                 stageDescription: "Workflow failed.",
                 cancellationToken: ct);
         }
+    }
+
+    private static DealBatchLookupRequest BuildSelectedDealLookups(MealPlanGenerationRequest payload)
+    {
+        var storeIds = payload.SelectedStoreIds
+            .Where(storeId => !string.IsNullOrWhiteSpace(storeId))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var dealIds = payload.SelectedDealIds
+            .Where(dealId => !string.IsNullOrWhiteSpace(dealId))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var lookups = dealIds.Select(dealId =>
+        {
+            var selectedStoreId = storeIds
+                .Where(candidate => dealId.StartsWith($"{candidate}_", StringComparison.Ordinal))
+                .OrderByDescending(candidate => candidate.Length)
+                .FirstOrDefault();
+
+            var sourceDealId = selectedStoreId is null
+                ? dealId
+                : dealId[(selectedStoreId.Length + 1)..];
+            var sourceStoreSeparator = sourceDealId.IndexOf('_');
+            if (selectedStoreId is null && sourceStoreSeparator <= 0)
+            {
+                throw new InvalidOperationException(
+                    $"Selected deal '{dealId}' is not prefixed by a selected store and does not contain a source store ID. Return to Discover and select the deal again.");
+            }
+
+            var sourceStoreId = sourceStoreSeparator > 0
+                ? sourceDealId[..sourceStoreSeparator]
+                : selectedStoreId ?? throw new InvalidOperationException(
+                    $"Selected deal '{dealId}' does not contain a source store ID.");
+
+            return new DealLookupItemDto
+            {
+                DealId = sourceDealId,
+                StoreId = sourceStoreId
+            };
+        }).ToList();
+
+        if (lookups.Count == 0)
+        {
+            throw new InvalidOperationException("At least one valid selected deal is required to generate a meal plan.");
+        }
+
+        return new DealBatchLookupRequest { Items = lookups };
+    }
+
+    private static void ApplySelectedDealMatches(
+        List<PlannedMealDto> meals,
+        List<DealItemDto> selectedDeals)
+    {
+        var dealsById = selectedDeals.ToDictionary(deal => deal.DealId, StringComparer.OrdinalIgnoreCase);
+        var dealsByIngredient = selectedDeals
+            .SelectMany(deal => new[] { deal.ItemName, deal.CleanName, deal.PrimaryIngredient }
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => (Name: NormalizeIngredientName(name), Deal: deal)))
+            .Where(match => match.Name.Length > 0)
+            .GroupBy(match => match.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Deal, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var ingredient in meals.SelectMany(meal => meal.Ingredients))
+        {
+            DealItemDto? selectedDeal = null;
+            if (!string.IsNullOrWhiteSpace(ingredient.DealId))
+            {
+                dealsById.TryGetValue(ingredient.DealId, out selectedDeal);
+            }
+
+            if (selectedDeal is null)
+            {
+                dealsByIngredient.TryGetValue(NormalizeIngredientName(ingredient.Name), out selectedDeal);
+            }
+
+            if (selectedDeal is null)
+            {
+                continue;
+            }
+
+            ingredient.DealId = selectedDeal.DealId;
+            ingredient.StoreName = selectedDeal.StoreName;
+            ingredient.IsPromotional = true;
+        }
+    }
+
+    private static string NormalizeIngredientName(string value)
+    {
+        var tokens = System.Text.RegularExpressions.Regex
+            .Matches(value.ToLowerInvariant(), "[a-z0-9]+")
+            .Select(match => match.Value)
+            .Select(token => token.Length > 4 && token.EndsWith('s') ? token[..^1] : token);
+        return string.Join(' ', tokens);
     }
 
     private async Task<List<StoreDto>> DiscoverStoresStageAsync(JobRecord job, CancellationToken ct)
@@ -494,12 +626,13 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                         var best = g.OrderBy(d => d.DealPrice).ThenByDescending(d => d.ValueScore).First();
                         return new DealItemDto
                         {
-                            DealId = $"{store.Id}_{best.DealId}",
+                            DealId = $"{best.DealId}",
                             StoreId = store.Id,
                             StoreName = store.Name,
                             ItemName = best.ItemName,
                             CleanName = best.CleanName,
                             NormalizedCategory = best.NormalizedCategory,
+                            PrimaryIngredient = best.PrimaryIngredient,
                             ProteinSubtype = best.ProteinSubtype,
                             ImageUrl = best.ImageUrl,
                             DealPrice = best.DealPrice,
@@ -594,7 +727,11 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
         List<String> cuisines,
         List<String> avoidIngredients,
         TopDealsResponse topDeals,
-        CancellationToken ct)
+        Guid userId,
+        CancellationToken ct,
+        List<string>? dietaryPreferences = null,
+        int daysCount = 3,
+        int servingsCount = 2)
     {
         await _jobStateStore!.UpdateJobStatusAsync(
             jobId,
@@ -604,9 +741,13 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
 
         var generateRequest = new GenerateMealPlanRequest
         {
+            UserId = userId,
             Cuisines = cuisines ?? [],
             AvoidIngredients = avoidIngredients ?? [],
-            TopDeals = topDeals.Deals ?? []
+            TopDeals = topDeals.Deals ?? [],
+            DietaryRestrictions = dietaryPreferences ?? [],
+            DaysCount = daysCount,
+            HouseholdSize = servingsCount
         };
 
         var draft = await _legacyPlanningClient!.GenerateMealPlanAsync(generateRequest, ct);
@@ -745,7 +886,8 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                         Name = ingredient.Name,
                         AmountDescription = amountDesc ?? string.Empty,
                         StoreName = ingredient.StoreName,
-                        DealPriceDescription = priceDesc
+                        DealPriceDescription = priceDesc,
+                        IsPromotional = true
                     });
                 }
                 else
@@ -755,13 +897,15 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                         Name = ingredient.Name,
                         AmountDescription = amountDesc,
                         StoreName = null,
-                        DealPriceDescription = null
+                        DealPriceDescription = null,
+                        IsPromotional = false
                     });
                 }
             }
 
             recipeCards.Add(new RecipeCardDto
             {
+                RecipeId = Guid.NewGuid().ToString(),
                 RecipeTitle = meal.RecipeTitle,
                 Description = meal.Description,
                 ThumbnailUrl = null,

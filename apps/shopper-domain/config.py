@@ -1,9 +1,5 @@
 import os
-from pathlib import Path
 from urllib.parse import quote_plus
-
-BASE_DIR = Path(__file__).resolve().parent
-DEALS_PATH = BASE_DIR / "data" / "deals.json"
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 

@@ -31,6 +31,17 @@ resource "google_secret_manager_secret" "shopper_db_password" {
   depends_on = [google_project_service.required_apis["secretmanager.googleapis.com"]]
 }
 
+resource "google_secret_manager_secret" "planner_db_password" {
+  secret_id = "mealshopper-planner-db-password"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.required_apis["secretmanager.googleapis.com"]]
+}
+
 resource "google_secret_manager_secret" "orchestrator_client_secret" {
   secret_id = "mealshopper-orchestrator-client-secret"
   project   = var.project_id
@@ -74,6 +85,7 @@ resource "google_secret_manager_secret_iam_member" "runtime_secrets" {
   for_each = {
     users_db_password          = google_secret_manager_secret.users_db_password.secret_id
     shopper_db_password        = google_secret_manager_secret.shopper_db_password.secret_id
+    planner_db_password        = google_secret_manager_secret.planner_db_password.secret_id
     orchestrator_client_secret = google_secret_manager_secret.orchestrator_client_secret.secret_id
     jwt_signing_key            = google_secret_manager_secret.jwt_signing_key.secret_id
     gemini_api_key             = google_secret_manager_secret.gemini_api_key.secret_id

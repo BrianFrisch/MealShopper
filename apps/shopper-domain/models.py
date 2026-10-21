@@ -40,12 +40,24 @@ class Deal(BaseModel):
     store_id: str
     store_name: str
     item_name: str
-    category: str
-    price: float
+    category: str = Field(
+        default="",
+        validation_alias=AliasChoices("category", "normalized_category"),
+    )
+    price: float = Field(
+        default=0.0,
+        validation_alias=AliasChoices("price", "deal_price"),
+    )
     unit: str
-    discount_percentage: float
-    primary_ingredient: str
-    deal_score: Optional[float] = None
+    discount_percentage: float = 0.0
+    primary_ingredient: str = Field(
+        default="",
+        validation_alias=AliasChoices("primary_ingredient", "item_name"),
+    )
+    deal_score: Optional[float] = Field(
+        default=None,
+        validation_alias=AliasChoices("deal_score", "value_score"),
+    )
 
 
 class DealScoringRequest(BaseModel):
@@ -122,13 +134,13 @@ class MatchedIngredientDeal(BaseModel):
 
 
 class DealLookupItem(BaseModel):
-    deal_id: str = Field(
-        ...,
-        validation_alias=AliasChoices("deal_id", "dealId", "DealId"),
-    )
     store_id: str = Field(
         ...,
         validation_alias=AliasChoices("store_id", "storeId", "StoreId"),
+    )
+    deal_id: str = Field(
+        ...,
+        validation_alias=AliasChoices("deal_id", "dealId", "DealId"),
     )
 
 

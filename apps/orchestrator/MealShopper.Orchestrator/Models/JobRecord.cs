@@ -37,6 +37,8 @@ public record JobRecord
     /// </summary>
     public Guid JobId { get; init; } = Guid.NewGuid();
 
+    public Guid UserId { get; init; }
+
     public JobType JobType { get; init; } = JobType.StoreDiscoveryAndPlanGeneration;
 
     /// <summary>

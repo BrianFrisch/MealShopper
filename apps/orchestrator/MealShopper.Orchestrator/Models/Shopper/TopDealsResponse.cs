@@ -80,6 +80,12 @@ public class DealItemDto
     public string NormalizedCategory { get; set; } = string.Empty;
 
     /// <summary>
+    /// Normalized ingredient represented by the deal, when provided by the shopper domain.
+    /// </summary>
+    [JsonPropertyName("primary_ingredient")]
+    public string PrimaryIngredient { get; set; } = string.Empty;
+
+    /// <summary>
     /// Protein subtype for meat, poultry, or seafood items (e.g., Chicken, Beef, Salmon).
     /// </summary>
     [JsonPropertyName("protein_subtype")]

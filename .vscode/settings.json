@@ -38,5 +38,6 @@
     "python.analysis.diagnosticSeverityOverrides": {
         "reportUnknownMemberType": "none",
         "reportUnknownVariableType": "none"
-    }
+    },
+    "python.terminal.useEnvFile": true
 }

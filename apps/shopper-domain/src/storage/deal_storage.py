@@ -225,6 +225,72 @@ class PartitionedDealStorage:
                     pass
         return results
 
+    async def get_deals_by_keys(
+        self,
+        deal_store_pairs: list[tuple[str, str]],
+    ) -> list[dict[str, Any]]:
+        lookup_pairs = list(
+            dict.fromkeys(
+                (store_id.strip(), deal_id.strip())
+                for store_id, deal_id in deal_store_pairs
+                if store_id.strip() and deal_id.strip()
+            )
+        )
+        if not lookup_pairs:
+            return []
+
+        deal_ids_by_pair = {
+            (store_id, deal_id): (
+                deal_id
+                if deal_id.startswith(f"{store_id}_")
+                else f"{store_id}_{deal_id}"
+            )
+            for store_id, deal_id in lookup_pairs
+        }
+        deal_ids = list(dict.fromkeys(deal_ids_by_pair.values()))
+        for deal_id in deal_ids:
+            logger.info("Looking up deal for deal_id=%s", deal_id)
+        cached_deals = await self.redis.mget(
+            [f"deals:data:{deal_id}" for deal_id in deal_ids]
+        )
+        logger.info("Found %d cached deals for requested keys", len(cached_deals))
+
+        deals_by_key: dict[str, dict[str, Any]] = {}
+
+        for deal_id, raw in zip(deal_ids, cached_deals):
+            if raw is None:
+                continue
+            payload = json.loads(raw)
+            if payload.get("deal_id") != deal_id or not payload.get("store_id"):
+                logger.warning("Cached deal payload mismatch for deal_id=%s: %s", deal_id, payload)
+                continue
+            deals_by_key[deal_id] = payload
+
+        missing_pairs = [
+            (store_id, deal_id)
+            for store_id, deal_id in lookup_pairs
+            if deal_ids_by_pair[(store_id, deal_id)] not in deals_by_key
+        ]
+        if missing_pairs:
+            cached_by_store = await self.get_deals_for_stores(
+                list(dict.fromkeys(store_id for store_id, _ in missing_pairs)),
+                tier="all",
+            )
+            for deals in cached_by_store.values():
+                for deal in deals:
+                    deal_id = str(deal.get("deal_id") or "")
+                    store_id = str(deal.get("store_id") or "")
+                    if deal_id and store_id and deal_id.startswith(f"{store_id}_"):
+                        deals_by_key[deal_id] = deal
+
+        results: list[dict[str, Any]] = []
+        for store_id, requested_deal_id in lookup_pairs:
+            deal_id = deal_ids_by_pair[(store_id, requested_deal_id)]
+            deal = deals_by_key.get(deal_id)
+            if deal and deal.get("store_id") == store_id:
+                results.append(deal)
+        return results
+
     async def get_deals_by_flyer_id(
         self,
         flyer_id: str,

@@ -355,6 +355,7 @@ public class ShopperClient : IShopperClient
             ItemName = d.ItemName,
             CleanName = d.ItemName,
             NormalizedCategory = d.Category,
+            PrimaryIngredient = d.PrimaryIngredient,
             DealPrice = d.Price,
             Unit = d.Unit,
             ValueScore = d.DealScore ?? 0.0

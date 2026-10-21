@@ -1,15 +1,13 @@
 from typing import Optional
 import redis.asyncio as redis
 
-from config import REDIS_URL, SHOPPER_DATABASE_URL, DEALS_PATH
+from config import REDIS_URL, SHOPPER_DATABASE_URL
 from geo_service import StoreRepository
-from deal_service import DealRepository
 from src.storage.deal_storage import PartitionedDealStorage
 from src.ingestion.factory import DealAdapterFactory
 
 redis_pool: Optional[redis.ConnectionPool] = None
 store_repo = StoreRepository(SHOPPER_DATABASE_URL)
-deal_repo = DealRepository(DEALS_PATH)
 
 
 def get_redis_pool() -> redis.ConnectionPool:
@@ -38,7 +36,3 @@ async def get_deal_adapter_factory() -> DealAdapterFactory:
 
 def get_store_repository() -> StoreRepository:
     return store_repo
-
-
-def get_deal_repository() -> DealRepository:
-    return deal_repo

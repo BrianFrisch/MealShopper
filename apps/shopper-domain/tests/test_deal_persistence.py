@@ -139,6 +139,59 @@ async def test_redis_deal_caching_and_category_indexing(tmp_path):
     assert produce_deals[0]["clean_name"] == "gala apples"
 
 
+@pytest.mark.anyio
+async def test_batch_lookup_retrieves_live_cached_deals_by_id_and_store(tmp_path):
+    fake_redis = FakeRedis()
+    storage = PartitionedDealStorage(redis_client=fake_redis, base_storage_dir=str(tmp_path))
+    store_id = "vons-5605136"
+    deals = [
+        {
+            "deal_id": f"{store_id}_1046379157_1",
+            "store_id": store_id,
+            "store_name": "Vons",
+            "item_name": "Boneless Skinless Chicken Breast",
+            "normalized_category": "Meat",
+            "deal_price": 2.99,
+            "unit": "lb",
+        },
+        {
+            "deal_id": f"{store_id}_1046379154",
+            "store_id": store_id,
+            "store_name": "Vons",
+            "item_name": "Ground Beef",
+            "normalized_category": "Meat",
+            "deal_price": 3.99,
+            "unit": "lb",
+        },
+        {
+            "deal_id": f"{store_id}_1046379158",
+            "store_id": store_id,
+            "store_name": "Vons",
+            "item_name": "Pork Chops",
+            "normalized_category": "Meat",
+            "deal_price": 2.49,
+            "unit": "lb",
+        },
+    ]
+    await storage.save_deals(
+        flyer_id=store_id,
+        deals=deals,
+        valid_from=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        valid_to=datetime(2026, 10, 8, tzinfo=timezone.utc),
+    )
+
+    requested_pairs = [
+        *((store_id, deal["deal_id"]) for deal in deals),
+        ("vons-wrong-store", deals[0]["deal_id"]),
+        (store_id, "vons-5605136_unknown-deal"),
+    ]
+    found_deals = await storage.get_deals_by_keys(requested_pairs)
+
+    assert [deal["deal_id"] for deal in found_deals] == [
+        deal["deal_id"] for deal in deals
+    ]
+
+
 # def test_postgres_sql_migration_syntax():
 #     """Verify Postgres table and procedure files exist and contain valid length and ON CONFLICT statements."""
 #     table_sql_path = Path(__file__).resolve().parent.parent / "Infrastructure" / "postgres" / "init" / "01_tables" / "003_grocery_deal.sql"

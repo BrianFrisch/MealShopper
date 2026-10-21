@@ -1,21 +1,19 @@
-import { useEffect, useState } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { DealDiscoveryPage } from './pages/DealDiscoveryPage';
 import { HomePage } from './pages/HomePage';
+import { MealPlanningPage } from './pages/MealPlanningPage';
+import { ShoppingListPage } from './pages/ShoppingListPage';
 
 function App() {
-  const [pathname, setPathname] = useState(window.location.pathname);
-
-  useEffect(() => {
-    const updatePathname = () => setPathname(window.location.pathname);
-    window.addEventListener('popstate', updatePathname);
-    return () => window.removeEventListener('popstate', updatePathname);
-  }, []);
-
-  if (pathname === '/discover') {
-    return <DealDiscoveryPage />;
-  }
-
-  return <HomePage />;
+  return (
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/discover" element={<DealDiscoveryPage />} />
+      <Route path="/plan" element={<MealPlanningPage />} />
+      <Route path="/shopping-list/:taskId" element={<ShoppingListPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
 }
 
 export default App;

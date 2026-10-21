@@ -12,12 +12,13 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in .env}"
       SHOPPER_DB_PASSWORD: "${SHOPPER_DB_PASSWORD:?Set SHOPPER_DB_PASSWORD in .env}"
       USERS_DB_PASSWORD: "${USERS_DB_PASSWORD:?Set USERS_DB_PASSWORD in .env}"
+      PLANNER_DB_PASSWORD: "${PLANNER_DB_PASSWORD:?Set PLANNER_DB_PASSWORD in .env}"
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/postgres/init:/docker-entrypoint-initdb.d
-      - ./infra/postgres/data/seed_data.sql:/docker-entrypoint-initdb.d/10_seed_data.sql:ro
+      - ./apps/planning-domain/Infrastructure/postgres/init:/planner-postgres-init:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]  # -d mealshopper
       interval: 3s
@@ -26,6 +27,26 @@ services:
       start_period: 5s
     networks:
       - mealshopper-net
+
+  # planner-db-init:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     PGPASSWORD: "${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in .env}"
+  #     PLANNER_DB_PASSWORD: "${PLANNER_DB_PASSWORD:?Set PLANNER_DB_PASSWORD in .env}"
+  #   volumes:
+  #     - ./infra/postgres/init/10_create_planner_database.sql:/db-init/10_create_planner_database.sql:ro
+  #     - ./infra/postgres/init/20_init_planner_schema.sql:/db-init/20_init_planner_schema.sql:ro
+  #     - ./apps/planning-domain/Infrastructure/postgres/init:/planner-postgres-init:ro
+  #   entrypoint: ["/bin/sh", "-c"]
+  #   command: >-
+  #     until pg_isready -h postgres -U postgres; do sleep 1; done;
+  #     psql -v ON_ERROR_STOP=1 -h postgres -U postgres -f /db-init/10_create_planner_database.sql &&
+  #     psql -v ON_ERROR_STOP=1 -h postgres -U postgres -f /db-init/20_init_planner_schema.sql
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   networks:
+  #     - mealshopper-net
 
   redis:
     image: redis:7-alpine
@@ -127,11 +148,23 @@ services:
       dockerfile: Dockerfile
     container_name: mealshopper-planning-domain
     environment:
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_API_KEY: "${GEMINI_API_KEY}"
       PLANNER_USE_MOCK: "${PLANNER_USE_MOCK:-false}"
       GEMINI_MODEL_NAME: "${GEMINI_MODEL_NAME:-gemini-3.8-flash}"
+      PLANNER_DB_HOST: postgres
+      PLANNER_DB_PORT: "5432"
+      PLANNER_DB_NAME: mealshopper_planner
+      PLANNER_DB_USER: planner_app
+      PLANNER_DB_PASSWORD: "${PLANNER_DB_PASSWORD:?Set PLANNER_DB_PASSWORD in .env}"
     ports:
       - "8002:8002"
+    volumes:
+      - ./apps/planning-domain/Infrastructure/postgres/init:/app/Infrastructure/postgres/init:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # planner-db-init:
+      #   condition: service_completed_successfully
     networks:
       - mealshopper-net
 

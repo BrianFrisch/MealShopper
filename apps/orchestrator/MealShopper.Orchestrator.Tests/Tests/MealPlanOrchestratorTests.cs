@@ -988,10 +988,16 @@ public class MealPlanOrchestratorTests
         var genRequest = new MealPlanGenerationRequest
         {
             SelectedStoreIds = ["store-ralphs-101", "store-sprouts-305"],
-            SelectedDealIds = ["deal-chicken-breast-001", "deal-bell-peppers-002"],
-            Cuisines = ["Mexican"],
-            AvoidIngredients = ["peanuts"],
-            DaysCount = 3
+            SelectedDealIds =
+            [
+                "store-ralphs-101_deal-chicken-breast-001",
+                "store-sprouts-305_deal-bell-peppers-002"
+            ],
+            Cuisines = ["Southern", "Classic American", "Comfort Food"],
+            DietaryPreferences = ["Keto"],
+            AvoidIngredients = ["onions", "corn", "mango"],
+            DaysCount = 3,
+            ServingsCount = 4
         };
 
         var initialJob = new JobRecord
@@ -1016,8 +1022,151 @@ public class MealPlanOrchestratorTests
         finalJob.Result!.Recipes.Should().NotBeEmpty();
 
         // Verify batch lookup was called and planner received top deals
-        mockHandler.CapturedRequests.Should().Contain(r => r.RequestUri!.ToString().Contains("v1/shopper/deals/batch-lookup"));
-        mockHandler.CapturedRequests.Should().Contain(r => r.RequestUri!.ToString().Contains("v1/planner/generate"));
+        var batchLookupRequest = mockHandler.CapturedRequests.Single(
+            request => request.RequestUri!.ToString().Contains("v1/shopper/deals/batch-lookup"));
+        var batchLookupBody = await batchLookupRequest.Content!.ReadAsStringAsync();
+        using var batchLookupJson = System.Text.Json.JsonDocument.Parse(batchLookupBody);
+        var lookupItems = batchLookupJson.RootElement.GetProperty("items").EnumerateArray().ToList();
+        lookupItems.Should().HaveCount(2);
+        lookupItems[0].GetProperty("deal_id").GetString().Should().Be("deal-chicken-breast-001");
+        lookupItems[0].GetProperty("store_id").GetString().Should().Be("store-ralphs-101");
+        lookupItems[1].GetProperty("deal_id").GetString().Should().Be("deal-bell-peppers-002");
+        lookupItems[1].GetProperty("store_id").GetString().Should().Be("store-sprouts-305");
+
+        var plannerRequest = mockHandler.CapturedRequests.Single(
+            request => request.RequestUri!.ToString().Contains("v1/planner/generate"));
+        var plannerBody = await plannerRequest.Content!.ReadAsStringAsync();
+        using var plannerJson = System.Text.Json.JsonDocument.Parse(plannerBody);
+        var plannerRoot = plannerJson.RootElement;
+        plannerRoot.GetProperty("cuisines").EnumerateArray().Select(item => item.GetString())
+            .Should().BeEquivalentTo(["Southern", "Classic American", "Comfort Food"]);
+        plannerRoot.GetProperty("dietary_restrictions").EnumerateArray().Select(item => item.GetString())
+            .Should().ContainSingle().Which.Should().Be("Keto");
+        plannerRoot.GetProperty("avoid_ingredients").EnumerateArray().Select(item => item.GetString())
+            .Should().BeEquivalentTo(["onions", "corn", "mango"]);
+        plannerRoot.GetProperty("days_count").GetInt32().Should().Be(3);
+        plannerRoot.GetProperty("household_size").GetInt32().Should().Be(4);
+        var plannerDeals = plannerRoot.GetProperty("top_deals").EnumerateArray().ToList();
+        plannerDeals.Should().HaveCount(2);
+        plannerDeals[0].GetProperty("deal_id").GetString().Should().Be("deal-chicken-breast-001");
+        plannerDeals[0].GetProperty("primary_ingredient").GetString().Should().Be("Chicken Breast");
+
+        finalJob.Result!.Recipes[0].IngredientsWithDeals
+            .Should().Contain(ingredient =>
+                ingredient.Name == "Boneless Skinless Chicken Breast" &&
+                ingredient.IsPromotional &&
+                ingredient.StoreName == "Ralphs" &&
+                ingredient.DealPriceDescription == "$2.99 / lb");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ProcessGenerationJobAsync_UsesSourceStoreIdEmbeddedInSelectedDealId(
+        bool selectedDealIdIncludesSelectedStorePrefix)
+    {
+        var jobStore = new InMemoryJobTracker();
+        var mockHandler = new MockHttpMessageHandler();
+        const string selectedStoreId = "vons-5673941";
+        const string sourceStoreId = "vons-5605136";
+        var rawDealIds = new[]
+        {
+            $"{sourceStoreId}_1046379157_1",
+            $"{sourceStoreId}_1046379154",
+            $"{sourceStoreId}_1046379158"
+        };
+        mockHandler.CustomHandler = request =>
+            request.RequestUri!.ToString().Contains("v1/shopper/deals/batch-lookup")
+                ? new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new System.Net.Http.StringContent(
+                        $$"""
+                        {
+                          "deals": [
+                            {
+                              "deal_id": "{{rawDealIds[0]}}",
+                              "store_id": "{{sourceStoreId}}",
+                              "store_name": "Vons",
+                              "item_name": "Chicken Breast",
+                              "category": "Meat & Poultry",
+                              "price": 2.99,
+                              "unit": "lb",
+                              "discount_percentage": 20,
+                              "primary_ingredient": "Chicken Breast"
+                            },
+                            {
+                              "deal_id": "{{rawDealIds[1]}}",
+                              "store_id": "{{sourceStoreId}}",
+                              "store_name": "Vons",
+                              "item_name": "Ground Beef",
+                              "category": "Meat & Poultry",
+                              "price": 3.99,
+                              "unit": "lb",
+                              "discount_percentage": 20,
+                              "primary_ingredient": "Ground Beef"
+                            },
+                            {
+                              "deal_id": "{{rawDealIds[2]}}",
+                              "store_id": "{{sourceStoreId}}",
+                              "store_name": "Vons",
+                              "item_name": "Pork Chops",
+                              "category": "Meat & Poultry",
+                              "price": 2.49,
+                              "unit": "lb",
+                              "discount_percentage": 20,
+                              "primary_ingredient": "Pork Chops"
+                            }
+                          ],
+                          "total_found": 3
+                        }
+                        """,
+                        System.Text.Encoding.UTF8,
+                        "application/json")
+                }
+                : null;
+        var shopperClient = new ShopperClient(
+            new HttpClient(mockHandler) { BaseAddress = new Uri("http://localhost:8001/") },
+            NullLogger<ShopperClient>.Instance);
+        var planningClient = new PlanningClient(
+            new HttpClient(mockHandler) { BaseAddress = new Uri("http://localhost:8002/") },
+            NullLogger<PlanningClient>.Instance);
+        var orchestrator = new MealPlanOrchestrator(
+            shopperClient,
+            Mock.Of<IPlannerClient>(),
+            planningClient,
+            jobStore,
+            NullLogger<MealPlanOrchestrator>.Instance,
+            Mock.Of<IGeocodingService>());
+
+        var jobId = Guid.NewGuid();
+        await jobStore.CreateJobAsync(new JobRecord
+        {
+            JobId = jobId,
+            JobType = JobType.PlanGeneration,
+            Status = JobStatus.Pending,
+            RequestPayloadJson = System.Text.Json.JsonSerializer.Serialize(new MealPlanGenerationRequest
+            {
+                SelectedStoreIds = [selectedStoreId],
+                SelectedDealIds = selectedDealIdIncludesSelectedStorePrefix
+                    ? rawDealIds.Select(rawDealId => $"{selectedStoreId}_{rawDealId}").ToList()
+                    : rawDealIds.ToList()
+            })
+        });
+
+        await orchestrator.ProcessGenerationJobAsync(jobId);
+
+        (await jobStore.GetJobAsync(jobId))!.Status.Should().Be(JobStatus.Completed);
+        var lookupRequest = mockHandler.CapturedRequests.Single(
+            request => request.RequestUri!.ToString().Contains("v1/shopper/deals/batch-lookup"));
+        var requestBody = await lookupRequest.Content!.ReadAsStringAsync();
+        using var requestJson = System.Text.Json.JsonDocument.Parse(requestBody);
+        var lookups = requestJson.RootElement.GetProperty("items").EnumerateArray().ToList();
+        lookups.Should().HaveCount(3);
+        for (var index = 0; index < rawDealIds.Length; index++)
+        {
+            lookups[index].GetProperty("deal_id").GetString().Should().Be(rawDealIds[index]);
+            lookups[index].GetProperty("store_id").GetString().Should().Be(sourceStoreId);
+        }
     }
 
     #endregion

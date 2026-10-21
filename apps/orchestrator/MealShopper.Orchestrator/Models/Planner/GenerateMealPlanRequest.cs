@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System;
 using MealShopper.Orchestrator.Models.Shopper;
 
 namespace MealShopper.Orchestrator.Models.Planner;
@@ -8,6 +9,9 @@ namespace MealShopper.Orchestrator.Models.Planner;
 /// </summary>
 public class GenerateMealPlanRequest
 {
+    [JsonPropertyName("user_id")]
+    public Guid UserId { get; set; }
+
     /// <summary>
     /// List of preferred cuisine types (e.g., Italian, Mexican, Asian).
     /// </summary>
@@ -31,4 +35,10 @@ public class GenerateMealPlanRequest
     /// </summary>
     [JsonPropertyName("days_count")]
     public int DaysCount { get; set; } = 3;
+
+    [JsonPropertyName("household_size")]
+    public int HouseholdSize { get; set; } = 2;
+
+    [JsonPropertyName("dietary_restrictions")]
+    public List<string> DietaryRestrictions { get; set; } = [];
 }

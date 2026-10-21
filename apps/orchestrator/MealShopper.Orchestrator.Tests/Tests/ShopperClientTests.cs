@@ -340,6 +340,7 @@ public class ShopperClientTests
         deal.DealId.Should().Be("deal-chicken-breast-001");
         deal.StoreName.Should().Be("Ralphs");
         deal.ItemName.Should().Be("Boneless Skinless Chicken Breast");
+        deal.PrimaryIngredient.Should().Be("Chicken Breast");
         deal.DealPrice.Should().Be(2.99m);
         deal.Unit.Should().Be("lb");
     }

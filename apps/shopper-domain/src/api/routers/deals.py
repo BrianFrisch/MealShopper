@@ -1,8 +1,9 @@
 from typing import Any, Dict, List
 from fastapi import APIRouter, Depends
+import logging
 
-from deal_service import DealRepository
-from dependencies import get_deal_repository
+from deal_service import find_matching_deals, get_scored_deals, map_live_deal
+from dependencies import get_deal_storage
 from models import (
     DealBatchLookupRequest,
     DealBatchLookupResponse,
@@ -13,17 +14,32 @@ from models import (
     LegacyDealsRequest,
     LookupIngredientsRequest,
 )
+from src.storage.deal_storage import PartitionedDealStorage
 
 router = APIRouter(prefix="/v1/shopper", tags=["Deals"])
 
+logger = logging.getLogger(__name__)
+
+async def _get_live_deals(
+    store_ids: list[str],
+    storage: PartitionedDealStorage,
+) -> list[dict[str, Any]]:
+    deals_by_store = await storage.get_deals_for_stores(store_ids, tier="all")
+    return [
+        deal
+        for store_id in store_ids
+        for deal in deals_by_store.get(store_id, [])
+    ]
+
 
 @router.post("/deals")
-def get_deals_legacy(
+async def get_deals_legacy(
     payload: LegacyDealsRequest,
-    deal_repo: DealRepository = Depends(get_deal_repository),
+    deal_storage: PartitionedDealStorage = Depends(get_deal_storage),
 ) -> Dict[str, Any]:
-    """Dynamically queries deals.json for the Orchestrator client."""
-    scored = deal_repo.get_scored_deals(
+    live_deals = await _get_live_deals(payload.store_ids, deal_storage)
+    scored = get_scored_deals(
+        deals=live_deals,
         store_ids=payload.store_ids,
         avoid_ingredients=payload.avoid_ingredients,
         top_n=10,
@@ -48,11 +64,13 @@ def get_deals_legacy(
 
 
 @router.post("/deals/score", response_model=DealScoringResponse)
-def score_deals(
+async def score_deals(
     payload: DealScoringRequest,
-    deal_repo: DealRepository = Depends(get_deal_repository),
+    deal_storage: PartitionedDealStorage = Depends(get_deal_storage),
 ) -> DealScoringResponse:
-    scored = deal_repo.get_scored_deals(
+    live_deals = await _get_live_deals(payload.store_ids, deal_storage)
+    scored = get_scored_deals(
+        deals=live_deals,
         store_ids=payload.store_ids,
         avoid_ingredients=payload.avoid_ingredients,
         top_n=payload.top_n,
@@ -64,11 +82,10 @@ def score_deals(
 
 
 @router.post("/lookup-ingredients")
-def lookup_ingredients(
+async def lookup_ingredients(
     payload: LookupIngredientsRequest,
-    deal_repo: DealRepository = Depends(get_deal_repository),
+    deal_storage: PartitionedDealStorage = Depends(get_deal_storage),
 ) -> Dict[str, Any]:
-    """Dynamically runs fuzzy matching against deals.json for loop-back."""
     names: List[str] = []
     for item in payload.missing_ingredients:
         if isinstance(item, dict):
@@ -88,7 +105,9 @@ def lookup_ingredients(
 
     valid_names = [n.strip() for n in names if n.strip()]
 
-    matches = deal_repo.find_matching_deals(
+    live_deals = await _get_live_deals(payload.store_ids, deal_storage)
+    matches = find_matching_deals(
+        deals=live_deals,
         store_ids=payload.store_ids,
         missing_ingredients=valid_names,
         similarity_threshold=60.0,
@@ -110,11 +129,13 @@ def lookup_ingredients(
 
 
 @router.post("/deals/match", response_model=IngredientMatchResponse)
-def match_missing_ingredients(
+async def match_missing_ingredients(
     payload: IngredientMatchRequest,
-    deal_repo: DealRepository = Depends(get_deal_repository),
+    deal_storage: PartitionedDealStorage = Depends(get_deal_storage),
 ) -> IngredientMatchResponse:
-    results = deal_repo.find_matching_deals(
+    live_deals = await _get_live_deals(payload.store_ids, deal_storage)
+    results = find_matching_deals(
+        deals=live_deals,
         store_ids=payload.store_ids,
         missing_ingredients=payload.missing_ingredients,
         similarity_threshold=payload.similarity_threshold,
@@ -126,14 +147,20 @@ def match_missing_ingredients(
 
 
 @router.post("/deals/batch-lookup", response_model=DealBatchLookupResponse)
-def batch_lookup_deals(
+async def batch_lookup_deals(
     payload: DealBatchLookupRequest,
-    deal_repo: DealRepository = Depends(get_deal_repository),
+    deal_storage: PartitionedDealStorage = Depends(get_deal_storage),
 ) -> DealBatchLookupResponse:
-    pairs = [(item.deal_id, item.store_id) for item in payload.items]
-    deals = deal_repo.get_deals_by_keys(pairs)
+    requested_pairs = [
+        (item.store_id, item.deal_id) for item in payload.items
+    ]
+    for requested in requested_pairs:
+        logger.info("Looking up deal for store_id=%s, deal_id=%s", requested[0], requested[1])
+    live_deal_data = await deal_storage.get_deals_by_keys(requested_pairs)
+    logger.info("Found %d deals for requested pairs", len(live_deal_data))
+    deals = [map_live_deal(deal) for deal in live_deal_data]
+    logger.info("Mapped %d live deals to Deal models", len(deals))
     return DealBatchLookupResponse(
         deals=deals,
         total_found=len(deals),
     )
-

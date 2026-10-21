@@ -72,7 +72,7 @@ export type DiscoveryJobResult = DiscoveryResultDto;
 
 export interface TaskStatusResponse<T> {
   jobId: string;
-  status: 'Pending' | 'DiscoveringStores' | 'FetchingDeals' | 'Completed' | 'Failed';
+  status: 'Pending' | 'DiscoveringStores' | 'FetchingDeals' | 'GeneratingMealPlan' | 'Completed' | 'Failed';
   stageDescription?: string;
   errorMessage?: string;
   result?: T;

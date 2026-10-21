@@ -27,6 +27,7 @@ through `TF_VAR_...` environment variables:
 | `sql_password` | PostgreSQL administrator password |
 | `users_db_password` | Dedicated password for the Users service database role |
 | `shopper_db_password` | Dedicated password for the Shopper service database role |
+| `planner_db_password` | Dedicated password for the Planning service database role |
 | `worker_bucket_name` | Globally unique private worker-file bucket name |
 | `web_bucket_name` | Globally unique public static-site bucket name |
 | `frontend_domain` | DNS hostname for the HTTPS load balancer |
@@ -41,12 +42,13 @@ through `TF_VAR_...` environment variables:
 The SQL password is marked sensitive, but the Cloud SQL provider stores its
 configured values in Terraform state. Configure encrypted, access-controlled
 remote state before applying; do not commit state or plaintext variable files.
-Use separate random values for the administrator, Users, and Shopper passwords.
+Use separate random values for the administrator, Users, Shopper, and Planner passwords.
 Do not reuse local development credentials in production. Terraform manages the
-two application-role passwords, while Cloud Run reads the matching password
-from each service's dedicated Secret Manager secret. Add the Users and Shopper
-passwords to the protected `deployment.tfvars` file as `users_db_password` and
-`shopper_db_password`; never pass secret values on the Terraform command line.
+application-role passwords, while Cloud Run reads the matching password
+from each service's dedicated Secret Manager secret. Add the Users, Shopper,
+and Planner passwords to the protected `deployment.tfvars` file as
+`users_db_password`, `shopper_db_password`, and `planner_db_password`; never pass
+secret values on the Terraform command line.
 For example, `openssl rand -hex 32` generates a high-entropy value suitable
 for each password; use a different value each time.
 
@@ -77,13 +79,14 @@ terraform apply `
   -target="google_secret_manager_secret.db_password" `
   -target="google_secret_manager_secret.users_db_password" `
   -target="google_secret_manager_secret.shopper_db_password" `
+  -target="google_secret_manager_secret.planner_db_password" `
   -target="google_secret_manager_secret.orchestrator_client_secret" `
   -target="google_secret_manager_secret.jwt_signing_key" `
   -target="google_secret_manager_secret.gemini_api_key"
   ```
 
-After the bootstrap apply, add versions to the Users and Shopper DB secrets
-using the exact same values provided in `deployment.tfvars`. For example, with
+After the bootstrap apply, add versions to the Users, Shopper, and Planner DB
+secrets using the exact same values provided in `deployment.tfvars`. For example, with
 each value in a protected file, use
 `gcloud secrets versions add mealshopper-shopper-db-password --data-file=<protected-file>`.
 Do not put secret values in command arguments or terminal history. Then build
@@ -138,6 +141,8 @@ start:
   `users_db_password`.
 - `mealshopper-shopper-db-password`: use the same value supplied as
   `shopper_db_password`.
+  - `mealshopper-planner-db-password`: use the same value supplied as
+    `planner_db_password`.
 - `mealshopper-orchestrator-client-secret`: use the same secret configured for
   the `orchestrator-client` in the Identity service.
 - `mealshopper-jwt-signing-key`: a PEM-encoded RSA private key. Keep it stable
