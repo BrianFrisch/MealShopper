@@ -9,7 +9,7 @@ namespace MealShopper.Identity.Models.DTOs;
 public class TokenRequest
 {
     /// <summary>
-    /// Grant type for authorization ("password" or "refresh_token").
+    /// Grant type for authorization ("password", cookie-backed "refresh_token", or "client_credentials").
     /// </summary>
     [FromForm(Name = "grant_type")]
     [JsonPropertyName("grant_type")]
@@ -28,13 +28,6 @@ public class TokenRequest
     [FromForm(Name = "password")]
     [JsonPropertyName("password")]
     public string? Password { get; set; }
-
-    /// <summary>
-    /// Refresh token string (required for "refresh_token" grant).
-    /// </summary>
-    [FromForm(Name = "refresh_token")]
-    [JsonPropertyName("refresh_token")]
-    public string? RefreshToken { get; set; }
 
     /// <summary>
     /// Client application identifier (required or optional for client_credentials grant).

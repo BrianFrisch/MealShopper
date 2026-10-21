@@ -4,6 +4,7 @@ using System.Text;
 using MealShopper.Identity.Models.DTOs;
 using MealShopper.Identity.Services;
 using Microsoft.AspNetCore.Mvc;
+using TokenLifetimes = MealShopper.Identity.Models.TokenLifetimes;
 
 namespace MealShopper.Identity.Controllers;
 
@@ -12,6 +13,7 @@ namespace MealShopper.Identity.Controllers;
 public class TokenController : ControllerBase
 {
     private static readonly string[] DefaultUserScopes = ["shopper.read", "planner.generate"];
+    private const string RefreshTokenCookieName = "mealshopper_refresh";
 
     private readonly ITokenService _tokenService;
     private readonly IRefreshTokenStore _refreshTokenStore;
@@ -69,9 +71,29 @@ public class TokenController : ControllerBase
         {
             "client_credentials" => await HandleClientCredentialsGrantAsync(request, headerClientId, headerClientSecret, ct),
             "password"           => await HandlePasswordGrantAsync(request, ct),
-            "refresh_token"      => await HandleRefreshTokenGrantAsync(request, ct),
+            "refresh_token"      => await HandleRefreshTokenGrantAsync(ct),
             _                    => BadRequest(new { error = "unsupported_grant_type", error_description = $"Grant type '{request.GrantType}' is not supported." })
         };
+    }
+
+    [HttpPost("logout")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> Logout(CancellationToken ct)
+    {
+        try
+        {
+            if (Request.Cookies.TryGetValue(RefreshTokenCookieName, out var refreshToken) &&
+                !string.IsNullOrWhiteSpace(refreshToken))
+            {
+                await _refreshTokenStore.RevokeRefreshTokenAsync(refreshToken, ct);
+            }
+        }
+        finally
+        {
+            Response.Cookies.Delete(RefreshTokenCookieName, CreateRefreshTokenCookieOptions());
+        }
+
+        return NoContent();
     }
 
     private async Task<TokenRequest?> ResolveTokenRequestAsync(TokenRequest? formRequest, CancellationToken ct)
@@ -230,6 +252,10 @@ public class TokenController : ControllerBase
             ct: ct);
 
         var refreshToken = await _refreshTokenStore.CreateRefreshTokenAsync(validationResult.UserId, ct);
+        Response.Cookies.Append(
+            RefreshTokenCookieName,
+            refreshToken,
+            CreateRefreshTokenCookieOptions());
 
         _logger.LogInformation("Successfully issued tokens for user {UserId} via password grant.", validationResult.UserId);
 
@@ -237,8 +263,7 @@ public class TokenController : ControllerBase
         {
             AccessToken = tokenResult.AccessToken,
             TokenType = tokenResult.TokenType,
-            ExpiresIn = tokenResult.ExpiresIn,
-            RefreshToken = refreshToken
+            ExpiresIn = tokenResult.ExpiresIn
         });
     }
 
@@ -283,25 +308,32 @@ public class TokenController : ControllerBase
         return (validationResult, null);
     }
 
-    private async Task<IActionResult> HandleRefreshTokenGrantAsync(TokenRequest request, CancellationToken ct)
+    private async Task<IActionResult> HandleRefreshTokenGrantAsync(CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+        if (!Request.Cookies.TryGetValue(RefreshTokenCookieName, out var refreshToken) ||
+            string.IsNullOrWhiteSpace(refreshToken))
         {
+            Response.Cookies.Delete(RefreshTokenCookieName, CreateRefreshTokenCookieOptions());
             return BadRequest(new { error = "invalid_grant", error_description = "Invalid or expired refresh token." });
         }
 
-        var tokenRecord = await _refreshTokenStore.GetRefreshTokenAsync(request.RefreshToken, ct);
+        var tokenRecord = await _refreshTokenStore.GetRefreshTokenAsync(refreshToken, ct);
         if (tokenRecord == null || tokenRecord.IsRevoked || tokenRecord.ExpiryDate < DateTimeOffset.UtcNow)
         {
             _logger.LogWarning("Invalid, expired, or revoked refresh token provided.");
+            Response.Cookies.Delete(RefreshTokenCookieName, CreateRefreshTokenCookieOptions());
             return BadRequest(new { error = "invalid_grant", error_description = "Invalid or expired refresh token." });
         }
 
         // Single-use rotation: Revoke current refresh token
-        await _refreshTokenStore.RevokeRefreshTokenAsync(request.RefreshToken, ct);
+        await _refreshTokenStore.RevokeRefreshTokenAsync(refreshToken, ct);
 
         // Issue new access token and new refresh token
         var newRefreshToken = await _refreshTokenStore.CreateRefreshTokenAsync(tokenRecord.UserId, ct);
+        Response.Cookies.Append(
+            RefreshTokenCookieName,
+            newRefreshToken,
+            CreateRefreshTokenCookieOptions());
 
         var tokenResult = await _tokenService.CreateAccessTokenAsync(
             tokenRecord.UserId.ToString(),
@@ -316,8 +348,17 @@ public class TokenController : ControllerBase
         {
             AccessToken = tokenResult.AccessToken,
             TokenType = tokenResult.TokenType,
-            ExpiresIn = tokenResult.ExpiresIn,
-            RefreshToken = newRefreshToken
+            ExpiresIn = tokenResult.ExpiresIn
         });
     }
+
+    private static CookieOptions CreateRefreshTokenCookieOptions() => new()
+    {
+        HttpOnly = true,
+        Secure = true,
+        SameSite = SameSiteMode.Lax,
+        Path = "/v1/auth",
+        Expires = DateTimeOffset.UtcNow.Add(TokenLifetimes.RefreshToken),
+        MaxAge = TokenLifetimes.RefreshToken
+    };
 }

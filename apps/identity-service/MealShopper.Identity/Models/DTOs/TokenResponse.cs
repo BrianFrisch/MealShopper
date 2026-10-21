@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace MealShopper.Identity.Models.DTOs;
 
 /// <summary>
-/// OAuth 2.0 / OpenID Connect token endpoint response payload.
+/// Access-token response payload. User refresh tokens are sent separately in an HttpOnly cookie.
 /// </summary>
 public class TokenResponse
 {
@@ -25,9 +25,4 @@ public class TokenResponse
     [JsonPropertyName("expires_in")]
     public int ExpiresIn { get; set; } = 900;
 
-    /// <summary>
-    /// Cryptographically random single-use refresh token.
-    /// </summary>
-    [JsonPropertyName("refresh_token")]
-    public string RefreshToken { get; set; } = string.Empty;
 }

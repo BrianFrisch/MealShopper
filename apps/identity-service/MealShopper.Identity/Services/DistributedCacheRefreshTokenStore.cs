@@ -8,7 +8,6 @@ namespace MealShopper.Identity.Services;
 
 public class DistributedCacheRefreshTokenStore : IRefreshTokenStore
 {
-    private static readonly TimeSpan DefaultRefreshTokenLifetime = TimeSpan.FromDays(7);
     private readonly IDistributedCache _cache;
     private readonly ILogger<DistributedCacheRefreshTokenStore> _logger;
 
@@ -29,7 +28,7 @@ public class DistributedCacheRefreshTokenStore : IRefreshTokenStore
         {
             Token = token,
             UserId = userId,
-            ExpiryDate = DateTimeOffset.UtcNow.Add(DefaultRefreshTokenLifetime),
+            ExpiryDate = DateTimeOffset.UtcNow.Add(TokenLifetimes.RefreshToken),
             IsRevoked = false
         };
 
@@ -38,7 +37,7 @@ public class DistributedCacheRefreshTokenStore : IRefreshTokenStore
 
         var options = new DistributedCacheEntryOptions
         {
-            AbsoluteExpirationRelativeToNow = DefaultRefreshTokenLifetime
+            AbsoluteExpirationRelativeToNow = TokenLifetimes.RefreshToken
         };
 
         await _cache.SetStringAsync(key, json, options, ct);
