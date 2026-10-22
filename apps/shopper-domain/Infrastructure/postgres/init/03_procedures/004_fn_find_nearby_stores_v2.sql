@@ -43,5 +43,5 @@ AS $$
           p_radius_miles * 1609.34
       )
     ORDER BY distance_miles ASC
-    LIMIT 10;
+    LIMIT 25;
 $$;

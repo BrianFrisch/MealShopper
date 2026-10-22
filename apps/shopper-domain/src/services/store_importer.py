@@ -41,6 +41,10 @@ def clean_store_number(raw_num: Optional[Any], fallback_id: str) -> str:
         digits = re.findall(r"\d+", fallback_id)
         return digits[0] if digits else "0"
     num_str = str(raw_num).strip()
+    for token in num_str.split():
+        compact_token = re.sub(r"[^a-zA-Z0-9]", "", token)
+        if re.search(r"[a-zA-Z]", compact_token) and re.search(r"\d", compact_token):
+            return compact_token[:16]
     match = re.search(r"\d+", num_str)
     if match:
         val = match.group(0).lstrip("0")
@@ -144,6 +148,7 @@ def deduplicate_stores(stores: Sequence[ParsedStore]) -> List[ParsedStore]:
                 unique_locations[coord_key] = store
         else:
             unique_locations[coord_key] = store
+
     return list(unique_locations.values())
 
 
@@ -178,7 +183,7 @@ class StoreImportService:
             spider_name=meta.get("spider") or meta.get("spider_name"),
             flyer_source_type=meta.get("flyer_source_type", "flipp"),
         )
-        conn = await asyncpg.connect(self.db_url)
+        conn = await asyncpg.connect(self.db_url)            
         try:
             await conn.execute(
                 "CALL sp_import_grocery_stores_batch_v2($1::jsonb, NULL);",
@@ -207,6 +212,7 @@ class StoreImportService:
         if not unique_stores:
             return {"chain_id": chain_key, "region": region_state, "imported_count": 0}
 
+        logger.info("Persisting %d unique stores for chain %s...", len(unique_stores), chain_key)
         await self._persist_stores(chain_key, meta, unique_stores)
 
         return {

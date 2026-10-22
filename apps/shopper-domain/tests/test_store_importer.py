@@ -18,6 +18,8 @@ from src.services.store_importer import (
 class TestStoreImporterHelpers(unittest.TestCase):
     def test_clean_store_number(self):
         self.assertEqual(clean_store_number("00123", "fallback-1"), "123")
+        self.assertEqual(clean_store_number("FE29", "fallback-1"), "FE29")
+        self.assertEqual(clean_store_number("A-0012", "fallback-1"), "A0012")
         self.assertEqual(clean_store_number("Store #456", "fallback-1"), "456")
         self.assertEqual(clean_store_number(None, "node/789"), "789")
         self.assertEqual(clean_store_number(None, "abc"), "0")
@@ -92,6 +94,18 @@ class TestStoreImporterHelpers(unittest.TestCase):
         self.assertEqual(parsed["postal_code"], "90012")
         self.assertEqual(parsed["longitude"], -118.25)
         self.assertEqual(parsed["latitude"], 34.05)
+
+        feat_alphanumeric_ref: Dict[str, Any] = {
+            **valid_feat,
+            "properties": {**valid_feat["properties"], "ref": "FE29"},
+        }
+        parsed_alphanumeric_ref = parse_geojson_feature(
+            feat_alphanumeric_ref, "ralphs", meta, "CA"
+        )
+        self.assertIsNotNone(parsed_alphanumeric_ref)
+        assert parsed_alphanumeric_ref is not None
+        self.assertEqual(parsed_alphanumeric_ref["store_id"], "ralphs-FE29")
+        self.assertEqual(parsed_alphanumeric_ref["store_number"], "FE29")
 
         # Filtered out by state
         feat_wrong_state: Dict[str, Any] = {**valid_feat, "properties": {**valid_feat["properties"], "addr:state": "NV"}}
