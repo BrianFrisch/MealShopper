@@ -9,6 +9,12 @@ from deal_normalizer import (
     needs_multi_item_expansion,
     expand_and_normalize_deals_batch,
 )
+from src.services.categories import (
+    DEFAULT_CATEGORY_MAP,
+    is_excluded_primary_meat_item,
+    resolve_protein_subtype,
+    standardize_category as _standardize_category,
+)
 
 
 try:
@@ -19,35 +25,6 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 _gemini_semaphore = asyncio.Semaphore(1)
-
-DEFAULT_CATEGORY_MAP: dict[str, str] = {
-    "produce": "Produce",
-    "fresh produce": "Produce",
-    "fruit": "Produce",
-    "fruits": "Produce",
-    "vegetable": "Produce",
-    "vegetables": "Produce",
-    "dairy": "Dairy",
-    "dairy & eggs": "Dairy",
-    "eggs": "Dairy",
-    "meat": "Meat",
-    "fresh meat": "Meat",
-    "poultry": "Meat",
-    "beef": "Meat",
-    "pork": "Meat",
-    "chicken": "Meat",
-    "seafood": "Seafood",
-    "fresh seafood": "Seafood",
-    "fish": "Seafood",
-    "bakery": "Bakery",
-    "bread": "Bakery",
-    "pantry": "Pantry",
-    "grocery": "Pantry",
-    "snacks": "Pantry",
-    "beverages": "Pantry",
-    "frozen": "Pantry",
-    "aldi finds": "Pantry",
-}
 
 
 class BaseDealAdapter(ABC):
@@ -135,105 +112,14 @@ class BaseDealAdapter(ABC):
 
     def determine_protein_subtype(self, product_name: str, normalized_category: str) -> Optional[str]:
         """Resolves specific protein subtype for meat/seafood deals."""
-        if normalized_category not in ("Meat", "Seafood"):
-            return None
-
-        name = product_name.lower()
-        if any(k in name for k in ["shrimp", "salmon", "tilapia", "fish", "tuna", "cod", "flounder", "scallop", "trout", "crab", "lobster", "halibut", "rockfish", "catfish"]):
-            return "Seafood"
-        if any(k in name for k in ["beef", "steak", "roast", "tri-tip", "tri tip", "chuck", "ground beef", "patties", "ribeye", "sirloin", "brisket", "flanken"]):
-            return "Beef"
-        if any(k in name for k in ["chicken", "breast", "breasts", "thigh", "thighs", "wing", "wings", "drumstick", "drumsticks", "tender", "tenders", "poultry"]):
-            return "Chicken"
-        if any(k in name for k in ["pork", "ribs", "chop", "chops", "loin", "bacon", "ham", "sausage", "bratwurst"]):
-            return "Pork"
-        if any(k in name for k in ["turkey"]):
-            return "Turkey"
-        if any(k in name for k in ["lamb"]):
-            return "Lamb"
-
-        return "Other"
+        return resolve_protein_subtype(product_name, normalized_category)
 
     def standardize_category(self, raw_category: str, product_name: str = "") -> str:
         """
         Maps raw category strings and product titles to standardized categories:
         Produce, Dairy, Meat, Seafood, Bakery, Pantry.
         """
-        raw_clean = (raw_category or "").strip()
-        item_clean = (product_name or "").lower()
-        cat_lower = raw_clean.lower()
-        combined = f"{cat_lower} {item_clean}"
-
-        # 1. Prepared / Convenience / Non-food items -> Pantry (evaluated on COMBINED text)
-        pantry_terms = [
-            "pizza", "hot pocket", "hot pockets", "burrito", "chimichanga",
-            "lasagna", "meal kit", "tv dinner", "bites", "waffles", "ice cream",
-            "chips", "candy", "cookies", "crackers", "cereal", "tortillas",
-            "buns", "bread", "dressing", "sauce", "mustard", "mayo",
-            "beverage", "soda", "beer", "wine", "tequila", "whiskey", "vodka",
-            "wipes", "charcoal", "pillow", "bucket", "tissue", "toothpaste", "shampoo",
-        ]
-        if any(term in combined for term in pantry_terms):
-            return "Pantry"
-
-        # 2. Product-specific checks when category is combined/ambiguous (e.g. 'Meat & Seafood')
-        meat_terms = [
-            "fresh meat", "meat", "poultry", "beef", "pork", "chicken", "turkey",
-            "steak", "steaks", "lamb", "ribs", "sausage", "bacon", "roast", "roasts",
-            "chop", "chops", "drumstick", "drumsticks", "wing", "wings", "tri-tip",
-            "tri tip", "flanken", "ribeye", "tenderloin", "brisket", "patties", "ground beef"
-        ]
-        seafood_terms = [
-            "seafood", "fish", "shrimp", "salmon", "tilapia", "tuna", "crab",
-            "lobster", "cod", "flounder", "scallop", "trout", "halibut", "mahi"
-        ]
-        if any(k in item_clean for k in meat_terms):
-            return "Meat"
-        if any(k in item_clean for k in seafood_terms):
-            return "Seafood"
-
-        # 3. Seafood checks on combined string
-        if any(k in combined for k in seafood_terms):
-            return "Seafood"
-
-        # 4. Meat checks on combined string
-        if any(k in combined for k in meat_terms):
-            return "Meat"
-
-        # 5. Produce checks
-        produce_terms = [
-            "produce", "fruit", "fruits", "vegetable", "vegetables", "greens",
-            "apple", "apples", "banana", "bananas", "avocado", "avocados", "berry",
-            "berries", "strawberries", "salad", "spinach", "lettuce", "tomato",
-            "tomatoes", "potato", "potatoes", "onion", "onions", "carrot", "carrots",
-            "pepper", "peppers", "cucumber", "zucchini", "squash", "broccoli",
-            "asparagus", "celery", "citrus", "orange", "oranges", "lemon", "lemons",
-            "lime", "limes", "corn", "peaches", "plums", "grapes", "cantaloupe", "mandarins"
-        ]
-        if any(k in combined for k in produce_terms):
-            return "Produce"
-
-        # 5. Dairy checks
-        dairy_terms = [
-            "dairy & eggs", "dairy", "cheese", "milk", "egg", "eggs", "yogurt",
-            "butter", "cream", "cheddar", "mozzarella", "sour cream", "cottage cheese"
-        ]
-        if any(k in combined for k in dairy_terms):
-            return "Dairy"
-
-        # 6. Bakery checks
-        bakery_terms = [
-            "bakery", "bread", "bagel", "bagels", "pastry", "muffin", "muffins",
-            "croissant", "cake", "rolls", "brioche"
-        ]
-        if any(k in combined for k in bakery_terms):
-            return "Bakery"
-
-        # 7. Explicit category map fallback (excluding generic 'grocery')
-        if cat_lower in self.category_map and cat_lower != "grocery":
-            return self.category_map[cat_lower]
-
-        return "Pantry"
+        return _standardize_category(raw_category, product_name, category_map=self.category_map)
 
     async def get_normalized_deals(
         self,
@@ -389,11 +275,29 @@ class BaseDealAdapter(ABC):
 
         combined_deals: list[dict[str, Any]] = expanded_candidate_deals + passthrough_deals
 
-        # 3. Deduplicate deals keyed off (store_id, clean_name)
+        # 3. Recompute category exclusions & protein_subtype after expansion, then deduplicate by (store_id, clean_name)
         deduped_deals: list[NormalizedDealItem] = []
         seen_keys: set[tuple[str, str]] = set()
 
         for deal_data in combined_deals:
+            if isinstance(deal_data, dict):
+                effective_name = str(
+                    deal_data.get("clean_name")
+                    or deal_data.get("item_name")
+                    or ""
+                )
+                effective_cat = str(
+                    deal_data.get("normalized_category")
+                    or deal_data.get("category")
+                    or "Pantry"
+                )
+                if is_excluded_primary_meat_item(effective_name):
+                    effective_cat = "Pantry"
+                    deal_data["normalized_category"] = "Pantry"
+                deal_data["protein_subtype"] = self.determine_protein_subtype(
+                    effective_name, effective_cat
+                )
+
             deal_item = (
                 deal_data
                 if isinstance(deal_data, NormalizedDealItem)

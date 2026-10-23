@@ -8,6 +8,13 @@ from typing import Any, Optional
 
 import redis.asyncio as redis
 
+from src.services.categories import (
+    NON_PRIMARY_ITEM_TERMS,
+    PRIMARY_CATEGORIES,
+    is_primary_deal,
+    normalize_category_key,
+)
+
 try:
     from src.storage.cycle_helper import get_circular_cycle_key, get_spanning_cycle_keys
 except ImportError:
@@ -19,50 +26,6 @@ DEFAULT_DATA_DIR = os.getenv(
     "DEAL_DATA_DIR",
     str(Path(__file__).resolve().parent.parent.parent / "data" / "deals"),
 )
-
-PRIMARY_CATEGORIES = {
-    "meat",
-    "fresh meat",
-    "poultry",
-    "beef",
-    "pork",
-    "chicken",
-    "meat & poultry",
-    "meat and poultry",
-    "seafood",
-    "fresh seafood",
-    "fish",
-    "shellfish",
-}
-
-
-def normalize_category_key(category: str) -> str:
-    """Normalizes category string to lowercase standard slug."""
-    cat = category.strip().lower()
-    if cat in {"meat", "meat & poultry", "meat and poultry", "poultry", "beef", "pork", "chicken"}:
-        return "meat_and_poultry"
-    if cat in {"seafood", "fish", "shellfish"}:
-        return "seafood"
-    if cat in {"produce", "fruits", "fruit", "vegetables", "vegetable"}:
-        return "produce"
-    if cat in {"dairy", "dairy & eggs", "dairy and eggs", "milk", "cheese", "eggs"}:
-        return "dairy_and_eggs"
-    if cat in {"bakery", "bread"}:
-        return "bakery"
-    if cat in {"frozen", "frozen foods"}:
-        return "frozen"
-    if cat in {"beverages", "drinks", "beverage", "soda"}:
-        return "beverages"
-    return "pantry"
-
-
-def is_primary_deal(deal: dict[str, Any]) -> bool:
-    category = (
-        deal.get("normalized_category")
-        or deal.get("category")
-        or ""
-    ).strip().lower()
-    return category in PRIMARY_CATEGORIES
 
 
 class PartitionedDealStorage:

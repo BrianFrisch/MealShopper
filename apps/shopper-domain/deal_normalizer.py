@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import re
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Optional
 
 try:
     from google import genai
@@ -15,68 +15,17 @@ except ImportError:
 
 from pydantic import BaseModel, Field, field_validator
 
+from src.services.categories import (
+    CATEGORY_MAP,
+    NON_PRIMARY_MEAT_TERMS,
+    VALID_CATEGORIES,
+    NormalizedCategory,
+    is_excluded_primary_meat_item,
+    normalize_category_label,
+    resolve_protein_subtype,
+)
+
 logger = logging.getLogger("shopper_domain.deal_normalizer")
-
-# Standard normalized grocery categories
-VALID_CATEGORIES = [
-    "Produce",
-    "Meat",
-    "Seafood",
-    "Dairy",
-    "Bakery",
-    "Pantry",
-]
-
-NormalizedCategory = Literal[
-    "Produce",
-    "Meat",
-    "Seafood",
-    "Dairy",
-    "Bakery",
-    "Pantry",
-]
-
-CATEGORY_MAP: Dict[str, NormalizedCategory] = {
-    "produce": "Produce",
-    "fruits": "Produce",
-    "fruit": "Produce",
-    "vegetables": "Produce",
-    "vegetable": "Produce",
-    "fresh produce": "Produce",
-    "meat & poultry": "Meat",
-    "meat and poultry": "Meat",
-    "meat": "Meat",
-    "poultry": "Meat",
-    "beef": "Meat",
-    "chicken": "Meat",
-    "pork": "Meat",
-    "turkey": "Meat",
-    "lamb": "Meat",
-    "seafood": "Seafood",
-    "fish": "Seafood",
-    "shellfish": "Seafood",
-    "dairy & eggs": "Dairy",
-    "dairy and eggs": "Dairy",
-    "dairy": "Dairy",
-    "eggs": "Dairy",
-    "milk": "Dairy",
-    "cheese": "Dairy",
-    "pantry": "Pantry",
-    "grocery": "Pantry",
-    "snacks": "Pantry",
-    "condiments": "Pantry",
-    "canned goods": "Pantry",
-    "bakery": "Bakery",
-    "bread": "Bakery",
-    "baked goods": "Bakery",
-    "frozen": "Pantry",
-    "frozen foods": "Pantry",
-    "frozen meals": "Pantry",
-    "beverages": "Pantry",
-    "beverage": "Pantry",
-    "drinks": "Pantry",
-    "soda": "Pantry",
-}
 
 
 class NormalizedDealItemOutput(BaseModel):
@@ -90,14 +39,7 @@ class NormalizedDealItemOutput(BaseModel):
     @field_validator("normalized_category", mode="before")
     @classmethod
     def validate_and_normalize_category(cls, v: Any) -> Any:
-        if isinstance(v, str):
-            key = v.strip().lower()
-            if key in CATEGORY_MAP:
-                return CATEGORY_MAP[key]
-            for cat in VALID_CATEGORIES:
-                if cat.lower() == key:
-                    return cat
-        return v
+        return normalize_category_label(v)
 
 
 class DealExpansionItem(BaseModel):
@@ -347,16 +289,25 @@ INSTRUCTIONS:
             if len(items) > 1:
                 for idx, item in enumerate(items):
                     cloned: Dict[str, Any] = copy.deepcopy(deal)
+                    effective_cat = (
+                        "Pantry"
+                        if is_excluded_primary_meat_item(item.clean_name)
+                        else item.normalized_category
+                    )
                     cloned["deal_id"] = f"{parent_deal_id}_{idx}"
                     cloned["clean_name"] = item.clean_name
-                    cloned["normalized_category"] = item.normalized_category
+                    cloned["normalized_category"] = effective_cat
                     cloned["unit"] = item.unit or parent_unit
                     if "category" in cloned:
-                        cloned["category"] = item.normalized_category
+                        cloned["category"] = effective_cat
                     if "item_name" in cloned:
                         cloned["item_name"] = item.clean_name
                     if item.qualifiers:
                         cloned["qualifiers"] = item.qualifiers
+                    if "protein_subtype" in cloned or effective_cat in ("Meat", "Seafood"):
+                        cloned["protein_subtype"] = resolve_protein_subtype(
+                            item.clean_name, effective_cat
+                        )
 
                     # Preserved / distributed brand mapping
                     if getattr(item, "brand", None):
@@ -370,15 +321,24 @@ INSTRUCTIONS:
             elif len(items) == 1:
                 item = items[0]
                 cloned = copy.deepcopy(deal)
+                effective_cat = (
+                    "Pantry"
+                    if is_excluded_primary_meat_item(item.clean_name)
+                    else item.normalized_category
+                )
                 cloned["clean_name"] = item.clean_name
-                cloned["normalized_category"] = item.normalized_category
+                cloned["normalized_category"] = effective_cat
                 cloned["unit"] = item.unit or parent_unit
                 if "category" in cloned:
-                    cloned["category"] = item.normalized_category
+                    cloned["category"] = effective_cat
                 if "item_name" in cloned:
                     cloned["item_name"] = item.clean_name
                 if item.qualifiers:
                     cloned["qualifiers"] = item.qualifiers
+                if "protein_subtype" in cloned or effective_cat in ("Meat", "Seafood"):
+                    cloned["protein_subtype"] = resolve_protein_subtype(
+                        item.clean_name, effective_cat
+                    )
 
                 # Preserved brand mapping
                 if getattr(item, "brand", None):

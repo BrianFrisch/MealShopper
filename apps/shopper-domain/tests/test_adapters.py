@@ -449,3 +449,109 @@ async def test_adapter_compound_brand_ocr_truncation_expansion():
         assert d1.deal_price == 3.49
 
 
+@pytest.mark.anyio
+async def test_multi_item_expansion_recomputes_protein_subtype_and_excludes_lunch_meat():
+    """
+    Verifies that:
+    1. Multi-item deals whose raw title initially matches Pantry (e.g. 'bites' or 'lasagna')
+       recompute protein_subtype on each split item after Gemini expansion.
+    2. Multi-protein deals (e.g. Steak or Shrimp) assign distinct protein_subtype ('Beef' vs 'Seafood')
+       to each split item rather than inheriting the parent's subtype.
+    3. Lunch meat and franks are categorized as 'Pantry' with protein_subtype=None.
+    """
+    def mock_handler(request: httpx.Request) -> httpx.Response:
+        url_str = str(request.url)
+        if "/flipp/flyers/" in url_str:
+            items = [
+                {
+                    "id": 1001,
+                    "name": "Kroger Chicken Breast Tenders, Bites or Chunks",
+                    "current_price": 9.99,
+                    "sale_story": "$9.99 each",
+                    "category": "Frozen",
+                },
+                {
+                    "id": 1002,
+                    "name": "Tiger Thai Tempura Style Shrimp or Rana Lasagna",
+                    "current_price": 5.00,
+                    "sale_story": "$5.00 each",
+                    "category": "Frozen",
+                },
+                {
+                    "id": 1003,
+                    "name": "Fresh Packed Seafood",
+                    "current_price": 6.99,
+                    "sale_story": "$6.99 each",
+                    "category": "Seafood",
+                },
+                {
+                    "id": 1004,
+                    "name": "Fresh Grass-Fed Stew Meat",
+                    "current_price": 5.99,
+                    "sale_story": "$5.99 / lb",
+                    "category": "Meat",
+                },
+                {
+                    "id": 1005,
+                    "name": "Oscar Mayer Deli Fresh Lunch Meat",
+                    "current_price": 4.49,
+                    "sale_story": "$4.49 each",
+                    "category": "Meat",
+                },
+                {
+                    "id": 1006,
+                    "name": "Bar-S Meat Franks",
+                    "current_price": 1.29,
+                    "sale_story": "$1.29 each",
+                    "category": "Meat",
+                },
+            ]
+            return httpx.Response(200, json=items)
+        elif "/flipp/flyers" in url_str:
+            return httpx.Response(200, json={"flyers": [{"id": 1, "merchant": "Ralphs"}]})
+        return httpx.Response(404)
+
+    mock_gemini_client = MagicMock()
+    mock_batch_resp = BatchDealExpansionResponse(
+        expansions=[
+            DealExpansionItem(
+                source_index=0,
+                items=[
+                    NormalizedItem(clean_name="chicken breast tenders", normalized_category="Meat", unit="each"),
+                    NormalizedItem(clean_name="chicken breast chunks", normalized_category="Meat", unit="each"),
+                ],
+            ),
+            DealExpansionItem(
+                source_index=1,
+                items=[
+                    NormalizedItem(clean_name="tempura style shrimp", normalized_category="Seafood", unit="each"),
+                    NormalizedItem(clean_name="lasagna", normalized_category="Pantry", unit="each"),
+                ],
+            ),
+        ]
+    )
+    mock_response = MagicMock()
+    mock_response.parsed = mock_batch_resp
+    mock_gemini_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
+
+    transport = httpx.MockTransport(mock_handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        adapter = FlippAdapter(client=http_client, gemini_client=mock_gemini_client)
+        _, _, deals = await adapter.get_normalized_deals("90210", "store-ralphs")
+
+        by_name = {d.clean_name: d for d in deals}
+
+        assert by_name["chicken breast tenders"].protein_subtype == "Chicken"
+        assert by_name["chicken breast chunks"].protein_subtype == "Chicken"
+        assert by_name["tempura style shrimp"].protein_subtype == "Seafood"
+        assert by_name["lasagna"].normalized_category == "Pantry"
+        assert by_name["lasagna"].protein_subtype is None
+        assert by_name["fresh packed seafood"].protein_subtype == "Seafood"
+        assert by_name["fresh grass fed stew meat"].protein_subtype == "Beef"
+        assert by_name["oscar mayer deli fresh lunch meat"].normalized_category == "Pantry"
+        assert by_name["oscar mayer deli fresh lunch meat"].protein_subtype is None
+        assert by_name["bar s meat franks"].normalized_category == "Pantry"
+        assert by_name["bar s meat franks"].protein_subtype is None
+
+
+

@@ -13,7 +13,8 @@ if shopper_dir not in sys.path:
 import httpx
 from fastapi.testclient import TestClient
 
-from main import app, ingest_store_on_demand, get_deal_storage, get_deal_adapter_factory
+from main import app, ingest_store_on_demand, get_deal_storage, get_deal_adapter_factory, get_store_repository
+from models import Store
 from src.ingestion.adapters.base import BaseDealAdapter
 from src.ingestion.factory import DealAdapterFactory
 from src.ingestion.models import NormalizedDealItem
@@ -99,6 +100,9 @@ class MockAdapter(BaseDealAdapter):
     def extract_raw_category(self, item: dict[str, Any]) -> str:
         return item.get("category", "Pantry")
 
+    def extract_image_url(self, item: dict[str, Any]) -> Optional[str]:
+        return item.get("image_url")
+
     async def get_normalized_deals(
         self, postal_code: str, store_id: str, merchant_name: Optional[str] = None, **kwargs: Any
     ) -> tuple[datetime, datetime, list[NormalizedDealItem]]:
@@ -113,13 +117,14 @@ async def test_ingest_store_on_demand_lock_acquired():
     with tempfile.TemporaryDirectory() as temp_dir:
         storage = PartitionedDealStorage(redis_client=mock_redis, base_storage_dir=temp_dir)  # type: ignore
 
-        deal_item = NormalizedDealItem(
+        primary_deal = NormalizedDealItem(
             deal_id="ralphs-101_1",
             store_id="ralphs-101",
             store_name="Ralphs",
             item_name="Chicken Breast",
             clean_name="chicken breast",
             normalized_category="Meat",
+            protein_subtype="Chicken",
             deal_price=2.99,
             original_price=4.99,
             currency="USD",
@@ -129,7 +134,41 @@ async def test_ingest_store_on_demand_lock_acquired():
             valid_from=datetime.now(timezone.utc),
             valid_to=datetime.now(timezone.utc) + timedelta(days=7),
         )
-        mock_adapter = MockAdapter(deals=[deal_item])
+        secondary_deal = NormalizedDealItem(
+            deal_id="ralphs-101_2",
+            store_id="ralphs-101",
+            store_name="Ralphs",
+            item_name="Gala Apples",
+            clean_name="gala apples",
+            normalized_category="Produce",
+            protein_subtype=None,
+            deal_price=1.49,
+            original_price=2.49,
+            currency="USD",
+            unit="lb",
+            value_score=8.5,
+            raw_promotion_text="$1.49/lb",
+            valid_from=datetime.now(timezone.utc),
+            valid_to=datetime.now(timezone.utc) + timedelta(days=7),
+        )
+        lunch_meat_deal = NormalizedDealItem(
+            deal_id="ralphs-101_3",
+            store_id="ralphs-101",
+            store_name="Ralphs",
+            item_name="Oscar Mayer Deli Fresh Lunch Meat",
+            clean_name="oscar mayer deli fresh lunch meat",
+            normalized_category="Meat",
+            protein_subtype="Other",
+            deal_price=4.49,
+            original_price=5.99,
+            currency="USD",
+            unit="each",
+            value_score=8.0,
+            raw_promotion_text="$4.49 each",
+            valid_from=datetime.now(timezone.utc),
+            valid_to=datetime.now(timezone.utc) + timedelta(days=7),
+        )
+        mock_adapter = MockAdapter(deals=[primary_deal, secondary_deal, lunch_meat_deal])
         factory = DealAdapterFactory()
         factory.register_adapter("ralphs", mock_adapter)
 
@@ -139,23 +178,26 @@ async def test_ingest_store_on_demand_lock_acquired():
             postal_code="90260",
             storage=storage,
             factory=factory,
+            tier="primary",
         )
 
         # Lock was checked with nx=True and ex=20
-        assert ("lock:ingest:ralphs-101", "1", True, 20) in mock_redis.lock_attempts
+        assert ("lock:ingest:ralphs:90260", "1", True, 20) in mock_redis.lock_attempts
         # Lock was released
-        assert "lock:ingest:ralphs-101" in mock_redis.deleted_keys
+        assert "lock:ingest:ralphs:90260" in mock_redis.deleted_keys
         # Adapter was invoked
         assert len(mock_adapter.called_with) == 1
         assert mock_adapter.called_with[0] == ("90260", "ralphs-101", "ralphs")
-        # Deals were saved and returned
+        # Only primary tier deals are returned on uncached ingestion (excluding Produce and lunch meat)
         assert len(result) == 1
         assert result[0]["item_name"] == "Chicken Breast"
         assert result[0]["deal_price"] == 2.99
 
-        # Verify storage now has the deals
-        stored = await storage.get_deals_for_stores(["ralphs-101"])
-        assert len(stored.get("ralphs-101", [])) == 1
+        # Verify storage has 1 primary deal and 2 secondary deals
+        stored_primary = await storage.get_deals_for_stores(["ralphs-101"], tier="primary")
+        assert len(stored_primary.get("ralphs-101", [])) == 1
+        stored_secondary = await storage.get_deals_for_stores(["ralphs-101"], tier="secondary")
+        assert len(stored_secondary.get("ralphs-101", [])) == 2
 
         await factory.close()
     print("test_ingest_store_on_demand_lock_acquired passed!")
@@ -168,7 +210,7 @@ async def test_ingest_store_on_demand_lock_held_by_another():
         storage = PartitionedDealStorage(redis_client=mock_redis, base_storage_dir=temp_dir)  # type: ignore
 
         # Pre-set the lock key to simulate another process holding it
-        await mock_redis.set("lock:ingest:ralphs-101", "1")
+        await mock_redis.set("lock:ingest:ralphs:90260", "1")
 
         # In parallel, populate storage after a short sleep to simulate the other request finishing
         async def mock_other_worker():
@@ -176,7 +218,10 @@ async def test_ingest_store_on_demand_lock_held_by_another():
             now = datetime.now(timezone.utc)
             await storage.save_deals(
                 store_id="ralphs-101",
-                deals=[{"deal_id": "d1", "item_name": "Apples", "deal_price": 1.50}],
+                deals=[
+                    {"deal_id": "d1", "item_name": "Ribeye Steak", "normalized_category": "Meat", "deal_price": 7.99},
+                    {"deal_id": "d2", "item_name": "Apples", "normalized_category": "Produce", "deal_price": 1.50},
+                ],
                 valid_from=now,
                 valid_to=now + timedelta(days=7),
             )
@@ -190,12 +235,13 @@ async def test_ingest_store_on_demand_lock_held_by_another():
             postal_code="90260",
             storage=storage,
             factory=factory,
+            tier="primary",
         )
         await task
 
-        # Returns deals retrieved after sleep
+        # Returns only primary deals retrieved after sleep
         assert len(result) == 1
-        assert result[0]["item_name"] == "Apples"
+        assert result[0]["item_name"] == "Ribeye Steak"
 
         await factory.close()
     print("test_ingest_store_on_demand_lock_held_by_another passed!")
@@ -229,17 +275,46 @@ def test_get_store_deals_endpoint():
         empty_adapter = MockAdapter(deals=[])
         factory.register_adapter("empty_chain", empty_adapter)
 
+        class MockStoreRepo:
+            async def get_store_context(self, store_id: str) -> Optional[Store]:
+                if store_id == "ralphs-101":
+                    return Store(
+                        id="ralphs-101",
+                        name="Ralphs",
+                        street="123 Main St",
+                        city="Lawndale",
+                        state="CA",
+                        zip_code="90260",
+                        latitude=33.89,
+                        longitude=-118.35,
+                        chain_id="ralphs",
+                    )
+                if store_id == "store-empty":
+                    return Store(
+                        id="store-empty",
+                        name="Empty",
+                        street="123 Main St",
+                        city="Lawndale",
+                        state="CA",
+                        zip_code="90260",
+                        latitude=33.89,
+                        longitude=-118.35,
+                        chain_id="empty_chain",
+                    )
+                return None
+
         app.dependency_overrides[get_deal_storage] = lambda: storage
         app.dependency_overrides[get_deal_adapter_factory] = lambda: factory
+        app.dependency_overrides[get_store_repository] = lambda: MockStoreRepo()
 
         client = TestClient(app)
 
-        # 1. 404 when no deals and no postal_code/chain supplied
-        res1 = client.get("/v1/deals/stores/ralphs-101")
+        # 1. 404 when no deals and unknown store context
+        res1 = client.get("/v1/deals/stores/unknown-store")
         assert res1.status_code == 404
 
-        # 2. On-demand ingestion triggered when postal_code and chain supplied
-        res2 = client.get("/v1/deals/stores/ralphs-101?postal_code=90260&chain=ralphs")
+        # 2. On-demand ingestion triggered when store context resolved
+        res2 = client.get("/v1/deals/stores/ralphs-101")
         assert res2.status_code == 200
         data2 = res2.json()
         assert len(data2["deals"]) == 1
@@ -252,7 +327,7 @@ def test_get_store_deals_endpoint():
         assert len(mock_adapter.called_with) == call_count_before
 
         # 4. 404 when on-demand ingestion yields 0 items
-        res4 = client.get("/v1/deals/stores/store-empty?postal_code=90260&chain=empty_chain")
+        res4 = client.get("/v1/deals/stores/store-empty")
         assert res4.status_code == 404
 
         app.dependency_overrides.clear()

@@ -5,9 +5,19 @@ import logging
 from typing import Any
 
 from src.ingestion.factory import DealAdapterFactory
+from src.services.categories import is_primary_deal
 from src.storage.deal_storage import PartitionedDealStorage
 
 logger = logging.getLogger(__name__)
+
+
+def _filter_deals_by_tier(deals: list[dict[str, Any]], tier: str) -> list[dict[str, Any]]:
+    normalized_tier = (tier or "primary").strip().lower()
+    if normalized_tier == "primary":
+        return [d for d in deals if is_primary_deal(d)]
+    if normalized_tier == "secondary":
+        return [d for d in deals if not is_primary_deal(d)]
+    return deals
 
 
 async def ingest_store_on_demand(
@@ -49,9 +59,16 @@ async def ingest_store_on_demand(
             if not lock_val:
                 # Lock released; give a quick second for keys to settle and check once more
                 await asyncio.sleep(0.5)
-                deals = await storage.get_deals_by_flyer_id(store_id, tier)
-                if deals:
-                    return deals
+                flyer_id = await storage.get_flyer_id_for_postal(postal_code, chain)
+                settled_ids: list[str] = []
+                if flyer_id:
+                    settled_ids.append(flyer_id)
+                if store_id:
+                    settled_ids.append(store_id)
+                for fid in settled_ids:
+                    deals = await storage.get_deals_by_flyer_id(fid, tier)
+                    if deals:
+                        return deals
                 break
 
         # Final fallback check
@@ -121,7 +138,7 @@ async def ingest_store_on_demand(
             ]
             await storage.save_deals(flyer_id=flyer_id, deals=deal_dicts, valid_from=valid_from, valid_to=valid_to)
 
-            return deal_dicts
+            return _filter_deals_by_tier(deal_dicts, tier)
         return []
     except Exception as exc:
         logger.error("On-demand ingestion failed for store %s (%s): %s", store_id, chain, exc, exc_info=True)
