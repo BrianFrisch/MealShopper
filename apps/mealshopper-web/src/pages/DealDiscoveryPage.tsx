@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Header } from '../components/Header';
 import { LoginModal } from '../components/LoginModal';
 import { DealImageTooltip } from '../components/DealImageTooltip';
-import type { MealPlanDiscoveryRequest, Store, Deal, ProteinSubtype } from '../types/discovery';
+import type { Address, MealPlanDiscoveryRequest, Store, Deal, ProteinSubtype } from '../types/discovery';
 import { mealPlanApi } from '../services/mealPlanApi';
 import { authApi } from '../services/authApi';
 import { MapPin, Store as StoreIcon, Loader2, RotateCcw } from 'lucide-react';
@@ -14,6 +14,32 @@ const SUBTYPE_FILTERS: Array<'All' | ProteinSubtype> = [
   'All', 'Beef', 'Chicken', 'Pork', 'Turkey', 'Seafood', 'Lamb'
 ];
 const SELECTED_DEALS_STORAGE_KEY = 'mealshopper_selected_deals';
+const USER_ADDRESS_STORAGE_KEY = 'mealshopper_user_address';
+
+const DEFAULT_ADDRESS: Address = {
+  street: '123 Main St',
+  city: 'Los Angeles',
+  state: 'CA',
+  zipCode: '90007'
+};
+
+const readStoredAddress = (): Address => {
+  try {
+    const storedAddress = localStorage.getItem(USER_ADDRESS_STORAGE_KEY);
+    if (storedAddress === null) {
+      return DEFAULT_ADDRESS;
+    }
+    const parsedAddress = JSON.parse(storedAddress) as Partial<Address>;
+    return {
+      street: typeof parsedAddress.street === 'string' ? parsedAddress.street : DEFAULT_ADDRESS.street,
+      city: typeof parsedAddress.city === 'string' ? parsedAddress.city : DEFAULT_ADDRESS.city,
+      state: typeof parsedAddress.state === 'string' ? parsedAddress.state : DEFAULT_ADDRESS.state,
+      zipCode: typeof parsedAddress.zipCode === 'string' ? parsedAddress.zipCode : DEFAULT_ADDRESS.zipCode,
+    };
+  } catch {
+    return DEFAULT_ADDRESS;
+  }
+};
 
 interface DealDiscoveryPageProps {
   onProceedToPlan?: (selectedDeals: Deal[]) => void;
@@ -21,12 +47,7 @@ interface DealDiscoveryPageProps {
 
 export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedToPlan }) => {
   const navigate = useNavigate();
-  const [address, setAddress] = useState({
-    street: '123 Hawthorne Blvd',
-    city: 'Lawndale',
-    state: 'CA',
-    zipCode: '90260'
-  });
+  const [address, setAddress] = useState<Address>(readStoredAddress);
   const [searchRadiusMiles, setSearchRadiusMiles] = useState(5);
 
   const [loading, setLoading] = useState(false);
@@ -127,6 +148,8 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
   };
 
   const handleStartDiscovery = async () => {
+    localStorage.setItem(USER_ADDRESS_STORAGE_KEY, JSON.stringify(address));
+
     const token = authApi.getToken();
     if (!token) {
       setIsLoginOpen(true);
