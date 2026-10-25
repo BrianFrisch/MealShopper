@@ -244,6 +244,11 @@ async def update_meal_plan_name(
     await recipe_service.update_meal_plan(
         meal_plan_id=meal_plan_id,
         meal_plan_name=meal_plan_name,
+        is_archived=(
+            request.is_archived
+            if request.is_archived is not None
+            else stored.get("is_archived", False)
+        ),
     )
     updated = await recipe_service.get_meal_plan(meal_plan_id)
     if updated is not None:
@@ -253,6 +258,7 @@ async def update_meal_plan_name(
         meal_plan_id=str(meal_plan_id),
         meal_plan_name=meal_plan_name,
         user_id=stored["user_id"],
+        is_archived=stored.get("is_archived", False),
         created_at=stored.get("created_at"),
     )
 

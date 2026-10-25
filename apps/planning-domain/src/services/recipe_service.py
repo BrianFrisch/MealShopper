@@ -46,6 +46,7 @@ class StoredMealPlan(TypedDict):
     meal_plan_id: str
     meal_plan_name: str
     user_id: str
+    is_archived: bool
     recipe_count: int
     created_at: str
     updated_at: str
@@ -123,13 +124,19 @@ class RecipeService:
             raise RuntimeError("Database did not return an ID for meal plan.")
         return persisted_id
 
-    async def update_meal_plan(self, meal_plan_id: UUID, meal_plan_name: str) -> None:
+    async def update_meal_plan(
+        self,
+        meal_plan_id: UUID,
+        meal_plan_name: str,
+        is_archived: bool | None = None,
+    ) -> None:
         pool = self._require_pool()
         async with pool.acquire() as connection:
             await connection.execute(
-                "CALL sp_update_meal_plan($1, $2);",
+                "CALL sp_update_meal_plan($1, $2, $3);",
                 meal_plan_id,
                 meal_plan_name,
+                is_archived,
             )
 
     async def get_meal_plan(self, meal_plan_id: UUID) -> StoredMealPlan | None:
@@ -250,11 +257,12 @@ class RecipeService:
 
     @staticmethod
     def _to_stored_meal_plan(row: Mapping[str, Any]) -> StoredMealPlan:
-        raw_count = row.get("recipe_count") if hasattr(row, "get") else (row["recipe_count"] if "recipe_count" in row else 0)
+        raw_count = row.get("recipe_count", 0)
         return {
             "meal_plan_id": str(row["meal_plan_id"]),
             "meal_plan_name": row["meal_plan_name"],
             "user_id": str(row["user_id"]),
+            "is_archived": bool(row.get("is_archived", False)),
             "recipe_count": int(raw_count or 0),
             "created_at": row["created_at"].isoformat(),
             "updated_at": row["updated_at"].isoformat(),

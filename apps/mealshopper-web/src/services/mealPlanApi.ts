@@ -18,6 +18,7 @@ export interface MealPlanRecordDto {
   meal_plan_id: string;
   meal_plan_name: string;
   user_id: string;
+  is_archived: boolean;
   recipe_count?: number;
   created_at?: string;
   updated_at?: string;
@@ -77,6 +78,20 @@ export const mealPlanApi = {
     const response = await apiClient.put<MealPlanRecordDto>(
       `/v1/planner/meal-plans/${mealPlanId}`,
       { mealPlanName },
+      authorizationHeaders(token)
+    );
+    return response.data;
+  },
+
+  async updateMealPlanArchive(
+    mealPlanId: string,
+    mealPlanName: string,
+    isArchived: boolean,
+    token: string
+  ): Promise<MealPlanRecordDto> {
+    const response = await apiClient.put<MealPlanRecordDto>(
+      `/v1/planner/meal-plans/${mealPlanId}`,
+      { mealPlanName, isArchived },
       authorizationHeaders(token)
     );
     return response.data;

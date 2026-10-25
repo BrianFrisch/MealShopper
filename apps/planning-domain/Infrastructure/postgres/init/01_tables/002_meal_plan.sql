@@ -2,9 +2,13 @@ CREATE TABLE IF NOT EXISTS meal_plan (
     meal_plan_id UUID PRIMARY KEY,
     meal_plan_name TEXT NOT NULL,
     user_id UUID NOT NULL,
+    is_archived BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE meal_plan
+    ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE INDEX IF NOT EXISTS ix_meal_plan_user_id ON meal_plan (user_id);
 

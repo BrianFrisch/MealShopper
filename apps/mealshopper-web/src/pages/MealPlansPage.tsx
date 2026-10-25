@@ -27,6 +27,11 @@ export const MealPlansPage = () => {
   const [includeArchived, setIncludeArchived] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [reloadCount, setReloadCount] = useState(0);
+  const [updatingMealPlanId, setUpdatingMealPlanId] = useState<string | null>(null);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
+  const visibleMealPlans = includeArchived
+    ? mealPlans
+    : mealPlans.filter(plan => !plan.is_archived);
 
   useEffect(() => {
     const token = authApi.getToken();
@@ -74,6 +79,37 @@ export const MealPlansPage = () => {
     };
   }, [reloadCount]);
 
+  const handleToggleArchive = async (plan: MealPlanRecordDto) => {
+    const token = authApi.getToken();
+    if (!token) {
+      setArchiveError('Please sign in to update this meal plan.');
+      setIsLoginOpen(true);
+      return;
+    }
+
+    setUpdatingMealPlanId(plan.meal_plan_id);
+    setArchiveError(null);
+    try {
+      const updatedPlan = await mealPlanApi.updateMealPlanArchive(
+        plan.meal_plan_id,
+        plan.meal_plan_name,
+        !plan.is_archived,
+        token
+      );
+      setMealPlans(current => sortMealPlansMostRecentFirst(current.map(currentPlan => (
+        currentPlan.meal_plan_id === updatedPlan.meal_plan_id
+          ? { ...currentPlan, ...updatedPlan }
+          : currentPlan
+      ))));
+    } catch (error) {
+      setArchiveError(
+        error instanceof Error ? error.message : 'Unable to update the meal plan archive status.'
+      );
+    } finally {
+      setUpdatingMealPlanId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#FDFDF9] pb-12 text-stone-900">
       <Header onUserClick={() => setIsLoginOpen(true)} />
@@ -110,7 +146,7 @@ export const MealPlansPage = () => {
             <span className="text-sm font-semibold text-stone-700">
               {isLoading
                 ? 'Loading meal plans...'
-                : `${mealPlans.length} ${mealPlans.length === 1 ? 'meal plan' : 'meal plans'}`}
+                : `${visibleMealPlans.length} ${visibleMealPlans.length === 1 ? 'meal plan' : 'meal plans'}`}
             </span>
 
             <label className="inline-flex cursor-pointer items-center gap-2.5 select-none text-sm font-medium text-stone-700">
@@ -129,6 +165,11 @@ export const MealPlansPage = () => {
           </div>
 
           <div className="mt-4">
+            {archiveError && (
+              <p role="alert" className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                {archiveError}
+              </p>
+            )}
             {isLoading ? (
               <div
                 role="status"
@@ -153,9 +194,9 @@ export const MealPlansPage = () => {
                   </button>
                 )}
               </div>
-            ) : mealPlans.length > 0 ? (
+            ) : visibleMealPlans.length > 0 ? (
               <ul className="divide-y divide-stone-200">
-                {mealPlans.map(plan => {
+                {visibleMealPlans.map(plan => {
                   const recipeCount = plan.recipe_count ?? 0;
                   return (
                     <li
@@ -168,9 +209,16 @@ export const MealPlansPage = () => {
                             <Calendar aria-hidden="true" className="h-4 w-4" />
                           </span>
                           <div className="min-w-0">
-                            <h2 className="truncate text-base font-bold text-stone-900 sm:text-lg">
-                              {plan.meal_plan_name}
-                            </h2>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h2 className="truncate text-base font-bold text-stone-900 sm:text-lg">
+                                {plan.meal_plan_name}
+                              </h2>
+                              {plan.is_archived && (
+                                <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-stone-600">
+                                  Archived
+                                </span>
+                              )}
+                            </div>
                             <p className="mt-0.5 text-xs font-medium text-stone-500 sm:text-sm">
                               {recipeCount} {recipeCount === 1 ? 'recipe' : 'recipes'} included
                             </p>
@@ -197,10 +245,16 @@ export const MealPlansPage = () => {
 
                         <button
                           type="button"
-                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-stone-200 bg-stone-50 px-3.5 py-2 text-xs font-semibold text-stone-600 transition hover:bg-stone-100 hover:text-stone-900 sm:text-sm"
+                          disabled={updatingMealPlanId === plan.meal_plan_id}
+                          onClick={() => { void handleToggleArchive(plan); }}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-stone-200 bg-stone-50 px-3.5 py-2 text-xs font-semibold text-stone-600 transition hover:bg-stone-100 hover:text-stone-900 disabled:cursor-wait disabled:opacity-60 sm:text-sm"
                         >
-                          <Archive aria-hidden="true" className="h-4 w-4 shrink-0" />
-                          <span>Archive</span>
+                          {updatingMealPlanId === plan.meal_plan_id ? (
+                            <Loader2 aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin" />
+                          ) : (
+                            <Archive aria-hidden="true" className="h-4 w-4 shrink-0" />
+                          )}
+                          <span>{plan.is_archived ? 'Unarchive' : 'Archive'}</span>
                         </button>
                       </div>
                     </li>
@@ -209,9 +263,13 @@ export const MealPlansPage = () => {
               </ul>
             ) : (
               <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50/40 p-10 text-center">
-                <h2 className="font-semibold text-stone-800">No meal plans yet</h2>
+                <h2 className="font-semibold text-stone-800">
+                  {mealPlans.length > 0 ? 'No active meal plans' : 'No meal plans yet'}
+                </h2>
                 <p className="mx-auto mt-1 max-w-md text-sm text-stone-500">
-                  Discover local grocery deals and add recipes to a meal plan to see them listed here.
+                  {mealPlans.length > 0
+                    ? 'Turn on “Include archived meal plans” to view archived plans.'
+                    : 'Discover local grocery deals and add recipes to a meal plan to see them listed here.'}
                 </p>
               </div>
             )}

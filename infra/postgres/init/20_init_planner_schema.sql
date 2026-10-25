@@ -23,7 +23,7 @@ ALTER FUNCTION fn_get_recipes_for_meal_plan(UUID) OWNER TO planner_app;
 ALTER PROCEDURE sp_create_recipe(UUID, VARCHAR, TEXT, VARCHAR, VARCHAR, TEXT, JSONB, JSONB) OWNER TO planner_app;
 ALTER PROCEDURE sp_associate_user_recipe(UUID, UUID) OWNER TO planner_app;
 ALTER PROCEDURE sp_create_meal_plan(UUID, TEXT, UUID) OWNER TO planner_app;
-ALTER PROCEDURE sp_update_meal_plan(UUID, TEXT) OWNER TO planner_app;
+ALTER PROCEDURE sp_update_meal_plan(UUID, TEXT, BOOLEAN) OWNER TO planner_app;
 ALTER PROCEDURE sp_associate_meal_plan_recipe(UUID, UUID) OWNER TO planner_app;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO planner_app;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO planner_app;

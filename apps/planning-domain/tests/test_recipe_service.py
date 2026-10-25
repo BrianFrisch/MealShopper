@@ -127,6 +127,22 @@ async def test_get_recipe_deserializes_json_fields() -> None:
 
 
 @pytest.mark.asyncio
+async def test_update_meal_plan_passes_archive_state_to_database() -> None:
+    connection = FakeConnection()
+    service = RecipeService("unused", pool=FakePool(connection))  # type: ignore[arg-type]
+    meal_plan_id = UUID("11111111-1111-1111-1111-111111111111")
+
+    await service.update_meal_plan(meal_plan_id, "Weeknight Favorites", True)
+
+    assert connection.execute_calls == [
+        (
+            "CALL sp_update_meal_plan($1, $2, $3);",
+            (meal_plan_id, "Weeknight Favorites", True),
+        )
+    ]
+
+
+@pytest.mark.asyncio
 async def test_generate_plan_persists_mock_result_for_request_user(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -228,7 +244,8 @@ async def test_meal_plan_endpoints_create_associate_and_update(
     meal_plan_id = UUID("11111111-1111-1111-1111-111111111111")
     recipe_id = UUID("33333333-3333-3333-3333-333333333333")
     associations: list[tuple[UUID, UUID]] = []
-    plans: dict[UUID, dict[str, str]] = {}
+    plans: dict[UUID, dict[str, Any]] = {}
+    update_calls: list[tuple[UUID, str, bool | None]] = []
 
     class StubRecipeService:
         async def create_meal_plan(
@@ -242,12 +259,13 @@ async def test_meal_plan_endpoints_create_associate_and_update(
                 "meal_plan_id": str(resolved_id),
                 "meal_plan_name": meal_plan_name,
                 "user_id": str(user_id),
+                "is_archived": False,
                 "created_at": "2026-10-24T18:00:00+00:00",
                 "updated_at": "2026-10-24T18:00:00+00:00",
             }
             return resolved_id
 
-        async def get_meal_plan(self, requested_id: UUID) -> dict[str, str] | None:
+        async def get_meal_plan(self, requested_id: UUID) -> dict[str, Any] | None:
             return plans.get(requested_id)
 
         async def associate_meal_plan_with_recipe(
@@ -261,8 +279,12 @@ async def test_meal_plan_endpoints_create_associate_and_update(
             self,
             meal_plan_id: UUID,
             meal_plan_name: str,
+            is_archived: bool | None = None,
         ) -> None:
+            update_calls.append((meal_plan_id, meal_plan_name, is_archived))
             plans[meal_plan_id]["meal_plan_name"] = meal_plan_name
+            if is_archived is not None:
+                plans[meal_plan_id]["is_archived"] = is_archived
             plans[meal_plan_id]["updated_at"] = "2026-10-24T18:05:00+00:00"
 
     monkeypatch.setattr(main, "recipe_service", StubRecipeService())
@@ -294,6 +316,28 @@ async def test_meal_plan_endpoints_create_associate_and_update(
     )
     assert updated.meal_plan_name == "Renamed Meal Plan"
     assert updated.updated_at == "2026-10-24T18:05:00+00:00"
+    assert updated.is_archived is False
+    assert update_calls == [(meal_plan_id, "Renamed Meal Plan", False)]
+
+    archived = await main.update_meal_plan_name(
+        meal_plan_id=meal_plan_id,
+        request=main.UpdateMealPlanNameRequest(
+            meal_plan_name="Renamed Meal Plan",
+            is_archived=True,
+        ),
+        x_user_id=str(user_id),
+    )
+    assert archived.is_archived is True
+
+    unarchived = await main.update_meal_plan_name(
+        meal_plan_id=meal_plan_id,
+        request=main.UpdateMealPlanNameRequest(
+            meal_plan_name="Renamed Meal Plan",
+            is_archived=False,
+        ),
+        x_user_id=str(user_id),
+    )
+    assert unarchived.is_archived is False
 
 
 @pytest.mark.asyncio
@@ -324,4 +368,3 @@ async def test_list_meal_plans_for_user_includes_recipe_count(
     assert listed[0].meal_plan_id == str(meal_plan_id)
     assert listed[0].meal_plan_name == "Oct 25, 2026"
     assert listed[0].recipe_count == 3
-
