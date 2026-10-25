@@ -26,6 +26,8 @@ export interface RecipeCardDto {
   pantryIngredients: RecipeIngredientDto[];
   instructions: string[];
   isKept: boolean;
+  mealPlanId?: string;
+  mealPlanName?: string;
 }
 
 export interface MealPlanSynthesisResponse {

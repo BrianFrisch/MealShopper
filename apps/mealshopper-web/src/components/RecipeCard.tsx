@@ -40,9 +40,9 @@ export const RecipeCard = ({
         type="button"
         aria-expanded={isExpanded}
         onClick={() => setIsExpanded(expanded => !expanded)}
-        className="flex w-full items-center gap-4 p-4 text-left transition hover:bg-stone-50 sm:p-5"
+        className="flex w-full items-center gap-3 p-3.5 text-left transition hover:bg-stone-50 sm:gap-4 sm:p-5"
       >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1E7538] text-sm font-bold text-white">
+        <span className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-[#1E7538] text-xs sm:text-sm font-bold text-white">
           {index + 1}
         </span>
 
@@ -50,34 +50,37 @@ export const RecipeCard = ({
           <img
             src={recipe.thumbnailUrl}
             alt=""
-            className="h-16 w-20 shrink-0 rounded-lg object-cover"
+            className="h-14 w-16 sm:h-16 sm:w-20 shrink-0 rounded-lg object-cover"
           />
         ) : (
-          <span className="flex h-16 w-20 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-400">
-            <ChefHat aria-hidden="true" className="h-8 w-8" />
+          <span className="flex h-14 w-16 sm:h-16 sm:w-20 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-400">
+            <ChefHat aria-hidden="true" className="h-6 w-6 sm:h-8 sm:w-8" />
           </span>
         )}
 
         <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="truncate font-bold text-stone-900">{recipe.recipeTitle}</span>
+          <span className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <span className="truncate text-sm sm:text-base font-bold text-stone-900">{recipe.recipeTitle}</span>
             {recipe.proteinSubtype && (
-              <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-[#1E7538]">
+              <span className="rounded-full bg-green-50 px-2 py-0.5 text-[11px] sm:text-xs font-semibold text-[#1E7538]">
                 {recipe.proteinSubtype}
               </span>
             )}
           </span>
-          <span className="mt-1 block truncate text-sm text-stone-500">{recipe.description}</span>
+          <span className="mt-0.5 sm:mt-1 block truncate text-xs sm:text-sm text-stone-500">{recipe.description}</span>
         </span>
 
         <span
-          className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${
+          className={`shrink-0 max-w-[130px] sm:max-w-[200px] truncate rounded-full px-2.5 py-1 text-[11px] sm:text-xs font-semibold ${
             recipe.isKept
               ? 'bg-emerald-100 text-emerald-800'
               : 'bg-stone-100 text-stone-600'
           }`}
+          title={recipe.isKept && recipe.mealPlanName ? `Added to ${recipe.mealPlanName}` : undefined}
         >
-          {recipe.isKept ? 'Kept' : 'Pending'}
+          {recipe.isKept
+            ? (recipe.mealPlanName ? `Added • ${recipe.mealPlanName}` : 'Added')
+            : 'Pending'}
         </span>
         <span className="shrink-0 text-stone-500">
           {isExpanded
@@ -87,18 +90,18 @@ export const RecipeCard = ({
       </button>
 
       {isExpanded && (
-        <div className="border-t border-stone-200 p-4 sm:p-6">
+        <div className="border-t border-stone-200 p-3.5 sm:p-6">
           {recipe.thumbnailUrl && (
             <img
               src={recipe.thumbnailUrl}
               alt={recipe.recipeTitle}
-              className="mb-6 max-h-96 w-full rounded-xl object-cover"
+              className="mb-4 sm:mb-6 max-h-96 w-full rounded-xl object-cover"
             />
           )}
 
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
             <section>
-              <h3 className="mb-3 font-bold text-stone-900">
+              <h3 className="mb-2.5 sm:mb-3 text-sm sm:text-base font-bold text-stone-900">
                 Promotional Deals &amp; Fresh Ingredients
               </h3>
               {recipe.ingredientsWithDeals.length > 0 ? (
@@ -116,7 +119,7 @@ export const RecipeCard = ({
             </section>
 
             <section>
-              <h3 className="mb-3 font-bold text-stone-900">Pantry Staples</h3>
+              <h3 className="mb-2.5 sm:mb-3 text-sm sm:text-base font-bold text-stone-900">Pantry Staples</h3>
               {recipe.pantryIngredients.length > 0 ? (
                 <ul className="space-y-2">
                   {recipe.pantryIngredients.map((ingredient, ingredientIndex) => (
@@ -132,9 +135,9 @@ export const RecipeCard = ({
             </section>
           </div>
 
-          <section className="mt-6">
-            <h3 className="mb-3 font-bold text-stone-900">Preparation Steps</h3>
-            <ol className="space-y-3">
+          <section className="mt-5 sm:mt-6">
+            <h3 className="mb-2.5 sm:mb-3 text-sm sm:text-base font-bold text-stone-900">Preparation Steps</h3>
+            <ol className="space-y-2.5 sm:space-y-3">
               {recipe.instructions.map((instruction, instructionIndex) => (
                 <li key={`${instructionIndex}-${instruction}`} className="flex gap-3 text-sm text-stone-700">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-100 text-xs font-bold text-stone-700">
@@ -146,27 +149,36 @@ export const RecipeCard = ({
             </ol>
           </section>
 
-          <div className="mt-6 flex flex-wrap gap-3 border-t border-stone-100 pt-5">
-            <button
-              type="button"
-              aria-pressed={recipe.isKept}
-              onClick={() => onToggleKeep(recipe.recipeId)}
-              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                recipe.isKept
-                  ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                  : 'bg-[#1E7538] text-white hover:bg-green-800'
-              }`}
-            >
-              <Check aria-hidden="true" className="h-4 w-4" />
-              {recipe.isKept ? 'Kept' : 'Keep Recipe'}
-            </button>
+          <div className="mt-5 sm:mt-6 flex flex-col sm:flex-row flex-wrap gap-2.5 sm:gap-3 border-t border-stone-100 pt-4 sm:pt-5">
+            {recipe.isKept ? (
+              <span
+                role="status"
+                className="inline-flex items-center justify-center sm:justify-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-800"
+              >
+                <Check aria-hidden="true" className="h-4 w-4 shrink-0" />
+                <span>
+                  {recipe.mealPlanName
+                    ? `Added to meal plan (${recipe.mealPlanName})`
+                    : 'Added to meal plan'}
+                </span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onToggleKeep(recipe.recipeId)}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#1E7538] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-green-800"
+              >
+                <Check aria-hidden="true" className="h-4 w-4 shrink-0" />
+                <span>Add Recipe to Meal Plan</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onRegenerate(recipe.recipeId)}
-              className="inline-flex items-center gap-2 rounded-lg bg-stone-100 px-4 py-2 text-sm font-semibold text-stone-700 transition hover:bg-stone-200"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-stone-100 px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-200"
             >
-              <RefreshCw aria-hidden="true" className="h-4 w-4" />
-              Regenerate This Meal
+              <RefreshCw aria-hidden="true" className="h-4 w-4 shrink-0" />
+              <span>Regenerate This Meal</span>
             </button>
           </div>
         </div>

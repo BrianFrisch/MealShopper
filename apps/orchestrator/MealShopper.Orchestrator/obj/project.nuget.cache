@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "GnAb2Fc63O8=",
+  "dgSpecHash": "OkvdzTsqYxA=",
   "success": true,
-  "projectFilePath": "c:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj",
+  "projectFilePath": "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\admin\\.nuget\\packages\\microsoft.aspnetcore.openapi\\8.0.32\\microsoft.aspnetcore.openapi.8.0.32.nupkg.sha512",
     "C:\\Users\\admin\\.nuget\\packages\\microsoft.extensions.ambientmetadata.application\\10.10.0\\microsoft.extensions.ambientmetadata.application.10.10.0.nupkg.sha512",

@@ -4,7 +4,10 @@ from contextlib import AbstractAsyncContextManager
 from typing import Any, Protocol, TypedDict, cast
 from uuid import UUID, uuid4
 
-import asyncpg  # type: ignore[reportMissingTypeStubs]
+try:
+    import asyncpg  # type: ignore[reportMissingTypeStubs]
+except ImportError:
+    asyncpg = None
 
 from src.models import MealPlanResponse, PlannedMeal
 
@@ -29,10 +32,29 @@ class RecipePool(Protocol):
 
 class StoredRecipe(TypedDict):
     recipe_id: str
-    meal_plan_id: str
-    source_meal_id: str
-    recipe: dict[str, Any]
+    title: str
+    description: str | None
+    protein_subtype: str | None
+    cuisine: str | None
+    image_url: str | None
+    ingredients: list[dict[str, Any]]
+    directions: list[str]
     created_at: str
+
+
+class StoredMealPlan(TypedDict):
+    meal_plan_id: str
+    meal_plan_name: str
+    user_id: str
+    created_at: str
+    updated_at: str
+
+
+def _resolve_meal_plan_uuid(plan_id: str) -> UUID:
+    try:
+        return UUID(str(plan_id))
+    except (ValueError, TypeError):
+        return uuid4()
 
 
 class RecipeService:
@@ -49,7 +71,11 @@ class RecipeService:
             await self._pool.close()
             self._pool = None
 
-    async def persist_meal_plan(self, user_id: UUID, meal_plan: MealPlanResponse) -> None:
+    async def persist_meal_plan(
+        self,
+        user_id: UUID,
+        meal_plan: MealPlanResponse,
+    ) -> None:
         pool = self._require_pool()
         async with pool.acquire() as connection:
             async with connection.transaction():
@@ -57,11 +83,15 @@ class RecipeService:
                     source_meal_id = meal.meal_id
                     candidate_recipe_id = uuid4()
                     recipe_id = await connection.fetchval(
-                        "CALL sp_create_recipe($1, $2, $3, $4::jsonb);",
+                        "CALL sp_create_recipe($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb);",
                         candidate_recipe_id,
-                        meal_plan.plan_id,
-                        source_meal_id,
-                        json.dumps(meal.model_dump(mode="json")),
+                        meal.recipe_name[:200],
+                        meal.description,
+                        meal.protein_subtype,
+                        meal.cuisine,
+                        meal.image_url,
+                        json.dumps([ing.model_dump(mode="json") for ing in meal.ingredients]),
+                        json.dumps(meal.instructions),
                     )
                     if recipe_id is None:
                         raise RuntimeError(f"Database did not return an ID for recipe {source_meal_id}.")
@@ -73,24 +103,76 @@ class RecipeService:
                     )
                     meal.meal_id = str(recipe_id)
 
+    async def create_meal_plan(
+        self,
+        user_id: UUID,
+        meal_plan_name: str,
+        meal_plan_id: UUID | None = None,
+    ) -> UUID:
+        pool = self._require_pool()
+        candidate_id = meal_plan_id or uuid4()
+        async with pool.acquire() as connection:
+            persisted_id = await connection.fetchval(
+                "CALL sp_create_meal_plan($1, $2, $3);",
+                candidate_id,
+                meal_plan_name,
+                user_id,
+            )
+        if persisted_id is None:
+            raise RuntimeError("Database did not return an ID for meal plan.")
+        return persisted_id
+
+    async def update_meal_plan(self, meal_plan_id: UUID, meal_plan_name: str) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as connection:
+            await connection.execute(
+                "CALL sp_update_meal_plan($1, $2);",
+                meal_plan_id,
+                meal_plan_name,
+            )
+
+    async def get_meal_plan(self, meal_plan_id: UUID) -> StoredMealPlan | None:
+        pool = self._require_pool()
+        async with pool.acquire() as connection:
+            row = await connection.fetchrow("SELECT * FROM fn_get_meal_plan($1);", meal_plan_id)
+        return self._to_stored_meal_plan(row) if row is not None else None
+
+    async def get_meal_plans_for_user(self, user_id: UUID) -> list[StoredMealPlan]:
+        pool = self._require_pool()
+        async with pool.acquire() as connection:
+            rows = await connection.fetch("SELECT * FROM fn_get_meal_plans_for_user($1);", user_id)
+        return [self._to_stored_meal_plan(row) for row in rows]
+
     async def create_recipe(
         self,
-        meal_plan_id: str,
         meal: PlannedMeal,
     ) -> UUID:
         pool = self._require_pool()
         candidate_recipe_id = uuid4()
         async with pool.acquire() as connection:
             recipe_id = await connection.fetchval(
-                "CALL sp_create_recipe($1, $2, $3, $4::jsonb);",
+                "CALL sp_create_recipe($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb);",
                 candidate_recipe_id,
-                meal_plan_id,
-                meal.meal_id,
-                json.dumps(meal.model_dump(mode="json")),
+                meal.recipe_name[:200],
+                meal.description,
+                meal.protein_subtype,
+                meal.cuisine,
+                meal.image_url,
+                json.dumps([ing.model_dump(mode="json") for ing in meal.ingredients]),
+                json.dumps(meal.instructions),
             )
         if recipe_id is None:
             raise RuntimeError(f"Database did not return an ID for recipe {meal.meal_id}.")
         return recipe_id
+
+    async def associate_meal_plan_with_recipe(self, meal_plan_id: UUID, recipe_id: UUID) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as connection:
+            await connection.execute(
+                "CALL sp_associate_meal_plan_recipe($1, $2);",
+                meal_plan_id,
+                recipe_id,
+            )
 
     async def associate_user_with_recipe(self, user_id: UUID, recipe_id: UUID) -> None:
         pool = self._require_pool()
@@ -113,6 +195,12 @@ class RecipeService:
             rows = await connection.fetch("SELECT * FROM fn_get_recipes_for_user($1);", user_id)
         return [self._to_stored_recipe(row) for row in rows]
 
+    async def get_recipes_for_meal_plan(self, meal_plan_id: UUID) -> list[StoredRecipe]:
+        pool = self._require_pool()
+        async with pool.acquire() as connection:
+            rows = await connection.fetch("SELECT * FROM fn_get_recipes_for_meal_plan($1);", meal_plan_id)
+        return [self._to_stored_recipe(row) for row in rows]
+
     def _require_pool(self) -> RecipePool:
         if self._pool is None:
             raise RuntimeError("RecipeService is not connected to the planner database.")
@@ -120,14 +208,32 @@ class RecipeService:
 
     @staticmethod
     def _to_stored_recipe(row: Mapping[str, Any]) -> StoredRecipe:
-        recipe_data = row["recipe_data"]
-        if isinstance(recipe_data, str):
-            recipe_data = json.loads(recipe_data)
+        ingredients = row["ingredients"]
+        if isinstance(ingredients, str):
+            ingredients = json.loads(ingredients)
+
+        directions = row["directions"]
+        if isinstance(directions, str):
+            directions = json.loads(directions)
 
         return {
             "recipe_id": str(row["recipe_id"]),
-            "meal_plan_id": row["meal_plan_id"],
-            "source_meal_id": row["source_meal_id"],
-            "recipe": recipe_data,
+            "title": row["title"],
+            "description": row.get("description"),
+            "protein_subtype": row.get("protein_subtype"),
+            "cuisine": row.get("cuisine"),
+            "image_url": row.get("image_url"),
+            "ingredients": ingredients,
+            "directions": directions,
             "created_at": row["created_at"].isoformat(),
+        }
+
+    @staticmethod
+    def _to_stored_meal_plan(row: Mapping[str, Any]) -> StoredMealPlan:
+        return {
+            "meal_plan_id": str(row["meal_plan_id"]),
+            "meal_plan_name": row["meal_plan_name"],
+            "user_id": str(row["user_id"]),
+            "created_at": row["created_at"].isoformat(),
+            "updated_at": row["updated_at"].isoformat(),
         }

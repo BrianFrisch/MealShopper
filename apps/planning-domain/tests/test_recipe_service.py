@@ -65,6 +65,9 @@ async def test_persist_meal_plan_saves_and_associates_each_recipe() -> None:
                 meal_id="meal-1",
                 recipe_name="Herb chicken",
                 description="Chicken with herbs",
+                protein_subtype="Chicken",
+                cuisine="Mediterranean",
+                image_url="https://example.com/chicken.jpg",
                 estimated_prep_time_minutes=30,
                 servings=2,
                 ingredients=[],
@@ -75,25 +78,37 @@ async def test_persist_meal_plan_saves_and_associates_each_recipe() -> None:
 
     await service.persist_meal_plan(user_id, meal_plan)
 
-    assert meal_plan.meals[0].meal_id == str(connection.fetchval_calls[0][1][0])
     assert len(connection.fetchval_calls) == 1
-    query, args = connection.fetchval_calls[0]
-    assert "CALL sp_create_recipe" in query
-    assert isinstance(args[0], UUID)
-    assert args[1:3] == ("plan-1", "meal-1")
+    recipe_query, recipe_args = connection.fetchval_calls[0]
+    assert "CALL sp_create_recipe" in recipe_query
+    assert isinstance(recipe_args[0], UUID)
+    assert meal_plan.meals[0].meal_id == str(recipe_args[0])
+    assert recipe_args[1:6] == (
+        "Herb chicken",
+        "Chicken with herbs",
+        "Chicken",
+        "Mediterranean",
+        "https://example.com/chicken.jpg",
+    )
+    assert recipe_args[6:8] == ("[]", '["Cook chicken."]')
+
     assert len(connection.execute_calls) == 1
     assert "CALL sp_associate_user_recipe" in connection.execute_calls[0][0]
-    assert connection.execute_calls[0][1] == (user_id, args[0])
+    assert connection.execute_calls[0][1] == (user_id, recipe_args[0])
 
 
 @pytest.mark.asyncio
-async def test_get_recipe_deserializes_json_recipe_data() -> None:
+async def test_get_recipe_deserializes_json_fields() -> None:
     connection = FakeConnection()
     connection.fetchrow_result = {
         "recipe_id": connection.next_recipe_id,
-        "meal_plan_id": "plan-1",
-        "source_meal_id": "meal-1",
-        "recipe_data": '{"meal_id":"recipe-id","recipe_name":"Herb chicken"}',
+        "title": "Herb chicken",
+        "description": "Chicken with herbs",
+        "protein_subtype": "Chicken",
+        "cuisine": "Mediterranean",
+        "image_url": "https://example.com/chicken.jpg",
+        "ingredients": '[{"name":"Chicken","quantity":"1 lb","is_promotional":true}]',
+        "directions": '["Cook chicken."]',
         "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
     }
     service = RecipeService("unused", pool=FakePool(connection))  # type: ignore[arg-type]
@@ -101,9 +116,14 @@ async def test_get_recipe_deserializes_json_recipe_data() -> None:
     recipe = await service.get_recipe(connection.next_recipe_id)
 
     assert recipe is not None
-    assert recipe["recipe"]["recipe_name"] == "Herb chicken"
     assert recipe["recipe_id"] == str(connection.next_recipe_id)
-    assert recipe["source_meal_id"] == "meal-1"
+    assert recipe["title"] == "Herb chicken"
+    assert recipe["description"] == "Chicken with herbs"
+    assert recipe["protein_subtype"] == "Chicken"
+    assert recipe["cuisine"] == "Mediterranean"
+    assert recipe["image_url"] == "https://example.com/chicken.jpg"
+    assert recipe["ingredients"][0]["name"] == "Chicken"
+    assert recipe["directions"] == ["Cook chicken."]
 
 
 @pytest.mark.asyncio
@@ -198,3 +218,80 @@ async def test_generate_plan_returns_unavailable_when_provider_not_configured(
         )
 
     assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_meal_plan_endpoints_create_associate_and_update(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = UUID("207d2de7-919d-4f48-b6f2-4a475ae96426")
+    meal_plan_id = UUID("11111111-1111-1111-1111-111111111111")
+    recipe_id = UUID("33333333-3333-3333-3333-333333333333")
+    associations: list[tuple[UUID, UUID]] = []
+    plans: dict[UUID, dict[str, str]] = {}
+
+    class StubRecipeService:
+        async def create_meal_plan(
+            self,
+            user_id: UUID,
+            meal_plan_name: str,
+            meal_plan_id: UUID | None = None,
+        ) -> UUID:
+            resolved_id = meal_plan_id or UUID("11111111-1111-1111-1111-111111111111")
+            plans[resolved_id] = {
+                "meal_plan_id": str(resolved_id),
+                "meal_plan_name": meal_plan_name,
+                "user_id": str(user_id),
+                "created_at": "2026-10-24T18:00:00+00:00",
+                "updated_at": "2026-10-24T18:00:00+00:00",
+            }
+            return resolved_id
+
+        async def get_meal_plan(self, requested_id: UUID) -> dict[str, str] | None:
+            return plans.get(requested_id)
+
+        async def associate_meal_plan_with_recipe(
+            self,
+            meal_plan_id: UUID,
+            recipe_id: UUID,
+        ) -> None:
+            associations.append((meal_plan_id, recipe_id))
+
+        async def update_meal_plan(
+            self,
+            meal_plan_id: UUID,
+            meal_plan_name: str,
+        ) -> None:
+            plans[meal_plan_id]["meal_plan_name"] = meal_plan_name
+            plans[meal_plan_id]["updated_at"] = "2026-10-24T18:05:00+00:00"
+
+    monkeypatch.setattr(main, "recipe_service", StubRecipeService())
+
+    created = await main.create_meal_plan(
+        main.CreateMealPlanRequest(meal_plan_name="Weeknight Favorites", meal_plan_id=meal_plan_id),
+        x_user_id=str(user_id),
+    )
+    assert created.meal_plan_id == str(meal_plan_id)
+    assert created.meal_plan_name == "Weeknight Favorites"
+    assert created.user_id == str(user_id)
+
+    assoc_res = await main.associate_recipe_to_meal_plan(
+        meal_plan_id=meal_plan_id,
+        request=main.AssociateMealPlanRecipeRequest(recipe_id=recipe_id),
+        x_user_id=str(user_id),
+    )
+    assert assoc_res == {
+        "status": "associated",
+        "meal_plan_id": str(meal_plan_id),
+        "recipe_id": str(recipe_id),
+    }
+    assert associations == [(meal_plan_id, recipe_id)]
+
+    updated = await main.update_meal_plan_name(
+        meal_plan_id=meal_plan_id,
+        request=main.UpdateMealPlanNameRequest(meal_plan_name="Renamed Meal Plan"),
+        x_user_id=str(user_id),
+    )
+    assert updated.meal_plan_name == "Renamed Meal Plan"
+    assert updated.updated_at == "2026-10-24T18:05:00+00:00"
+

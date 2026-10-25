@@ -1,26 +1,49 @@
+DROP PROCEDURE IF EXISTS sp_create_recipe(UUID, TEXT, TEXT, JSONB);
+
 CREATE OR REPLACE PROCEDURE sp_create_recipe(
     INOUT p_recipe_id UUID,
-    IN p_meal_plan_id TEXT,
-    IN p_source_meal_id TEXT,
-    IN p_recipe_data JSONB
+    IN p_title VARCHAR(200),
+    IN p_description TEXT,
+    IN p_protein_subtype VARCHAR(50),
+    IN p_cuisine VARCHAR(50),
+    IN p_image_url TEXT,
+    IN p_ingredients JSONB,
+    IN p_directions JSONB
 )
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    INSERT INTO recipe (recipe_id, meal_plan_id, source_meal_id, recipe_data)
+    p_recipe_id := COALESCE(p_recipe_id, gen_random_uuid());
+
+    INSERT INTO recipe (
+        recipe_id,
+        title,
+        description,
+        protein_subtype,
+        cuisine,
+        image_url,
+        ingredients,
+        directions
+    )
     VALUES (
         p_recipe_id,
-        p_meal_plan_id,
-        p_source_meal_id,
-        jsonb_set(p_recipe_data, '{meal_id}', to_jsonb(p_recipe_id::TEXT), TRUE)
+        p_title,
+        p_description,
+        p_protein_subtype,
+        p_cuisine,
+        p_image_url,
+        COALESCE(p_ingredients, '[]'::JSONB),
+        COALESCE(p_directions, '[]'::JSONB)
     )
-    ON CONFLICT (meal_plan_id, source_meal_id)
-    DO UPDATE SET recipe_data = jsonb_set(
-        EXCLUDED.recipe_data,
-        '{meal_id}',
-        to_jsonb(recipe.recipe_id::TEXT),
-        TRUE
-    )
+    ON CONFLICT (recipe_id)
+    DO UPDATE SET
+        title = EXCLUDED.title,
+        description = EXCLUDED.description,
+        protein_subtype = EXCLUDED.protein_subtype,
+        cuisine = EXCLUDED.cuisine,
+        image_url = EXCLUDED.image_url,
+        ingredients = EXCLUDED.ingredients,
+        directions = EXCLUDED.directions
     RETURNING recipe_id INTO p_recipe_id;
 END;
 $$;

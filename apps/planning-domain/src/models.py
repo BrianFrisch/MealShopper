@@ -39,7 +39,9 @@ class PlannedMeal(BaseModel):
     meal_id: str
     recipe_name: str
     description: str
-    #cuisine: str
+    protein_subtype: Optional[str] = None
+    cuisine: Optional[str] = None
+    image_url: Optional[str] = None
     estimated_prep_time_minutes: int
     servings: int
     ingredients: List[RecipeIngredient]
@@ -101,3 +103,42 @@ class MealPlanResponse(BaseModel):
     meals: List[PlannedMeal]
     missing_primary_ingredients: List[MissingIngredient] = Field(default_factory=list)
     estimated_total_spend: float = 0.0
+
+
+class CreateMealPlanRequest(BaseModel):
+    meal_plan_name: str = Field(
+        ...,
+        min_length=1,
+        validation_alias=AliasChoices("meal_plan_name", "mealPlanName", "name"),
+    )
+    meal_plan_id: Optional[UUID] = Field(
+        default=None,
+        validation_alias=AliasChoices("meal_plan_id", "mealPlanId"),
+    )
+    user_id: Optional[UUID] = Field(
+        default=None,
+        validation_alias=AliasChoices("user_id", "userId"),
+    )
+
+
+class UpdateMealPlanNameRequest(BaseModel):
+    meal_plan_name: str = Field(
+        ...,
+        min_length=1,
+        validation_alias=AliasChoices("meal_plan_name", "mealPlanName", "name"),
+    )
+
+
+class AssociateMealPlanRecipeRequest(BaseModel):
+    recipe_id: UUID = Field(
+        ...,
+        validation_alias=AliasChoices("recipe_id", "recipeId"),
+    )
+
+
+class MealPlanRecordResponse(BaseModel):
+    meal_plan_id: str
+    meal_plan_name: str
+    user_id: str
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None

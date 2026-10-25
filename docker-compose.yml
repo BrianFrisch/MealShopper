@@ -104,12 +104,14 @@ services:
       ReverseProxy__Clusters__orchestratorCluster__Destinations__destination1__Address: "http://orchestrator:5186"
       ReverseProxy__Clusters__identityCluster__Destinations__destination1__Address: "http://identity-service:5119"
       ReverseProxy__Clusters__shopperCluster__Destinations__destination1__Address: "http://shopper-domain:8001"
+      ReverseProxy__Clusters__planningCluster__Destinations__destination1__Address: "http://planning-domain:8002"
     ports:
       - "5247:5247"
     depends_on:
       - identity-service
       - orchestrator
       - shopper-domain
+      - planning-domain
     networks:
       - mealshopper-net
 

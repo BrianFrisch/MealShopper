@@ -462,14 +462,20 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                 ? dealId
                 : dealId[(selectedStoreId.Length + 1)..];
             var sourceStoreSeparator = sourceDealId.IndexOf('_');
-            if (selectedStoreId is null && sourceStoreSeparator <= 0)
+            var candidateSourceStoreId = sourceStoreSeparator > 0
+                ? sourceDealId[..sourceStoreSeparator]
+                : null;
+            var hasEmbeddedSourceStoreId = candidateSourceStoreId is not null &&
+                IsStoreIdentifier(candidateSourceStoreId, storeIds);
+
+            if (selectedStoreId is null && !hasEmbeddedSourceStoreId)
             {
                 throw new InvalidOperationException(
                     $"Selected deal '{dealId}' is not prefixed by a selected store and does not contain a source store ID. Return to Discover and select the deal again.");
             }
 
-            var sourceStoreId = sourceStoreSeparator > 0
-                ? sourceDealId[..sourceStoreSeparator]
+            var sourceStoreId = hasEmbeddedSourceStoreId
+                ? candidateSourceStoreId!
                 : selectedStoreId ?? throw new InvalidOperationException(
                     $"Selected deal '{dealId}' does not contain a source store ID.");
 
@@ -486,6 +492,24 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
         }
 
         return new DealBatchLookupRequest { Items = lookups };
+    }
+
+    private static bool IsStoreIdentifier(string candidate, IReadOnlyCollection<string> selectedStoreIds)
+    {
+        if (selectedStoreIds.Contains(candidate, StringComparer.Ordinal))
+        {
+            return true;
+        }
+
+        var separatorIndex = candidate.LastIndexOf('-');
+        if (separatorIndex <= 0 || separatorIndex == candidate.Length - 1)
+        {
+            return false;
+        }
+
+        var chainPart = candidate[..separatorIndex];
+        var storeNumberPart = candidate[(separatorIndex + 1)..];
+        return chainPart.Any(char.IsLetter) && storeNumberPart.All(char.IsLetterOrDigit);
     }
 
     private static void ApplySelectedDealMatches(
@@ -911,7 +935,9 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
 
             recipeCards.Add(new RecipeCardDto
             {
-                RecipeId = Guid.NewGuid().ToString(),
+                RecipeId = !string.IsNullOrWhiteSpace(meal.MealId)
+                    ? meal.MealId
+                    : Guid.NewGuid().ToString(),
                 RecipeTitle = meal.RecipeTitle,
                 Description = meal.Description,
                 ThumbnailUrl = null,

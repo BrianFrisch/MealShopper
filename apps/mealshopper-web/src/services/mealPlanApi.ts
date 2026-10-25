@@ -14,7 +14,65 @@ const authorizationHeaders = (token: string) => ({
   headers: { Authorization: `Bearer ${token}` }
 });
 
+export interface MealPlanRecordDto {
+  meal_plan_id: string;
+  meal_plan_name: string;
+  user_id: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export const mealPlanApi = {
+  async getMealPlans(token: string): Promise<MealPlanRecordDto[]> {
+    const response = await apiClient.get<MealPlanRecordDto[]>(
+      '/v1/planner/meal-plans',
+      authorizationHeaders(token)
+    );
+    return response.data;
+  },
+
+  async createMealPlan(
+    mealPlanName: string,
+    token: string,
+    mealPlanId?: string
+  ): Promise<MealPlanRecordDto> {
+    const response = await apiClient.post<MealPlanRecordDto>(
+      '/v1/planner/meal-plans',
+      {
+        mealPlanName,
+        ...(mealPlanId ? { mealPlanId } : {}),
+      },
+      authorizationHeaders(token)
+    );
+    return response.data;
+  },
+
+  async associateRecipeToMealPlan(
+    mealPlanId: string,
+    recipeId: string,
+    token: string
+  ): Promise<{ status: string; meal_plan_id: string; recipe_id: string }> {
+    const response = await apiClient.post<{ status: string; meal_plan_id: string; recipe_id: string }>(
+      `/v1/planner/meal-plans/${mealPlanId}/recipes`,
+      { recipeId },
+      authorizationHeaders(token)
+    );
+    return response.data;
+  },
+
+  async updateMealPlanName(
+    mealPlanId: string,
+    mealPlanName: string,
+    token: string
+  ): Promise<MealPlanRecordDto> {
+    const response = await apiClient.put<MealPlanRecordDto>(
+      `/v1/planner/meal-plans/${mealPlanId}`,
+      { mealPlanName },
+      authorizationHeaders(token)
+    );
+    return response.data;
+  },
+
   async startDiscovery(request: MealPlanDiscoveryRequest, token: string): Promise<{ jobId: string }> {
     const response = await apiClient.post<{ jobId: string }>(
       '/v1/meal-plans/discovery',

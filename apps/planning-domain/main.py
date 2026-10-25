@@ -12,10 +12,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from fastapi import FastAPI, HTTPException
+from typing import Optional
+from uuid import UUID
+from fastapi import FastAPI, Header, HTTPException, status
 
 from src.config import PLANNER_DATABASE_URL
-from src.models import MealPlanRequest, MealPlanResponse
+from src.models import (
+    AssociateMealPlanRecipeRequest,
+    CreateMealPlanRequest,
+    MealPlanRecordResponse,
+    MealPlanRequest,
+    MealPlanResponse,
+    UpdateMealPlanNameRequest,
+)
 from src.services.gemini_planner import GeminiPlannerService
 from src.services.mock_planner import MockMealPlannerService
 from src.services.recipe_service import RecipeService
@@ -116,6 +125,172 @@ async def generate_plan(request: MealPlanRequest) -> MealPlanResponse:
 
     await recipe_service.persist_meal_plan(request.user_id, plan)
     return plan
+
+
+def _resolve_request_user_id(
+    x_user_id: Optional[str],
+    body_user_id: Optional[UUID] = None,
+) -> UUID:
+    if x_user_id:
+        try:
+            return UUID(x_user_id.strip())
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid X-User-Id header.",
+            ) from exc
+    if body_user_id is not None:
+        return body_user_id
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Authenticated user ID is required.",
+    )
+
+
+@app.post(
+    "/v1/planner/meal-plans",
+    response_model=MealPlanRecordResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_meal_plan(
+    request: CreateMealPlanRequest,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> MealPlanRecordResponse:
+    user_id = _resolve_request_user_id(x_user_id, request.user_id)
+    meal_plan_name = request.meal_plan_name.strip()
+    if not meal_plan_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="meal_plan_name cannot be empty.",
+        )
+
+    meal_plan_id = await recipe_service.create_meal_plan(
+        user_id=user_id,
+        meal_plan_name=meal_plan_name,
+        meal_plan_id=request.meal_plan_id,
+    )
+    stored = await recipe_service.get_meal_plan(meal_plan_id)
+    if stored is not None:
+        return MealPlanRecordResponse(**stored)
+
+    return MealPlanRecordResponse(
+        meal_plan_id=str(meal_plan_id),
+        meal_plan_name=meal_plan_name,
+        user_id=str(user_id),
+    )
+
+
+@app.post("/v1/planner/meal-plans/{meal_plan_id}/recipes")
+async def associate_recipe_to_meal_plan(
+    meal_plan_id: UUID,
+    request: AssociateMealPlanRecipeRequest,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> dict[str, str]:
+    stored = await recipe_service.get_meal_plan(meal_plan_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Meal plan {meal_plan_id} not found.",
+        )
+    if x_user_id and stored["user_id"].lower() != x_user_id.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to modify this meal plan.",
+        )
+
+    await recipe_service.associate_meal_plan_with_recipe(
+        meal_plan_id=meal_plan_id,
+        recipe_id=request.recipe_id,
+    )
+    return {
+        "status": "associated",
+        "meal_plan_id": str(meal_plan_id),
+        "recipe_id": str(request.recipe_id),
+    }
+
+
+@app.put(
+    "/v1/planner/meal-plans/{meal_plan_id}",
+    response_model=MealPlanRecordResponse,
+)
+@app.patch(
+    "/v1/planner/meal-plans/{meal_plan_id}",
+    response_model=MealPlanRecordResponse,
+)
+async def update_meal_plan_name(
+    meal_plan_id: UUID,
+    request: UpdateMealPlanNameRequest,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> MealPlanRecordResponse:
+    meal_plan_name = request.meal_plan_name.strip()
+    if not meal_plan_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="meal_plan_name cannot be empty.",
+        )
+
+    stored = await recipe_service.get_meal_plan(meal_plan_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Meal plan {meal_plan_id} not found.",
+        )
+    if x_user_id and stored["user_id"].lower() != x_user_id.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to modify this meal plan.",
+        )
+
+    await recipe_service.update_meal_plan(
+        meal_plan_id=meal_plan_id,
+        meal_plan_name=meal_plan_name,
+    )
+    updated = await recipe_service.get_meal_plan(meal_plan_id)
+    if updated is not None:
+        return MealPlanRecordResponse(**updated)
+
+    return MealPlanRecordResponse(
+        meal_plan_id=str(meal_plan_id),
+        meal_plan_name=meal_plan_name,
+        user_id=stored["user_id"],
+        created_at=stored.get("created_at"),
+    )
+
+
+@app.get(
+    "/v1/planner/meal-plans",
+    response_model=list[MealPlanRecordResponse],
+)
+async def list_meal_plans_for_user(
+    user_id: Optional[UUID] = None,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> list[MealPlanRecordResponse]:
+    resolved_user_id = _resolve_request_user_id(x_user_id, user_id)
+    plans = await recipe_service.get_meal_plans_for_user(resolved_user_id)
+    return [MealPlanRecordResponse(**plan) for plan in plans]
+
+
+@app.get(
+    "/v1/planner/meal-plans/{meal_plan_id}",
+    response_model=MealPlanRecordResponse,
+)
+async def get_meal_plan_by_id(
+    meal_plan_id: UUID,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> MealPlanRecordResponse:
+    stored = await recipe_service.get_meal_plan(meal_plan_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Meal plan {meal_plan_id} not found.",
+        )
+    if x_user_id and stored["user_id"].lower() != x_user_id.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to view this meal plan.",
+        )
+    return MealPlanRecordResponse(**stored)
+
 
 if __name__ == "__main__":
     import uvicorn

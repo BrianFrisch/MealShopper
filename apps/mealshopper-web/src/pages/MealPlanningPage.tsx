@@ -1,13 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Loader2, Plus, X } from 'lucide-react';
+import { CalendarPlus, Check, Loader2, Plus, X } from 'lucide-react';
 import { DealImageTooltip } from '../components/DealImageTooltip';
 import { Header } from '../components/Header';
 import { RecipeCard } from '../components/RecipeCard';
 import { authApi } from '../services/authApi';
-import { mealPlanApi } from '../services/mealPlanApi';
+import { mealPlanApi, type MealPlanRecordDto } from '../services/mealPlanApi';
 import type { Deal } from '../types/discovery';
 import type { MealPlanSynthesisRequest, RecipeCardDto } from '../types/mealPlan';
+
+const formatDefaultMealPlanDate = (date: Date = new Date()) =>
+  new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date);
 
 const SELECTED_DEALS_STORAGE_KEY = 'mealshopper_selected_deals';
 const DIETARY_REQUIREMENTS = ['Keto', 'Gluten Free', 'Paleo', 'Low FODMAP', 'Mediterranean Diet'];
@@ -83,6 +90,16 @@ export const MealPlanningPage = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Add Recipe to Meal Plan modal state
+  const [modalRecipeId, setModalRecipeId] = useState<string | null>(null);
+  const [userMealPlans, setUserMealPlans] = useState<MealPlanRecordDto[]>([]);
+  const [isLoadingMealPlans, setIsLoadingMealPlans] = useState(false);
+  const [newMealPlanName, setNewMealPlanName] = useState(() => formatDefaultMealPlanDate());
+  const [selectedExistingMealPlanId, setSelectedExistingMealPlanId] = useState<string | null>(null);
+  const [lastUsedMealPlan, setLastUsedMealPlan] = useState<MealPlanRecordDto | null>(null);
+  const [isSubmittingModal, setIsSubmittingModal] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+
   const storeCount = new Set(selectedDeals.map(getDealStoreKey).filter(Boolean)).size;
   const keptRecipeCount = recipes.filter(recipe => recipe.isKept).length;
   const isGenerating = generationJob !== null;
@@ -91,6 +108,24 @@ export const MealPlanningPage = () => {
     : CUISINE_OPTIONS.filter((option, index) => (
       index < COLLAPSED_CUISINE_COUNT || cuisines.includes(option)
     ));
+
+  useEffect(() => {
+    if (modalRecipeId === null) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isSubmittingModal) {
+        setModalRecipeId(null);
+        setModalError(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [modalRecipeId, isSubmittingModal]);
 
   useEffect(() => {
     if (!generationJob) {
@@ -222,10 +257,134 @@ export const MealPlanningPage = () => {
     }
   };
 
-  const handleToggleKeep = (recipeId: string) => {
+  const handleOpenAddToMealPlanModal = async (recipeId: string) => {
+    const targetRecipe = recipes.find(recipe => recipe.recipeId === recipeId);
+    if (!targetRecipe || targetRecipe.isKept) {
+      return;
+    }
+
+    const token = authApi.getToken();
+    if (!token) {
+      setErrorMessage('Please sign in before adding a recipe to a meal plan.');
+      return;
+    }
+
+    setModalRecipeId(recipeId);
+    setModalError(null);
+    setNewMealPlanName(formatDefaultMealPlanDate());
+    setSelectedExistingMealPlanId(lastUsedMealPlan ? lastUsedMealPlan.meal_plan_id : null);
+
+    setIsLoadingMealPlans(true);
+    try {
+      const fetchedPlans = await mealPlanApi.getMealPlans(token);
+      setUserMealPlans(current => {
+        const merged = new Map<string, MealPlanRecordDto>();
+        for (const plan of [...fetchedPlans, ...current]) {
+          merged.set(plan.meal_plan_id, plan);
+        }
+        return Array.from(merged.values());
+      });
+    } catch {
+      // Keep any in-session meal plans if loading existing plans fails
+    } finally {
+      setIsLoadingMealPlans(false);
+    }
+  };
+
+  const handleCloseMealPlanModal = () => {
+    if (isSubmittingModal) {
+      return;
+    }
+    setModalRecipeId(null);
+    setModalError(null);
+  };
+
+  const completeRecipeAssociation = (recipeId: string, mealPlan: MealPlanRecordDto) => {
+    setLastUsedMealPlan(mealPlan);
+    setUserMealPlans(current => [
+      mealPlan,
+      ...current.filter(plan => plan.meal_plan_id !== mealPlan.meal_plan_id),
+    ]);
     setRecipes(current => current.map(recipe => (
-      recipe.recipeId === recipeId ? { ...recipe, isKept: !recipe.isKept } : recipe
+      recipe.recipeId === recipeId
+        ? {
+            ...recipe,
+            isKept: true,
+            mealPlanId: mealPlan.meal_plan_id,
+            mealPlanName: mealPlan.meal_plan_name,
+          }
+        : recipe
     )));
+    setModalRecipeId(null);
+    setModalError(null);
+  };
+
+  const handleCreateAndAssociateMealPlan = async () => {
+    if (!modalRecipeId) {
+      return;
+    }
+    const trimmedName = newMealPlanName.trim();
+    if (!trimmedName) {
+      setModalError('Please enter a name for the new meal plan.');
+      return;
+    }
+
+    const token = authApi.getToken();
+    if (!token) {
+      setModalError('Please sign in to create a meal plan.');
+      return;
+    }
+
+    setIsSubmittingModal(true);
+    setModalError(null);
+    try {
+      const createdPlan = await mealPlanApi.createMealPlan(trimmedName, token);
+      await mealPlanApi.associateRecipeToMealPlan(
+        createdPlan.meal_plan_id,
+        modalRecipeId,
+        token
+      );
+      completeRecipeAssociation(modalRecipeId, createdPlan);
+    } catch (error) {
+      setModalError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to create meal plan and add recipe.'
+      );
+    } finally {
+      setIsSubmittingModal(false);
+    }
+  };
+
+  const handleAssociateWithExistingMealPlan = async (plan: MealPlanRecordDto) => {
+    if (!modalRecipeId) {
+      return;
+    }
+
+    const token = authApi.getToken();
+    if (!token) {
+      setModalError('Please sign in to add this recipe to a meal plan.');
+      return;
+    }
+
+    setIsSubmittingModal(true);
+    setModalError(null);
+    try {
+      await mealPlanApi.associateRecipeToMealPlan(
+        plan.meal_plan_id,
+        modalRecipeId,
+        token
+      );
+      completeRecipeAssociation(modalRecipeId, plan);
+    } catch (error) {
+      setModalError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to add recipe to the selected meal plan.'
+      );
+    } finally {
+      setIsSubmittingModal(false);
+    }
   };
 
   const handleSave = async () => {
@@ -491,7 +650,7 @@ export const MealPlanningPage = () => {
                   key={recipe.recipeId}
                   recipe={recipe}
                   index={index}
-                  onToggleKeep={handleToggleKeep}
+                  onToggleKeep={recipeId => { void handleOpenAddToMealPlanModal(recipeId); }}
                   onRegenerate={() => { void handleGenerate(); }}
                 />
               ))
@@ -506,6 +665,202 @@ export const MealPlanningPage = () => {
           </section>
         </div>
       </main>
+
+      {modalRecipeId !== null && (() => {
+        const modalRecipe = recipes.find(recipe => recipe.recipeId === modalRecipeId);
+        const selectedPlan = userMealPlans.find(
+          plan => plan.meal_plan_id === selectedExistingMealPlanId
+        ) || (lastUsedMealPlan?.meal_plan_id === selectedExistingMealPlanId ? lastUsedMealPlan : null);
+
+        return (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-to-meal-plan-title"
+            className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/60 p-0 backdrop-blur-xs sm:items-center sm:p-4"
+            onClick={handleCloseMealPlanModal}
+          >
+            <div
+              className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-stone-200 bg-white p-4 sm:p-6 shadow-2xl"
+              onClick={event => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3 border-b border-stone-100 pb-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="shrink-0 rounded-xl bg-[#1E7538]/10 p-2 text-[#1E7538]">
+                    <CalendarPlus aria-hidden="true" className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 id="add-to-meal-plan-title" className="text-base sm:text-lg font-bold text-stone-900">
+                      Add Recipe to Meal Plan
+                    </h2>
+                    {modalRecipe && (
+                      <p className="truncate text-xs sm:text-sm text-stone-500">
+                        {modalRecipe.recipeTitle}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close modal"
+                  disabled={isSubmittingModal}
+                  onClick={handleCloseMealPlanModal}
+                  className="shrink-0 rounded-full p-1.5 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700 disabled:opacity-50"
+                >
+                  <X aria-hidden="true" className="h-5 w-5" />
+                </button>
+              </div>
+
+              {modalError && (
+                <p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs sm:text-sm text-rose-800">
+                  {modalError}
+                </p>
+              )}
+
+              <div className="mt-4 space-y-5">
+                {selectedPlan && (
+                  <div className="rounded-xl border border-[#1E7538]/30 bg-green-50/70 p-3.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="min-w-0">
+                        <span className="block text-[11px] font-semibold uppercase tracking-wider text-[#1E7538]">
+                          Selected Meal Plan
+                        </span>
+                        <span className="block truncate text-sm sm:text-base font-bold text-stone-900">
+                          {selectedPlan.meal_plan_name}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isSubmittingModal}
+                        onClick={() => { void handleAssociateWithExistingMealPlan(selectedPlan); }}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#1E7538] px-4 py-2 text-xs sm:text-sm font-bold text-white shadow-xs transition hover:bg-green-800 disabled:opacity-50"
+                      >
+                        {isSubmittingModal ? (
+                          <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Check aria-hidden="true" className="h-4 w-4" />
+                        )}
+                        <span>Add to "{selectedPlan.meal_plan_name}"</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label
+                    htmlFor="new-meal-plan-name"
+                    className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-stone-600"
+                  >
+                    Create New Meal Plan
+                  </label>
+                  <div className="flex flex-col xs:flex-row sm:flex-row gap-2">
+                    <input
+                      id="new-meal-plan-name"
+                      type="text"
+                      value={newMealPlanName}
+                      disabled={isSubmittingModal}
+                      autoFocus={lastUsedMealPlan === null}
+                      onChange={event => setNewMealPlanName(event.target.value)}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          void handleCreateAndAssociateMealPlan();
+                        }
+                      }}
+                      placeholder="e.g. Oct 24, 2026"
+                      className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 outline-none focus:border-[#1E7538] focus:ring-2 focus:ring-green-100"
+                    />
+                    <button
+                      type="button"
+                      disabled={isSubmittingModal || !newMealPlanName.trim()}
+                      onClick={() => { void handleCreateAndAssociateMealPlan(); }}
+                      className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                        selectedPlan
+                          ? 'border border-[#1E7538] bg-white text-[#1E7538] hover:bg-green-50'
+                          : 'bg-[#1E7538] text-white shadow-xs hover:bg-green-800'
+                      }`}
+                    >
+                      {isSubmittingModal && !selectedPlan && (
+                        <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+                      )}
+                      <span>Create</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="mb-2 block text-xs font-semibold uppercase tracking-wider text-stone-600">
+                    Existing Meal Plans
+                  </span>
+                  {isLoadingMealPlans && userMealPlans.length === 0 ? (
+                    <div className="flex items-center justify-center gap-2 rounded-xl border border-stone-200 py-6 text-xs sm:text-sm text-stone-500">
+                      <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-[#1E7538]" />
+                      <span>Loading your meal plans...</span>
+                    </div>
+                  ) : userMealPlans.length > 0 ? (
+                    <ul className="max-h-52 divide-y divide-stone-100 overflow-y-auto rounded-xl border border-stone-200">
+                      {userMealPlans.map(plan => {
+                        const isSelected = selectedExistingMealPlanId === plan.meal_plan_id;
+                        const isRecent = lastUsedMealPlan?.meal_plan_id === plan.meal_plan_id;
+
+                        return (
+                          <li key={plan.meal_plan_id}>
+                            <div
+                              onClick={() => setSelectedExistingMealPlanId(plan.meal_plan_id)}
+                              className={`flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-left transition ${
+                                isSelected ? 'bg-green-50/80' : 'hover:bg-stone-50'
+                              }`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="truncate text-sm font-semibold text-stone-900">
+                                    {plan.meal_plan_name}
+                                  </span>
+                                  {isRecent && (
+                                    <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-[#1E7538]">
+                                      Recent
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={isSubmittingModal}
+                                onClick={event => {
+                                  event.stopPropagation();
+                                  void handleAssociateWithExistingMealPlan(plan);
+                                }}
+                                className="shrink-0 rounded-lg bg-[#1E7538] px-3 py-1.5 text-xs font-bold text-white transition hover:bg-green-800 disabled:opacity-50"
+                              >
+                                Select
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="rounded-xl border border-dashed border-stone-200 px-3 py-4 text-center text-xs sm:text-sm text-stone-500">
+                      No existing meal plans yet. Create one above to get started.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-5 flex justify-end border-t border-stone-100 pt-3.5">
+                <button
+                  type="button"
+                  disabled={isSubmittingModal}
+                  onClick={handleCloseMealPlanModal}
+                  className="rounded-lg px-4 py-2 text-sm font-semibold text-stone-600 transition hover:bg-stone-100 hover:text-stone-900 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {recipes.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-stone-200 bg-white/95 shadow-[0_-8px_24px_rgba(28,25,23,0.08)] backdrop-blur">

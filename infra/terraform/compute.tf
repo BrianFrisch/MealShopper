@@ -414,6 +414,10 @@ resource "google_cloud_run_v2_service" "api_gateway" {
         name  = "ReverseProxy__Clusters__shopperCluster__Destinations__destination1__Address"
         value = google_cloud_run_v2_service.shopper_domain.uri
       }
+      env {
+        name  = "ReverseProxy__Clusters__planningCluster__Destinations__destination1__Address"
+        value = google_cloud_run_v2_service.planning_domain.uri
+      }
     }
   }
 

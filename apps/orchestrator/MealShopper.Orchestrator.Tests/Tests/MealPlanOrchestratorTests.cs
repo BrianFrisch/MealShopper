@@ -1169,5 +1169,136 @@ public class MealPlanOrchestratorTests
         }
     }
 
+    [Fact]
+    public async Task ProcessGenerationJobAsync_WithMultiItemAdSuffixesForSelectedStore_UsesSelectedStoreId()
+    {
+        var jobStore = new InMemoryJobTracker();
+        var mockHandler = new MockHttpMessageHandler();
+        const string selectedStoreId = "smartfinal-529";
+        var selectedDealIds = new[]
+        {
+            $"{selectedStoreId}_1047597537_0",
+            $"{selectedStoreId}_1047597537_1"
+        };
+        mockHandler.CustomHandler = request =>
+            request.RequestUri!.ToString().Contains("v1/shopper/deals/batch-lookup")
+                ? new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new System.Net.Http.StringContent(
+                        $$"""
+                        {
+                          "deals": [
+                            {
+                              "deal_id": "{{selectedDealIds[0]}}",
+                              "store_id": "{{selectedStoreId}}",
+                              "store_name": "Smart & Final",
+                              "item_name": "Chicken Breast",
+                              "category": "Meat",
+                              "price": 2.99,
+                              "unit": "lb",
+                              "discount_percentage": 20,
+                              "primary_ingredient": "Chicken Breast"
+                            },
+                            {
+                              "deal_id": "{{selectedDealIds[1]}}",
+                              "store_id": "{{selectedStoreId}}",
+                              "store_name": "Smart & Final",
+                              "item_name": "Pork Sirloin Chops",
+                              "category": "Meat",
+                              "price": 2.99,
+                              "unit": "lb",
+                              "discount_percentage": 20,
+                              "primary_ingredient": "Pork Sirloin Chops"
+                            }
+                          ],
+                          "total_found": 2
+                        }
+                        """,
+                        System.Text.Encoding.UTF8,
+                        "application/json")
+                }
+                : request.RequestUri!.ToString().Contains("v1/planner/generate")
+                    ? new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                    {
+                        Content = new System.Net.Http.StringContent(
+                            """
+                            {
+                              "meal_plan_id": "plan-draft-20261024-001",
+                              "meals": [
+                                {
+                                  "meal_id": "bf56dbce-eef6-47ff-82ea-8054cbbdf0c7",
+                                  "recipe_name": "Oven-Baked BBQ Pork Loin Back Ribs",
+                                  "description": "Tender baked ribs.",
+                                  "estimated_prep_time_minutes": 45,
+                                  "servings": 4,
+                                  "instructions": ["Season ribs", "Bake until tender"],
+                                  "ingredients": [
+                                    {
+                                      "name": "Pork Sirloin Chops",
+                                      "quantity": "2 lb",
+                                      "deal_id": "smartfinal-529_1047597537_1",
+                                      "store_name": "Smart & Final",
+                                      "is_promotional": true
+                                    }
+                                  ]
+                                }
+                              ],
+                              "missing_primary_ingredients": []
+                            }
+                            """,
+                            System.Text.Encoding.UTF8,
+                            "application/json")
+                    }
+                    : null;
+        var shopperClient = new ShopperClient(
+            new HttpClient(mockHandler) { BaseAddress = new Uri("http://localhost:8001/") },
+            NullLogger<ShopperClient>.Instance);
+        var planningClient = new PlanningClient(
+            new HttpClient(mockHandler) { BaseAddress = new Uri("http://localhost:8002/") },
+            NullLogger<PlanningClient>.Instance);
+        var orchestrator = new MealPlanOrchestrator(
+            shopperClient,
+            Mock.Of<IPlannerClient>(),
+            planningClient,
+            jobStore,
+            NullLogger<MealPlanOrchestrator>.Instance,
+            Mock.Of<IGeocodingService>());
+
+        var jobId = Guid.NewGuid();
+        await jobStore.CreateJobAsync(new JobRecord
+        {
+            JobId = jobId,
+            JobType = JobType.PlanGeneration,
+            Status = JobStatus.Pending,
+            RequestPayloadJson = System.Text.Json.JsonSerializer.Serialize(new MealPlanGenerationRequest
+            {
+                SelectedStoreIds = [selectedStoreId],
+                SelectedDealIds = [.. selectedDealIds],
+                DaysCount = 2,
+                ServingsCount = 4
+            })
+        });
+
+        await orchestrator.ProcessGenerationJobAsync(jobId);
+
+        var finalJob = await jobStore.GetJobAsync(jobId);
+        finalJob.Should().NotBeNull();
+        finalJob!.Status.Should().Be(JobStatus.Completed);
+        finalJob.ErrorMessage.Should().BeNull();
+        finalJob.Result!.Recipes.Should().ContainSingle()
+            .Which.RecipeId.Should().Be("bf56dbce-eef6-47ff-82ea-8054cbbdf0c7");
+
+        var lookupRequest = mockHandler.CapturedRequests.Single(
+            request => request.RequestUri!.ToString().Contains("v1/shopper/deals/batch-lookup"));
+        var requestBody = await lookupRequest.Content!.ReadAsStringAsync();
+        using var requestJson = System.Text.Json.JsonDocument.Parse(requestBody);
+        var lookups = requestJson.RootElement.GetProperty("items").EnumerateArray().ToList();
+        lookups.Should().HaveCount(2);
+        lookups[0].GetProperty("deal_id").GetString().Should().Be("1047597537_0");
+        lookups[0].GetProperty("store_id").GetString().Should().Be(selectedStoreId);
+        lookups[1].GetProperty("deal_id").GetString().Should().Be("1047597537_1");
+        lookups[1].GetProperty("store_id").GetString().Should().Be(selectedStoreId);
+    }
+
     #endregion
 }
