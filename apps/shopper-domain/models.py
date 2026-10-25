@@ -28,6 +28,18 @@ class StoreDiscoveryResponse(BaseModel):
     total_found: int
 
 
+class StoreContextResponse(BaseModel):
+    id: str
+    store_id: str
+    name: str
+    address: str
+    street: str
+    city: str
+    state: str
+    zip_code: str
+    postal_code: str
+
+
 class LegacyStoreRequest(BaseModel):
     latitude: float = 33.894893
     longitude: float = -118.362658

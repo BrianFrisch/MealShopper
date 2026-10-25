@@ -21,9 +21,11 @@ from src.models import (
     AssociateMealPlanRecipeRequest,
     CreateMealPlanRequest,
     MealPlanRecordResponse,
+    MealPlanIngredientResponse,
     MealPlanRequest,
     MealPlanResponse,
     UpdateMealPlanNameRequest,
+    UpdateIngredientPurchaseRequest,
 )
 from src.services.gemini_planner import GeminiPlannerService
 from src.services.mock_planner import MockMealPlannerService
@@ -209,6 +211,35 @@ async def associate_recipe_to_meal_plan(
     }
 
 
+@app.delete("/v1/planner/meal-plans/{meal_plan_id}/recipes/{recipe_id}")
+async def remove_recipe_from_meal_plan(
+    meal_plan_id: UUID,
+    recipe_id: UUID,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> dict[str, str]:
+    stored = await recipe_service.get_meal_plan(meal_plan_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Meal plan {meal_plan_id} not found.",
+        )
+    if x_user_id and stored["user_id"].lower() != x_user_id.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to modify this meal plan.",
+        )
+
+    await recipe_service.remove_recipe_from_meal_plan(
+        meal_plan_id=meal_plan_id,
+        recipe_id=recipe_id,
+    )
+    return {
+        "status": "removed",
+        "meal_plan_id": str(meal_plan_id),
+        "recipe_id": str(recipe_id),
+    }
+
+
 @app.put(
     "/v1/planner/meal-plans/{meal_plan_id}",
     response_model=MealPlanRecordResponse,
@@ -327,6 +358,75 @@ async def list_recipes_for_meal_plan(
         )
     recipes = await recipe_service.get_recipes_for_meal_plan(meal_plan_id)
     return [dict(recipe) for recipe in recipes]
+
+
+@app.get(
+    "/v1/planner/meal-plans/{meal_plan_id}/shopping-list",
+    response_model=list[MealPlanIngredientResponse],
+)
+async def get_meal_plan_shopping_list(
+    meal_plan_id: UUID,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> list[MealPlanIngredientResponse]:
+    stored = await recipe_service.get_meal_plan(meal_plan_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Meal plan {meal_plan_id} not found.",
+        )
+    if x_user_id and stored["user_id"].lower() != x_user_id.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to view this meal plan.",
+        )
+    ingredients = await recipe_service.get_meal_plan_ingredients(meal_plan_id)
+    return [MealPlanIngredientResponse(**ingredient) for ingredient in ingredients]
+
+
+@app.patch(
+    "/v1/planner/meal-plans/{meal_plan_id}/shopping-list/{ingredient_id}",
+    response_model=MealPlanIngredientResponse,
+)
+async def update_meal_plan_ingredient_purchase(
+    meal_plan_id: UUID,
+    ingredient_id: UUID,
+    request: UpdateIngredientPurchaseRequest,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> MealPlanIngredientResponse:
+    stored = await recipe_service.get_meal_plan(meal_plan_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Meal plan {meal_plan_id} not found.",
+        )
+    if x_user_id and stored["user_id"].lower() != x_user_id.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to modify this meal plan.",
+        )
+
+    updated = await recipe_service.update_meal_plan_ingredient_purchase(
+        meal_plan_id,
+        ingredient_id,
+        request.is_purchased,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Ingredient {ingredient_id} was not found in meal plan {meal_plan_id}.",
+        )
+
+    ingredients = await recipe_service.get_meal_plan_ingredients(meal_plan_id)
+    ingredient = next(
+        (item for item in ingredients if item["meal_plan_ingredient_id"] == str(ingredient_id)),
+        None,
+    )
+    if ingredient is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Ingredient {ingredient_id} was not found in meal plan {meal_plan_id}.",
+        )
+    return MealPlanIngredientResponse(**ingredient)
 
 
 if __name__ == "__main__":

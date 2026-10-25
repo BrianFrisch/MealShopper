@@ -1,15 +1,38 @@
 from typing import Any, Dict
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from dependencies import get_store_repository
 from geo_service import StoreRepository
 from models import (
     LegacyStoreRequest,
+    StoreContextResponse,
     StoreDiscoveryRequest,
     StoreDiscoveryResponse,
 )
 
 router = APIRouter(prefix="/v1/shopper/stores", tags=["Stores"])
+
+
+@router.get("/{store_id}", response_model=StoreContextResponse)
+async def get_store_v1(
+    store_id: str,
+    store_repo: StoreRepository = Depends(get_store_repository),
+) -> StoreContextResponse:
+    store = await store_repo.get_store_context(store_id)
+    if store is None:
+        raise HTTPException(status_code=404, detail=f"Store {store_id} not found.")
+
+    return StoreContextResponse(
+        id=store.id,
+        store_id=store.id,
+        name=store.name,
+        address=store.street,
+        street=store.street,
+        city=store.city,
+        state=store.state,
+        zip_code=store.zip_code,
+        postal_code=store.zip_code,
+    )
 
 
 @router.post("/discover", response_model=StoreDiscoveryResponse)

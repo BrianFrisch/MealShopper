@@ -148,3 +148,21 @@ class MealPlanRecordResponse(BaseModel):
     recipe_count: int = 0
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+
+class MealPlanIngredientResponse(BaseModel):
+    meal_plan_ingredient_id: str
+    meal_plan_id: str
+    recipe_id: str
+    deal_id: Optional[str] = None
+    store_id: Optional[str] = None
+    is_promotional: bool
+    ingredient_name: str
+    ingredient_quantity: str
+    is_purchased: bool
+    created_at: str
+    updated_at: str
+
+
+class UpdateIngredientPurchaseRequest(BaseModel):
+    is_purchased: bool

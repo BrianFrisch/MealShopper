@@ -52,6 +52,20 @@ class StoredMealPlan(TypedDict):
     updated_at: str
 
 
+class StoredMealPlanIngredient(TypedDict):
+    meal_plan_ingredient_id: str
+    meal_plan_id: str
+    recipe_id: str
+    deal_id: str | None
+    store_id: str | None
+    is_promotional: bool
+    ingredient_name: str
+    ingredient_quantity: str
+    is_purchased: bool
+    created_at: str
+    updated_at: str
+
+
 def _resolve_meal_plan_uuid(plan_id: str) -> UUID:
     try:
         return UUID(str(plan_id))
@@ -201,6 +215,57 @@ class RecipeService:
                 recipe_id,
             )
 
+    async def remove_recipe_from_meal_plan(self, meal_plan_id: UUID, recipe_id: UUID) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as connection:
+            await connection.execute(
+                "CALL sp_remove_meal_plan_recipe($1, $2);",
+                meal_plan_id,
+                recipe_id,
+            )
+
+    async def get_meal_plan_ingredients(
+        self,
+        meal_plan_id: UUID,
+    ) -> list[StoredMealPlanIngredient]:
+        pool = self._require_pool()
+        async with pool.acquire() as connection:
+            rows = await connection.fetch(
+                """
+                SELECT meal_plan_ingredient_id, meal_plan_id, recipe_id, deal_id,
+                       is_promotional, ingredient_name, ingredient_quantity,
+                       is_purchased, created_at, updated_at
+                FROM meal_plan_ingredient
+                WHERE meal_plan_id = $1
+                ORDER BY (deal_id IS NULL), deal_id, ingredient_name, created_at
+                """,
+                meal_plan_id,
+            )
+        return [self._to_stored_meal_plan_ingredient(row) for row in rows]
+
+    async def update_meal_plan_ingredient_purchase(
+        self,
+        meal_plan_id: UUID,
+        ingredient_id: UUID,
+        is_purchased: bool,
+    ) -> bool:
+        pool = self._require_pool()
+        async with pool.acquire() as connection:
+            updated_id = await connection.fetchval(
+                """
+                UPDATE meal_plan_ingredient
+                SET is_purchased = $3,
+                    updated_at = CLOCK_TIMESTAMP()
+                WHERE meal_plan_id = $1
+                  AND meal_plan_ingredient_id = $2
+                RETURNING meal_plan_ingredient_id
+                """,
+                meal_plan_id,
+                ingredient_id,
+                is_purchased,
+            )
+        return updated_id is not None
+
     async def associate_user_with_recipe(self, user_id: UUID, recipe_id: UUID) -> None:
         pool = self._require_pool()
         async with pool.acquire() as connection:
@@ -264,6 +329,26 @@ class RecipeService:
             "user_id": str(row["user_id"]),
             "is_archived": bool(row.get("is_archived", False)),
             "recipe_count": int(raw_count or 0),
+            "created_at": row["created_at"].isoformat(),
+            "updated_at": row["updated_at"].isoformat(),
+        }
+
+    @staticmethod
+    def _to_stored_meal_plan_ingredient(
+        row: Mapping[str, Any],
+    ) -> StoredMealPlanIngredient:
+        deal_id = row["deal_id"]
+        store_id = deal_id.partition("_")[0] if deal_id and "_" in deal_id else None
+        return {
+            "meal_plan_ingredient_id": str(row["meal_plan_ingredient_id"]),
+            "meal_plan_id": str(row["meal_plan_id"]),
+            "recipe_id": str(row["recipe_id"]),
+            "deal_id": deal_id,
+            "store_id": store_id,
+            "is_promotional": bool(row["is_promotional"]),
+            "ingredient_name": row["ingredient_name"],
+            "ingredient_quantity": row["ingredient_quantity"],
+            "is_purchased": bool(row["is_purchased"]),
             "created_at": row["created_at"].isoformat(),
             "updated_at": row["updated_at"].isoformat(),
         }

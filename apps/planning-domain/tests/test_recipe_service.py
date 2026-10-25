@@ -18,6 +18,8 @@ class FakeConnection:
         self.execute_calls: list[tuple[str, tuple[Any, ...]]] = []
         self.fetchrow_result: dict[str, Any] | None = None
         self.fetch_results: list[dict[str, Any]] = []
+        self.ingredient_fetch_results: list[dict[str, Any]] = []
+        self.fetchval_override: UUID | None = None
         self.next_recipe_id = UUID("8b8e74c3-b048-4b9d-810c-2bd756c62810")
 
     @asynccontextmanager
@@ -26,6 +28,8 @@ class FakeConnection:
 
     async def fetchval(self, query: str, *args: Any) -> UUID:
         self.fetchval_calls.append((query, args))
+        if self.fetchval_override is not None:
+            return self.fetchval_override
         return args[0]
 
     async def execute(self, query: str, *args: Any) -> str:
@@ -39,6 +43,9 @@ class FakeConnection:
         return self.fetchrow_result
 
     async def fetch(self, query: str, *args: Any) -> list[dict[str, Any]]:
+        if "FROM meal_plan_ingredient" in query:
+            assert len(args) == 1
+            return self.ingredient_fetch_results
         assert "fn_get_recipes_for_user" in query
         assert len(args) == 1
         return self.fetch_results
@@ -143,6 +150,92 @@ async def test_update_meal_plan_passes_archive_state_to_database() -> None:
 
 
 @pytest.mark.asyncio
+async def test_meal_plan_recipe_add_and_remove_use_sync_procedures() -> None:
+    connection = FakeConnection()
+    service = RecipeService("unused", pool=FakePool(connection))  # type: ignore[arg-type]
+    meal_plan_id = UUID("11111111-1111-1111-1111-111111111111")
+    recipe_id = UUID("33333333-3333-3333-3333-333333333333")
+
+    await service.associate_meal_plan_with_recipe(meal_plan_id, recipe_id)
+    await service.remove_recipe_from_meal_plan(meal_plan_id, recipe_id)
+
+    assert connection.execute_calls == [
+        (
+            "CALL sp_associate_meal_plan_recipe($1, $2);",
+            (meal_plan_id, recipe_id),
+        ),
+        (
+            "CALL sp_remove_meal_plan_recipe($1, $2);",
+            (meal_plan_id, recipe_id),
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_meal_plan_ingredients_derives_store_from_deal_id() -> None:
+    connection = FakeConnection()
+    meal_plan_id = UUID("11111111-1111-1111-1111-111111111111")
+    recipe_id = UUID("33333333-3333-3333-3333-333333333333")
+    ingredient_id = UUID("44444444-4444-4444-4444-444444444444")
+    connection.ingredient_fetch_results = [
+        {
+            "meal_plan_ingredient_id": ingredient_id,
+            "meal_plan_id": meal_plan_id,
+            "recipe_id": recipe_id,
+            "deal_id": "store-123_deal-456",
+            "is_promotional": True,
+            "ingredient_name": "Chicken",
+            "ingredient_quantity": "1 lb",
+            "is_purchased": False,
+            "created_at": datetime(2026, 10, 25, tzinfo=timezone.utc),
+            "updated_at": datetime(2026, 10, 25, tzinfo=timezone.utc),
+        },
+        {
+            "meal_plan_ingredient_id": UUID("55555555-5555-5555-5555-555555555555"),
+            "meal_plan_id": meal_plan_id,
+            "recipe_id": recipe_id,
+            "deal_id": None,
+            "is_promotional": False,
+            "ingredient_name": "Rice",
+            "ingredient_quantity": "2 cups",
+            "is_purchased": True,
+            "created_at": datetime(2026, 10, 25, tzinfo=timezone.utc),
+            "updated_at": datetime(2026, 10, 25, tzinfo=timezone.utc),
+        },
+    ]
+    service = RecipeService("unused", pool=FakePool(connection))  # type: ignore[arg-type]
+
+    ingredients = await service.get_meal_plan_ingredients(meal_plan_id)
+
+    assert ingredients[0]["store_id"] == "store-123"
+    assert ingredients[0]["deal_id"] == "store-123_deal-456"
+    assert ingredients[0]["ingredient_name"] == "Chicken"
+    assert ingredients[1]["store_id"] is None
+    assert ingredients[1]["is_purchased"] is True
+
+
+@pytest.mark.asyncio
+async def test_update_meal_plan_ingredient_purchase_updates_status_and_timestamp() -> None:
+    connection = FakeConnection()
+    meal_plan_id = UUID("11111111-1111-1111-1111-111111111111")
+    ingredient_id = UUID("44444444-4444-4444-4444-444444444444")
+    connection.fetchval_override = ingredient_id
+    service = RecipeService("unused", pool=FakePool(connection))  # type: ignore[arg-type]
+
+    updated = await service.update_meal_plan_ingredient_purchase(
+        meal_plan_id,
+        ingredient_id,
+        True,
+    )
+
+    assert updated is True
+    query, args = connection.fetchval_calls[0]
+    assert "SET is_purchased = $3" in query
+    assert "updated_at = CLOCK_TIMESTAMP()" in query
+    assert args == (meal_plan_id, ingredient_id, True)
+
+
+@pytest.mark.asyncio
 async def test_generate_plan_persists_mock_result_for_request_user(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -244,6 +337,7 @@ async def test_meal_plan_endpoints_create_associate_and_update(
     meal_plan_id = UUID("11111111-1111-1111-1111-111111111111")
     recipe_id = UUID("33333333-3333-3333-3333-333333333333")
     associations: list[tuple[UUID, UUID]] = []
+    removals: list[tuple[UUID, UUID]] = []
     plans: dict[UUID, dict[str, Any]] = {}
     update_calls: list[tuple[UUID, str, bool | None]] = []
 
@@ -274,6 +368,13 @@ async def test_meal_plan_endpoints_create_associate_and_update(
             recipe_id: UUID,
         ) -> None:
             associations.append((meal_plan_id, recipe_id))
+
+        async def remove_recipe_from_meal_plan(
+            self,
+            meal_plan_id: UUID,
+            recipe_id: UUID,
+        ) -> None:
+            removals.append((meal_plan_id, recipe_id))
 
         async def update_meal_plan(
             self,
@@ -308,6 +409,18 @@ async def test_meal_plan_endpoints_create_associate_and_update(
         "recipe_id": str(recipe_id),
     }
     assert associations == [(meal_plan_id, recipe_id)]
+
+    remove_result = await main.remove_recipe_from_meal_plan(
+        meal_plan_id=meal_plan_id,
+        recipe_id=recipe_id,
+        x_user_id=str(user_id),
+    )
+    assert remove_result == {
+        "status": "removed",
+        "meal_plan_id": str(meal_plan_id),
+        "recipe_id": str(recipe_id),
+    }
+    assert removals == [(meal_plan_id, recipe_id)]
 
     updated = await main.update_meal_plan_name(
         meal_plan_id=meal_plan_id,

@@ -235,13 +235,13 @@ export const MealPlansPage = () => {
                           <span>Recipes</span>
                         </button>
 
-                        <button
-                          type="button"
+                        <Link
+                          to={`/meal-plans/${plan.meal_plan_id}/shopping-list`}
                           className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3.5 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-50 hover:text-stone-900 sm:text-sm"
                         >
                           <ShoppingCart aria-hidden="true" className="h-4 w-4 shrink-0" />
                           <span>Shopping List</span>
-                        </button>
+                        </Link>
 
                         <button
                           type="button"

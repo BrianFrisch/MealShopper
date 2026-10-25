@@ -11,10 +11,12 @@
 \i /planner-postgres-init/03_procedures/003_sp_create_meal_plan.sql
 \i /planner-postgres-init/03_procedures/004_sp_update_meal_plan.sql
 \i /planner-postgres-init/03_procedures/005_sp_associate_meal_plan_recipe.sql
+\i /planner-postgres-init/03_procedures/006_sp_remove_meal_plan_recipe.sql
 ALTER TABLE recipe OWNER TO planner_app;
 ALTER TABLE user_recipe OWNER TO planner_app;
 ALTER TABLE meal_plan OWNER TO planner_app;
 ALTER TABLE meal_plan_recipe OWNER TO planner_app;
+ALTER TABLE meal_plan_ingredient OWNER TO planner_app;
 ALTER FUNCTION fn_get_recipe(UUID) OWNER TO planner_app;
 ALTER FUNCTION fn_get_recipes_for_user(UUID) OWNER TO planner_app;
 ALTER FUNCTION fn_get_meal_plan(UUID) OWNER TO planner_app;
@@ -25,6 +27,7 @@ ALTER PROCEDURE sp_associate_user_recipe(UUID, UUID) OWNER TO planner_app;
 ALTER PROCEDURE sp_create_meal_plan(UUID, TEXT, UUID) OWNER TO planner_app;
 ALTER PROCEDURE sp_update_meal_plan(UUID, TEXT, BOOLEAN) OWNER TO planner_app;
 ALTER PROCEDURE sp_associate_meal_plan_recipe(UUID, UUID) OWNER TO planner_app;
+ALTER PROCEDURE sp_remove_meal_plan_recipe(UUID, UUID) OWNER TO planner_app;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO planner_app;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO planner_app;
 GRANT EXECUTE ON ALL PROCEDURES IN SCHEMA public TO planner_app;

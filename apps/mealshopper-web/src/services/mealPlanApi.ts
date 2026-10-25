@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { MealPlanDiscoveryRequest, DiscoveryJobResult, TaskStatusResponse } from '../types/discovery';
+import type { MealPlanDiscoveryRequest, DiscoveryJobResult, StoreDto, TaskStatusResponse } from '../types/discovery';
 import type { MealPlanSynthesisRequest, MealPlanSynthesisResponse } from '../types/mealPlan';
 
 const apiClient = axios.create({
@@ -24,6 +24,20 @@ export interface MealPlanRecordDto {
   updated_at?: string;
 }
 
+export interface MealPlanIngredientDto {
+  meal_plan_ingredient_id: string;
+  meal_plan_id: string;
+  recipe_id: string;
+  deal_id: string | null;
+  store_id: string | null;
+  is_promotional: boolean;
+  ingredient_name: string;
+  ingredient_quantity: string;
+  is_purchased: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export const mealPlanApi = {
   async getMealPlans(token: string): Promise<MealPlanRecordDto[]> {
     const response = await apiClient.get<MealPlanRecordDto[]>(
@@ -36,6 +50,47 @@ export const mealPlanApi = {
   async getMealPlanRecipes(mealPlanId: string, token: string): Promise<unknown[]> {
     const response = await apiClient.get<unknown[]>(
       `/v1/planner/meal-plans/${mealPlanId}/recipes`,
+      authorizationHeaders(token)
+    );
+    return response.data;
+  },
+
+  async getMealPlanRecord(mealPlanId: string, token: string): Promise<MealPlanRecordDto> {
+    const response = await apiClient.get<MealPlanRecordDto>(
+      `/v1/planner/meal-plans/${mealPlanId}`,
+      authorizationHeaders(token)
+    );
+    return response.data;
+  },
+
+  async getMealPlanShoppingList(
+    mealPlanId: string,
+    token: string
+  ): Promise<MealPlanIngredientDto[]> {
+    const response = await apiClient.get<MealPlanIngredientDto[]>(
+      `/v1/planner/meal-plans/${mealPlanId}/shopping-list`,
+      authorizationHeaders(token)
+    );
+    return response.data;
+  },
+
+  async getStoreDetails(storeId: string, token: string): Promise<StoreDto> {
+    const response = await apiClient.get<StoreDto>(
+      `/v1/shopper/stores/${encodeURIComponent(storeId)}`,
+      authorizationHeaders(token)
+    );
+    return response.data;
+  },
+
+  async updateMealPlanIngredientPurchased(
+    mealPlanId: string,
+    ingredientId: string,
+    isPurchased: boolean,
+    token: string
+  ): Promise<MealPlanIngredientDto> {
+    const response = await apiClient.patch<MealPlanIngredientDto>(
+      `/v1/planner/meal-plans/${mealPlanId}/shopping-list/${ingredientId}`,
+      { is_purchased: isPurchased },
       authorizationHeaders(token)
     );
     return response.data;
@@ -65,6 +120,18 @@ export const mealPlanApi = {
     const response = await apiClient.post<{ status: string; meal_plan_id: string; recipe_id: string }>(
       `/v1/planner/meal-plans/${mealPlanId}/recipes`,
       { recipeId },
+      authorizationHeaders(token)
+    );
+    return response.data;
+  },
+
+  async removeRecipeFromMealPlan(
+    mealPlanId: string,
+    recipeId: string,
+    token: string
+  ): Promise<{ status: string; meal_plan_id: string; recipe_id: string }> {
+    const response = await apiClient.delete<{ status: string; meal_plan_id: string; recipe_id: string }>(
+      `/v1/planner/meal-plans/${mealPlanId}/recipes/${recipeId}`,
       authorizationHeaders(token)
     );
     return response.data;
