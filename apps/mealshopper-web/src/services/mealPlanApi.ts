@@ -18,6 +18,7 @@ export interface MealPlanRecordDto {
   meal_plan_id: string;
   meal_plan_name: string;
   user_id: string;
+  recipe_count?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -26,6 +27,14 @@ export const mealPlanApi = {
   async getMealPlans(token: string): Promise<MealPlanRecordDto[]> {
     const response = await apiClient.get<MealPlanRecordDto[]>(
       '/v1/planner/meal-plans',
+      authorizationHeaders(token)
+    );
+    return response.data;
+  },
+
+  async getMealPlanRecipes(mealPlanId: string, token: string): Promise<unknown[]> {
+    const response = await apiClient.get<unknown[]>(
+      `/v1/planner/meal-plans/${mealPlanId}/recipes`,
       authorizationHeaders(token)
     );
     return response.data;

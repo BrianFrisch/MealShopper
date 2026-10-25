@@ -267,7 +267,14 @@ async def list_meal_plans_for_user(
 ) -> list[MealPlanRecordResponse]:
     resolved_user_id = _resolve_request_user_id(x_user_id, user_id)
     plans = await recipe_service.get_meal_plans_for_user(resolved_user_id)
-    return [MealPlanRecordResponse(**plan) for plan in plans]
+    results: list[MealPlanRecordResponse] = []
+    for plan in plans:
+        plan_data = dict(plan)
+        if "recipe_count" not in plan_data and hasattr(recipe_service, "get_recipes_for_meal_plan"):
+            recipes = await recipe_service.get_recipes_for_meal_plan(UUID(str(plan_data["meal_plan_id"])))
+            plan_data["recipe_count"] = len(recipes)
+        results.append(MealPlanRecordResponse(**plan_data))
+    return results
 
 
 @app.get(
@@ -289,7 +296,31 @@ async def get_meal_plan_by_id(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to view this meal plan.",
         )
-    return MealPlanRecordResponse(**stored)
+    plan_data = dict(stored)
+    if "recipe_count" not in plan_data and hasattr(recipe_service, "get_recipes_for_meal_plan"):
+        recipes = await recipe_service.get_recipes_for_meal_plan(meal_plan_id)
+        plan_data["recipe_count"] = len(recipes)
+    return MealPlanRecordResponse(**plan_data)
+
+
+@app.get("/v1/planner/meal-plans/{meal_plan_id}/recipes")
+async def list_recipes_for_meal_plan(
+    meal_plan_id: UUID,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> list[dict[str, object]]:
+    stored = await recipe_service.get_meal_plan(meal_plan_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Meal plan {meal_plan_id} not found.",
+        )
+    if x_user_id and stored["user_id"].lower() != x_user_id.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to view this meal plan.",
+        )
+    recipes = await recipe_service.get_recipes_for_meal_plan(meal_plan_id)
+    return [dict(recipe) for recipe in recipes]
 
 
 if __name__ == "__main__":

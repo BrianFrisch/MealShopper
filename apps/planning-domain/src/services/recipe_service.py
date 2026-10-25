@@ -46,6 +46,7 @@ class StoredMealPlan(TypedDict):
     meal_plan_id: str
     meal_plan_name: str
     user_id: str
+    recipe_count: int
     created_at: str
     updated_at: str
 
@@ -135,13 +136,32 @@ class RecipeService:
         pool = self._require_pool()
         async with pool.acquire() as connection:
             row = await connection.fetchrow("SELECT * FROM fn_get_meal_plan($1);", meal_plan_id)
-        return self._to_stored_meal_plan(row) if row is not None else None
+            if row is None:
+                return None
+            plan = self._to_stored_meal_plan(row)
+            if "recipe_count" not in row or row["recipe_count"] is None:
+                recipe_rows = await connection.fetch(
+                    "SELECT * FROM fn_get_recipes_for_meal_plan($1);",
+                    meal_plan_id,
+                )
+                plan["recipe_count"] = len(recipe_rows)
+            return plan
 
     async def get_meal_plans_for_user(self, user_id: UUID) -> list[StoredMealPlan]:
         pool = self._require_pool()
         async with pool.acquire() as connection:
             rows = await connection.fetch("SELECT * FROM fn_get_meal_plans_for_user($1);", user_id)
-        return [self._to_stored_meal_plan(row) for row in rows]
+            plans: list[StoredMealPlan] = []
+            for row in rows:
+                plan = self._to_stored_meal_plan(row)
+                if "recipe_count" not in row or row["recipe_count"] is None:
+                    recipe_rows = await connection.fetch(
+                        "SELECT * FROM fn_get_recipes_for_meal_plan($1);",
+                        row["meal_plan_id"],
+                    )
+                    plan["recipe_count"] = len(recipe_rows)
+                plans.append(plan)
+        return plans
 
     async def create_recipe(
         self,
@@ -230,10 +250,12 @@ class RecipeService:
 
     @staticmethod
     def _to_stored_meal_plan(row: Mapping[str, Any]) -> StoredMealPlan:
+        raw_count = row.get("recipe_count") if hasattr(row, "get") else (row["recipe_count"] if "recipe_count" in row else 0)
         return {
             "meal_plan_id": str(row["meal_plan_id"]),
             "meal_plan_name": row["meal_plan_name"],
             "user_id": str(row["user_id"]),
+            "recipe_count": int(raw_count or 0),
             "created_at": row["created_at"].isoformat(),
             "updated_at": row["updated_at"].isoformat(),
         }

@@ -295,3 +295,33 @@ async def test_meal_plan_endpoints_create_associate_and_update(
     assert updated.meal_plan_name == "Renamed Meal Plan"
     assert updated.updated_at == "2026-10-24T18:05:00+00:00"
 
+
+@pytest.mark.asyncio
+async def test_list_meal_plans_for_user_includes_recipe_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = UUID("207d2de7-919d-4f48-b6f2-4a475ae96426")
+    meal_plan_id = UUID("11111111-1111-1111-1111-111111111111")
+
+    class StubRecipeService:
+        async def get_meal_plans_for_user(self, requested_user_id: UUID) -> list[dict[str, Any]]:
+            assert requested_user_id == user_id
+            return [
+                {
+                    "meal_plan_id": str(meal_plan_id),
+                    "meal_plan_name": "Oct 25, 2026",
+                    "user_id": str(user_id),
+                    "recipe_count": 3,
+                    "created_at": "2026-10-25T15:00:00+00:00",
+                    "updated_at": "2026-10-25T15:10:00+00:00",
+                }
+            ]
+
+    monkeypatch.setattr(main, "recipe_service", StubRecipeService())
+
+    listed = await main.list_meal_plans_for_user(x_user_id=str(user_id))
+    assert len(listed) == 1
+    assert listed[0].meal_plan_id == str(meal_plan_id)
+    assert listed[0].meal_plan_name == "Oct 25, 2026"
+    assert listed[0].recipe_count == 3
+
