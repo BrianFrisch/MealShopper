@@ -16,12 +16,18 @@ class GroceryChainService:
     Service responsible for grocery chain metadata retrieval and modifications.
     """
 
+    _chains_cache: Optional[List[Dict[str, Any]]] = None
+    _chain_by_id_cache: Dict[str, Dict[str, str]] = {}
+
     def __init__(self, db_url: Optional[str] = None):
         self.db_url = db_url or SHOPPER_DATABASE_URL
 
     async def get_chain_metadata(self, chain_id: str) -> Dict[str, str]:
         """Retrieve grocery chain metadata from the database for a specific chain."""
         chain_key = chain_id.strip().lower()
+        if self.db_url == SHOPPER_DATABASE_URL and chain_key in self._chain_by_id_cache:
+            return dict(self._chain_by_id_cache[chain_key])
+
         conn = await asyncpg.connect(self.db_url)
         try:
             row: Any = await conn.fetchrow(
@@ -35,7 +41,7 @@ class GroceryChainService:
             spider_value = cast(Optional[str], row["spider_name"])
             flyer_source_value = cast(Optional[str], row["flyer_source_type"])
             spider = spider_value or chain_value
-            return {
+            metadata = {
                 "chain_id": chain_value,
                 "display_name": cast(str, row["display_name"]),
                 "adapter_name": cast(str, row["adapter_name"]),
@@ -43,11 +49,18 @@ class GroceryChainService:
                 "spider_name": spider,
                 "flyer_source_type": flyer_source_value or "flipp",
             }
+            if self.db_url == SHOPPER_DATABASE_URL:
+                self._chain_by_id_cache[chain_key] = metadata
+                self._chain_by_id_cache[chain_value.strip().lower()] = metadata
+            return metadata
         finally:
             await conn.close()
 
     async def get_all_chains(self) -> List[Dict[str, Any]]:
         """Retrieve all active grocery chains from the database."""
+        if self.db_url == SHOPPER_DATABASE_URL and self._chains_cache is not None:
+            return [dict(c) for c in self._chains_cache]
+
         conn = None
         try:
             conn = await asyncpg.connect(self.db_url, timeout=3)
@@ -63,7 +76,7 @@ class GroceryChainService:
                 flyer_source_value = cast(Optional[str], row["flyer_source_type"])
                 active_value = cast(Optional[bool], row.get("is_active", True))
                 spider = spider_value or chain_value
-                chains.append({
+                entry = {
                     "chain_id": chain_value,
                     "display_name": cast(str, row["display_name"]),
                     "adapter_name": adapter_value,
@@ -71,7 +84,14 @@ class GroceryChainService:
                     "spider_name": spider,
                     "flyer_source_type": flyer_source_value or "flipp",
                     "is_active": active_value if active_value is not None else True,
-                })
+                }
+                chains.append(entry)
+                if self.db_url == SHOPPER_DATABASE_URL:
+                    meta_str = {k: str(v) for k, v in entry.items() if k != "is_active"}
+                    self._chain_by_id_cache[chain_value.strip().lower()] = meta_str
+                    self._chain_by_id_cache[cast(str, row["display_name"]).strip().lower()] = meta_str
+            if self.db_url == SHOPPER_DATABASE_URL and chains:
+                GroceryChainService._chains_cache = chains
             return chains
         except Exception as exc:
             logger.warning("Failed to fetch all chains from database: %s", exc)
@@ -99,5 +119,7 @@ class GroceryChainService:
                 spider_name,
                 flyer_source_type,
             )
+            GroceryChainService._chains_cache = None
+            GroceryChainService._chain_by_id_cache.clear()
         finally:
             await conn.close()

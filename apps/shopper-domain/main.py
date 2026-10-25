@@ -41,6 +41,9 @@ async def lifespan(app: FastAPI):
     pool = redis.ConnectionPool.from_url(REDIS_URL, decode_responses=True)
     dependencies.set_redis_pool(pool)
     yield
+    if dependencies.adapter_factory is not None:
+        await dependencies.adapter_factory.close()
+        dependencies.adapter_factory = None
     if dependencies.redis_pool:
         await dependencies.redis_pool.disconnect()
 

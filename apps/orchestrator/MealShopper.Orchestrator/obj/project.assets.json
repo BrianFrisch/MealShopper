@@ -2,10 +2,10 @@
   "version": 3,
   "targets": {
     "net8.0": {
-      "Microsoft.AspNetCore.OpenApi/8.0.31": {
+      "Microsoft.AspNetCore.OpenApi/8.0.32": {
         "type": "package",
         "dependencies": {
-          "Microsoft.OpenApi": "1.6.30"
+          "Microsoft.OpenApi": "1.6.31"
         },
         "compile": {
           "lib/net8.0/Microsoft.AspNetCore.OpenApi.dll": {
@@ -558,7 +558,7 @@
           "buildTransitive/net8.0/Microsoft.Extensions.Telemetry.Abstractions.targets": {}
         }
       },
-      "Microsoft.OpenApi/1.6.30": {
+      "Microsoft.OpenApi/1.6.31": {
         "type": "package",
         "compile": {
           "lib/netstandard2.0/Microsoft.OpenApi.dll": {
@@ -763,10 +763,10 @@
     }
   },
   "libraries": {
-    "Microsoft.AspNetCore.OpenApi/8.0.31": {
-      "sha512": "HaccNfR9eFD3qbCTukmCImQyslZs9ZN/Bvyr3lVcmNRrPpqH/ofQEzGHH3UAKuDjXJbBzGc8tW6iBs7lDD9kKA==",
+    "Microsoft.AspNetCore.OpenApi/8.0.32": {
+      "sha512": "ikJO5NUYWQrAjPMSdkf00+GN2ceKEQxCKUiCPjHBQ5EFvVbtRXX85BcC+9lHqt9+rEJcyLK0NbrRP1ISAO5Ssg==",
       "type": "package",
-      "path": "microsoft.aspnetcore.openapi/8.0.31",
+      "path": "microsoft.aspnetcore.openapi/8.0.32",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
@@ -774,7 +774,7 @@
         "THIRD-PARTY-NOTICES.TXT",
         "lib/net8.0/Microsoft.AspNetCore.OpenApi.dll",
         "lib/net8.0/Microsoft.AspNetCore.OpenApi.xml",
-        "microsoft.aspnetcore.openapi.8.0.31.nupkg.sha512",
+        "microsoft.aspnetcore.openapi.8.0.32.nupkg.sha512",
         "microsoft.aspnetcore.openapi.nuspec"
       ]
     },
@@ -1809,10 +1809,10 @@
         "microsoft.extensions.telemetry.abstractions.nuspec"
       ]
     },
-    "Microsoft.OpenApi/1.6.30": {
-      "sha512": "GIxOTS4vUCdIRDt+BcnJQKdaKb9b+L14IJnzkbHOXlm7JTbIyp37DpA2SdpxjdTB1RPQ1jhPwbdoNcUWznHsrg==",
+    "Microsoft.OpenApi/1.6.31": {
+      "sha512": "58ggc22i0BKvHuVoj5oVVQ7EbMkEMY0FvGeoQ/yBemk36pUbroDoj1XxRTnCi+fsgDTDuf+YZmigHkEzs5B2wA==",
       "type": "package",
-      "path": "microsoft.openapi/1.6.30",
+      "path": "microsoft.openapi/1.6.31",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
@@ -1820,7 +1820,7 @@
         "lib/netstandard2.0/Microsoft.OpenApi.dll",
         "lib/netstandard2.0/Microsoft.OpenApi.pdb",
         "lib/netstandard2.0/Microsoft.OpenApi.xml",
-        "microsoft.openapi.1.6.30.nupkg.sha512",
+        "microsoft.openapi.1.6.31.nupkg.sha512",
         "microsoft.openapi.nuspec"
       ]
     },
@@ -2135,11 +2135,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj",
+      "projectUniqueName": "c:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj",
       "projectName": "MealShopper.Orchestrator",
-      "projectPath": "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj",
+      "projectPath": "c:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\MealShopper.Orchestrator.csproj",
       "packagesPath": "C:\\Users\\admin\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\obj\\",
+      "outputPath": "c:\\Users\\admin\\Repositories\\MealShopper\\apps\\orchestrator\\MealShopper.Orchestrator\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\admin\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -2154,8 +2154,8 @@
         "net8.0": {
           "targetAlias": "net8.0",
           "projectReferences": {
-            "C:\\Users\\admin\\Repositories\\MealShopper\\libs\\MealShopper.Common\\MealShopper.Common.csproj": {
-              "projectPath": "C:\\Users\\admin\\Repositories\\MealShopper\\libs\\MealShopper.Common\\MealShopper.Common.csproj"
+            "c:\\Users\\admin\\Repositories\\MealShopper\\libs\\MealShopper.Common\\MealShopper.Common.csproj": {
+              "projectPath": "c:\\Users\\admin\\Repositories\\MealShopper\\libs\\MealShopper.Common\\MealShopper.Common.csproj"
             }
           }
         }

@@ -269,7 +269,8 @@ resource "google_cloud_run_v2_service" "shopper_domain" {
   deletion_protection = var.cloud_run_deletion_protection
 
   template {
-    service_account = google_service_account.cloud_run.email
+    service_account                  = google_service_account.cloud_run.email
+    max_instance_request_concurrency = 10
 
     vpc_access {
       egress = "PRIVATE_RANGES_ONLY"
@@ -283,6 +284,13 @@ resource "google_cloud_run_v2_service" "shopper_domain" {
       image = var.shopper_domain_image
       ports {
         container_port = 8001
+      }
+
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = "1Gi"
+        }
       }
 
       env {
@@ -326,6 +334,14 @@ resource "google_cloud_run_v2_service" "shopper_domain" {
       env {
         name  = "DEAL_DATA_DIR"
         value = "/tmp/deals"
+      }
+      env {
+        name  = "PERSIST_DEALS_TO_DISK"
+        value = "false"
+      }
+      env {
+        name  = "INGEST_LOCK_TTL_SECONDS"
+        value = "60"
       }
       env {
         name  = "GOOGLE_CLOUD_PROJECT"

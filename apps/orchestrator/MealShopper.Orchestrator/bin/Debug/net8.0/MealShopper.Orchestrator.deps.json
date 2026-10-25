@@ -9,7 +9,7 @@
       "MealShopper.Orchestrator/1.0.0": {
         "dependencies": {
           "MealShopper.Common": "1.0.0",
-          "Microsoft.AspNetCore.OpenApi": "8.0.31",
+          "Microsoft.AspNetCore.OpenApi": "8.0.32",
           "Microsoft.Extensions.Http.Resilience": "10.10.0",
           "StackExchange.Redis": "2.8.31",
           "Swashbuckle.AspNetCore": "6.6.2"
@@ -18,14 +18,14 @@
           "MealShopper.Orchestrator.dll": {}
         }
       },
-      "Microsoft.AspNetCore.OpenApi/8.0.31": {
+      "Microsoft.AspNetCore.OpenApi/8.0.32": {
         "dependencies": {
-          "Microsoft.OpenApi": "1.6.30"
+          "Microsoft.OpenApi": "1.6.31"
         },
         "runtime": {
           "lib/net8.0/Microsoft.AspNetCore.OpenApi.dll": {
-            "assemblyVersion": "8.0.31.0",
-            "fileVersion": "8.0.3126.42125"
+            "assemblyVersion": "8.0.32.0",
+            "fileVersion": "8.0.3226.50505"
           }
         }
       },
@@ -322,11 +322,11 @@
           }
         }
       },
-      "Microsoft.OpenApi/1.6.30": {
+      "Microsoft.OpenApi/1.6.31": {
         "runtime": {
           "lib/netstandard2.0/Microsoft.OpenApi.dll": {
-            "assemblyVersion": "1.6.30.0",
-            "fileVersion": "1.6.30.0"
+            "assemblyVersion": "1.6.31.0",
+            "fileVersion": "1.6.31.0"
           }
         }
       },
@@ -396,7 +396,7 @@
       },
       "Swashbuckle.AspNetCore.Swagger/6.6.2": {
         "dependencies": {
-          "Microsoft.OpenApi": "1.6.30"
+          "Microsoft.OpenApi": "1.6.31"
         },
         "runtime": {
           "lib/net8.0/Swashbuckle.AspNetCore.Swagger.dll": {
@@ -442,12 +442,12 @@
       "serviceable": false,
       "sha512": ""
     },
-    "Microsoft.AspNetCore.OpenApi/8.0.31": {
+    "Microsoft.AspNetCore.OpenApi/8.0.32": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-HaccNfR9eFD3qbCTukmCImQyslZs9ZN/Bvyr3lVcmNRrPpqH/ofQEzGHH3UAKuDjXJbBzGc8tW6iBs7lDD9kKA==",
-      "path": "microsoft.aspnetcore.openapi/8.0.31",
-      "hashPath": "microsoft.aspnetcore.openapi.8.0.31.nupkg.sha512"
+      "sha512": "sha512-ikJO5NUYWQrAjPMSdkf00+GN2ceKEQxCKUiCPjHBQ5EFvVbtRXX85BcC+9lHqt9+rEJcyLK0NbrRP1ISAO5Ssg==",
+      "path": "microsoft.aspnetcore.openapi/8.0.32",
+      "hashPath": "microsoft.aspnetcore.openapi.8.0.32.nupkg.sha512"
     },
     "Microsoft.Extensions.AmbientMetadata.Application/10.10.0": {
       "type": "package",
@@ -638,12 +638,12 @@
       "path": "microsoft.extensions.telemetry.abstractions/10.10.0",
       "hashPath": "microsoft.extensions.telemetry.abstractions.10.10.0.nupkg.sha512"
     },
-    "Microsoft.OpenApi/1.6.30": {
+    "Microsoft.OpenApi/1.6.31": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-GIxOTS4vUCdIRDt+BcnJQKdaKb9b+L14IJnzkbHOXlm7JTbIyp37DpA2SdpxjdTB1RPQ1jhPwbdoNcUWznHsrg==",
-      "path": "microsoft.openapi/1.6.30",
-      "hashPath": "microsoft.openapi.1.6.30.nupkg.sha512"
+      "sha512": "sha512-58ggc22i0BKvHuVoj5oVVQ7EbMkEMY0FvGeoQ/yBemk36pUbroDoj1XxRTnCi+fsgDTDuf+YZmigHkEzs5B2wA==",
+      "path": "microsoft.openapi/1.6.31",
+      "hashPath": "microsoft.openapi.1.6.31.nupkg.sha512"
     },
     "Pipelines.Sockets.Unofficial/2.2.8": {
       "type": "package",

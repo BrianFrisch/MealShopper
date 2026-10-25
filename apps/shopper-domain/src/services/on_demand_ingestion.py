@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timezone
 import json
 import logging
+import os
 from typing import Any
 
 from src.ingestion.factory import DealAdapterFactory
@@ -20,6 +21,26 @@ def _filter_deals_by_tier(deals: list[dict[str, Any]], tier: str) -> list[dict[s
     return deals
 
 
+async def _find_cached_deals(
+    storage: PartitionedDealStorage,
+    postal_code: str,
+    chain: str,
+    store_id: str,
+    tier: str,
+) -> list[dict[str, Any]]:
+    flyer_id = await storage.get_flyer_id_for_postal(postal_code, chain)
+    target_ids: list[str] = []
+    if flyer_id:
+        target_ids.append(flyer_id)
+    if store_id:
+        target_ids.append(store_id)
+    for fid in target_ids:
+        deals = await storage.get_deals_by_flyer_id(fid, tier)
+        if deals:
+            return deals
+    return []
+
+
 async def ingest_store_on_demand(
     store_id: str,
     chain: str,
@@ -28,61 +49,41 @@ async def ingest_store_on_demand(
     factory: DealAdapterFactory,
     tier: str = "primary",
 ) -> list[dict[str, Any]]:
- 
-    # lock_key = f"lock:ingest:{store_id}"
     clean_chain = chain.strip().lower().replace(" ", "")
     lock_key = f"lock:ingest:{clean_chain}:{postal_code}"
- 
+
     redis_client = storage.redis
-    lock_ttl_seconds = 20
+    lock_ttl_seconds = int(os.getenv("INGEST_LOCK_TTL_SECONDS", "20"))
 
     # 1. Attempt to acquire ingestion lock
     acquired = await redis_client.set(lock_key, "1", nx=True, ex=lock_ttl_seconds)
 
     if not acquired:
         logger.info("Store %s is currently being ingested by another request. Awaiting result...", store_id)
-        # Poll up to 25 seconds (50 x 500ms) for the scraping worker to complete
-        for _ in range(50):
+        max_polls = max(50, lock_ttl_seconds * 2)
+        for _ in range(max_polls):
             await asyncio.sleep(0.5)
-            flyer_id = await storage.get_flyer_id_for_postal(postal_code, chain)
-            target_ids: list[str] = []
-            if flyer_id:
-                target_ids.append(flyer_id)
-            if store_id:
-                target_ids.append(store_id)
-            for fid in target_ids:
-                deals = await storage.get_deals_by_flyer_id(fid, tier)
-                if deals:
-                    return deals
+            cached = await _find_cached_deals(storage, postal_code, chain, store_id, tier)
+            if cached:
+                return cached
             # If lock cleared, worker finished or released
             lock_val = await redis_client.get(lock_key)
             if not lock_val:
-                # Lock released; give a quick second for keys to settle and check once more
                 await asyncio.sleep(0.5)
-                flyer_id = await storage.get_flyer_id_for_postal(postal_code, chain)
-                settled_ids: list[str] = []
-                if flyer_id:
-                    settled_ids.append(flyer_id)
-                if store_id:
-                    settled_ids.append(store_id)
-                for fid in settled_ids:
-                    deals = await storage.get_deals_by_flyer_id(fid, tier)
-                    if deals:
-                        return deals
+                cached = await _find_cached_deals(storage, postal_code, chain, store_id, tier)
+                if cached:
+                    return cached
                 break
 
-        # Final fallback check
-        flyer_id = await storage.get_flyer_id_for_postal(postal_code, chain)
-        target_ids: list[str] = []
-        if flyer_id:
-            target_ids.append(flyer_id)
-        if store_id:
-            target_ids.append(store_id)
-        for fid in target_ids:
-            deals = await storage.get_deals_by_flyer_id(fid, tier)
-            if deals:
-                return deals
-        return []
+        # Final fallback check before attempting recovery
+        cached = await _find_cached_deals(storage, postal_code, chain, store_id, tier)
+        if cached:
+            return cached
+
+        # If previous worker crashed or timed out without saving deals, try acquiring the lock to recover
+        acquired = await redis_client.set(lock_key, "1", nx=True, ex=lock_ttl_seconds)
+        if not acquired:
+            return []
 
     try:
         adapter = await factory.get_or_load_adapter(chain)
@@ -96,6 +97,7 @@ async def ingest_store_on_demand(
     try:
         # Step 4a: Call the adapter to fetch the metadata & flyer_id if supported
         flyer_id = None
+        meta = None
         try:
             meta = await adapter.fetch_flyer_metadata(postal_code, chain_id=chain)
             if meta and meta[0]:
@@ -107,6 +109,7 @@ async def ingest_store_on_demand(
             postal_code=postal_code,
             store_id=store_id,
             merchant_name=chain,
+            flyer_metadata=meta,
         )
         if deals:
             if not flyer_id:

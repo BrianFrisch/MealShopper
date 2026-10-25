@@ -2,7 +2,10 @@ from typing import List, Any, Dict, Optional
 from config import SHOPPER_DATABASE_URL
 from models import Store
 
-import asyncpg  # type: ignore
+try:
+    import asyncpg  # type: ignore
+except ImportError:
+    asyncpg = None
 
 
 EARTH_RADIUS_MILES = 3958.8

@@ -38,9 +38,18 @@ class PartitionedDealStorage:
         postal_code: str,
         chain_id: str,
     ) -> Optional[str]:
-        cache_key = f"deals:flyer:{postal_code}:{chain_id}"
+        clean_chain = chain_id.strip().lower().replace(" ", "")
+        cache_key = f"deals:flyer:{postal_code.strip()}:{clean_chain}"
         val = await self.redis.get(cache_key)
-        return str(val) if val is not None else None
+        if val is not None:
+            return str(val)
+        # Fallback for exact legacy key if different
+        legacy_key = f"deals:flyer:{postal_code}:{chain_id}"
+        if legacy_key != cache_key:
+            legacy_val = await self.redis.get(legacy_key)
+            if legacy_val is not None:
+                return str(legacy_val)
+        return None
 
     async def set_flyer_id_for_postal(
         self,
@@ -49,7 +58,8 @@ class PartitionedDealStorage:
         flyer_id: Any,
         ttl: Optional[int] = None,
     ) -> None:
-        cache_key = f"deals:flyer:{postal_code}:{chain_id}"
+        clean_chain = chain_id.strip().lower().replace(" ", "")
+        cache_key = f"deals:flyer:{postal_code.strip()}:{clean_chain}"
         if ttl is not None:
             await self.redis.set(cache_key, str(flyer_id), ex=int(ttl))
         else:
@@ -95,8 +105,13 @@ class PartitionedDealStorage:
 
         cycles = get_spanning_cycle_keys(valid_from, valid_to)
         written_paths = []
+        persist_to_disk = os.getenv("PERSIST_DEALS_TO_DISK", "true").strip().lower() not in (
+            "false",
+            "0",
+            "no",
+        )
 
-        # 2. Persist both buckets to disk and Redis using flyer_id
+        # 2. Persist both buckets to disk (when enabled) and Redis using flyer_id
         for bucket_name, bucket_deals in buckets.items():
             payload = {
                 "flyer_id": target_id,
@@ -108,14 +123,14 @@ class PartitionedDealStorage:
             }
             serialized = json.dumps(payload, default=str)
 
-            # Persist to disk partition for each active cycle
-            for cycle_key in cycles:
-                cycle_dir = os.path.join(self.base_storage_dir, cycle_key)
-                os.makedirs(cycle_dir, exist_ok=True)
-                file_path = os.path.join(cycle_dir, f"{target_id}-{bucket_name}.json")
-                with open(file_path, "w", encoding="utf-8") as f:
-                    f.write(serialized)
-                written_paths.append(file_path)
+            if persist_to_disk:
+                for cycle_key in cycles:
+                    cycle_dir = os.path.join(self.base_storage_dir, cycle_key)
+                    os.makedirs(cycle_dir, exist_ok=True)
+                    file_path = os.path.join(cycle_dir, f"{target_id}-{bucket_name}.json")
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        f.write(serialized)
+                    written_paths.append(file_path)
 
             # Cache in Redis with flyer-tiered key
             cache_key = f"deals:flyer:{target_id}:{bucket_name}"
@@ -125,6 +140,40 @@ class PartitionedDealStorage:
         # Hash mapping: deals:data:{deal_id} -> JSON string
         # Sorted set / Set indexing by store & category: deals:store:{store_id}:cat:{category_slug} -> deal_id (score = deal_price)
         # Store all deals index: deals:store:{store_id}:all -> deal_id (score = deal_price)
+        if hasattr(self.redis, "pipeline"):
+            try:
+                async with self.redis.pipeline(transaction=False) as pipe:
+                    store_cat_ttls: set[str] = set()
+                    store_all_ttls: set[str] = set()
+                    for deal in deals:
+                        d_id = str(deal.get("deal_id") or "")
+                        s_id = str(deal.get("store_id") or target_id)
+                        if not d_id:
+                            continue
+
+                        deal_json = json.dumps(deal, default=str)
+                        pipe.set(f"deals:data:{d_id}", deal_json, ex=ttl_seconds)
+
+                        norm_cat = str(deal.get("normalized_category") or deal.get("category") or "Pantry")
+                        cat_slug = normalize_category_key(norm_cat)
+                        price = float(deal.get("deal_price") or 0.0)
+
+                        store_cat_key = f"deals:store:{s_id}:cat:{cat_slug}"
+                        pipe.zadd(store_cat_key, {d_id: price})
+                        store_cat_ttls.add(store_cat_key)
+
+                        store_all_key = f"deals:store:{s_id}:all"
+                        pipe.zadd(store_all_key, {d_id: price})
+                        store_all_ttls.add(store_all_key)
+
+                    for key in store_cat_ttls | store_all_ttls:
+                        pipe.expire(key, ttl_seconds)
+
+                    await pipe.execute()
+                return written_paths
+            except Exception as exc:
+                logger.warning("Redis pipeline indexing failed, falling back to sequential commands: %s", exc)
+
         for deal in deals:
             d_id = str(deal.get("deal_id") or "")
             s_id = str(deal.get("store_id") or target_id)

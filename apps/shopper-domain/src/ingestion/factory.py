@@ -64,6 +64,12 @@ class DealAdapterFactory:
                 adapter_key = str(meta.get("adapter_name") or "").strip().lower()
                 if adapter_key and adapter_key not in self._registry:
                     self._registry[adapter_key] = adapter
+                display_key = str(meta.get("display_name") or "").strip().lower()
+                if display_key and display_key not in self._registry:
+                    self._registry[display_key] = adapter
+                compact_key = display_key.replace(" ", "")
+                if compact_key and compact_key not in self._registry:
+                    self._registry[compact_key] = adapter
         except Exception as exc:
             logger.warning("Failed to populate chain adapters from database: %s", exc)
 

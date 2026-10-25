@@ -24,7 +24,30 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-_gemini_semaphore = asyncio.Semaphore(1)
+_gemini_semaphore = asyncio.Semaphore(2)
+_shared_gemini_client: Optional[Any] = None
+_shared_gemini_initialized: bool = False
+
+
+def _get_shared_gemini_client() -> Optional[Any]:
+    global _shared_gemini_client, _shared_gemini_initialized
+    if _shared_gemini_initialized:
+        return _shared_gemini_client
+
+    _shared_gemini_initialized = True
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        logger.warning("BaseDealAdapter: GEMINI_API_KEY is not set or empty in environment.")
+        return None
+
+    try:
+        from google import genai
+        _shared_gemini_client = genai.Client(api_key=api_key)
+        logger.info("BaseDealAdapter: Successfully initialized shared Gemini client.")
+    except Exception as exc:
+        logger.error("BaseDealAdapter: Failed to initialize Gemini client: %s", exc, exc_info=True)
+        _shared_gemini_client = None
+    return _shared_gemini_client
 
 
 class BaseDealAdapter(ABC):
@@ -36,19 +59,7 @@ class BaseDealAdapter(ABC):
     category_map: dict[str, str] = DEFAULT_CATEGORY_MAP
 
     def __init__(self, gemini_client: Optional[Any] = None, **kwargs: Any) -> None:
-        self.gemini_client = gemini_client
-        if self.gemini_client is None:
-            api_key = os.getenv("GEMINI_API_KEY")
-            if not api_key:
-                logger.warning("BaseDealAdapter: GEMINI_API_KEY is not set or empty in environment.")
-            else:
-                try:
-                    from google import genai
-                    self.gemini_client = genai.Client(api_key=api_key)
-                    logger.info("BaseDealAdapter: Successfully initialized Gemini client.")
-                except Exception as exc:
-                    logger.error("BaseDealAdapter: Failed to initialize Gemini client: %s", exc, exc_info=True)
-                    self.gemini_client = None
+        self.gemini_client = gemini_client if gemini_client is not None else _get_shared_gemini_client()
 
     @abstractmethod
     async def fetch_flyer_metadata(
@@ -145,7 +156,8 @@ class BaseDealAdapter(ABC):
         default_valid_from = now
         default_valid_to = now + timedelta(days=7)
 
-        meta = await self.fetch_flyer_metadata(postal_code, chain_id=chain_id, **kwargs)
+        pre_fetched_meta = kwargs.pop("flyer_metadata", None)
+        meta = pre_fetched_meta or await self.fetch_flyer_metadata(postal_code, chain_id=chain_id, **kwargs)
         if not meta:
             logger.warning("No flyer metadata found for postal_code=%s chain=%s", postal_code, chain_id)
             return default_valid_from, default_valid_to, []

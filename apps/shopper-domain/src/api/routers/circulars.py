@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -42,26 +43,29 @@ async def ingest_store_deals(
 async def get_store_deals(
     store_id: str,
     tier: str = "primary",  # "primary", "secondary", or "all"
+    postal_code: Optional[str] = None,
+    chain: Optional[str] = None,
     storage: PartitionedDealStorage = Depends(get_deal_storage),
     factory: DealAdapterFactory = Depends(get_deal_adapter_factory),
     store_repo: StoreRepository = Depends(get_store_repository),
 ) -> Dict[str, Any]:
     # 1. Lookup store context (postal_code, chain_id)
-    # eff_chain = chain
-    eff_chain: Optional[str] = None
-    eff_postal: Optional[str] = None
+    eff_chain: Optional[str] = chain.strip() if chain and chain.strip() else None
+    eff_postal: Optional[str] = postal_code.strip() if postal_code and postal_code.strip() else None
+    cached_flyer_id: Optional[str] = None
 
-    # # Fast-path: Check cached store context in Redis
-    # try:
-    #     cached_ctx_raw = await storage.redis.get(f"deals:store:{store_id}:context")
-    #     if cached_ctx_raw:
-    #         cached_ctx = json.loads(cached_ctx_raw)
-    #         eff_postal = eff_postal or cached_ctx.get("postal_code")
-    #         eff_chain = eff_chain or cached_ctx.get("chain_id")
-    # except Exception:
-    #     pass
+    # Fast-path: Check cached store context in Redis
+    try:
+        cached_ctx_raw = await storage.redis.get(f"deals:store:{store_id}:context")
+        if cached_ctx_raw:
+            cached_ctx = json.loads(cached_ctx_raw)
+            eff_postal = eff_postal or cached_ctx.get("postal_code")
+            eff_chain = eff_chain or cached_ctx.get("chain_id")
+            cached_flyer_id = cached_ctx.get("flyer_id")
+    except Exception:
+        pass
 
-    # Fallback to database store context lookup
+    # Fallback to database store context lookup when query params and Redis context are missing
     if not eff_postal or not eff_chain:
         ctx = await store_repo.get_store_context(store_id)
         if ctx:
@@ -69,7 +73,9 @@ async def get_store_deals(
             eff_chain = eff_chain or ctx.chain_id or ctx.adapter_name
 
     deals: list[dict[str, Any]] = []
-    flyer_id: Optional[str] = await storage.get_flyer_id_for_postal(eff_postal or "", eff_chain or "")
+    flyer_id: Optional[str] = cached_flyer_id
+    if not flyer_id and eff_postal and eff_chain:
+        flyer_id = await storage.get_flyer_id_for_postal(eff_postal, eff_chain)
 
     if flyer_id:
         deals = await storage.get_deals_by_flyer_id(flyer_id, tier=tier)

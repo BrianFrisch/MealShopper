@@ -605,12 +605,14 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             cancellationToken: ct);
 
         using var progressLock = new SemaphoreSlim(1, 1);
+        using var concurrencyLimiter = new SemaphoreSlim(4, 4);
         var successfulStoreCount = 0;
         var dealFetchTasks = stores.Select(async store =>
         {
             List<DealItemDto> storeDeals = [];
             Exception? fetchError = null;
 
+            await concurrencyLimiter.WaitAsync(ct);
             try
             {
                 var rawDeals = await _shopperClient.GetDealsForStoreAsync(store.Id, store.PostalCode, store.Name, ct);
@@ -648,6 +650,10 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             {
                 fetchError = ex;
                 _logger.LogError(ex, "Failed to fetch deals for store {StoreId} ({StoreName}) in Job {JobId}.", store.Id, store.Name, jobId);
+            }
+            finally
+            {
+                concurrencyLimiter.Release();
             }
 
             await progressLock.WaitAsync(ct);
