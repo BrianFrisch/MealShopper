@@ -10,11 +10,11 @@ interface RecipeCardProps {
 }
 
 const IngredientDetails = ({ ingredient }: { ingredient: RecipeIngredientDto }) => (
-  <li className="rounded-lg border border-stone-100 bg-white p-3">
+  <li className="min-w-0 break-words rounded-lg border border-stone-100 bg-white p-3">
     <div className="flex flex-wrap items-start justify-between gap-2">
       <span className="font-medium text-stone-800">{ingredient.name}</span>
       {ingredient.dealPriceDescription && (
-        <span className="whitespace-nowrap text-sm font-semibold text-[#1E7538]">
+        <span className="text-sm font-semibold text-[#1E7538]">
           {ingredient.dealPriceDescription}
         </span>
       )}
@@ -35,7 +35,7 @@ export const RecipeCard = ({
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+    <article className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
       <button
         type="button"
         aria-expanded={isExpanded}
@@ -59,8 +59,8 @@ export const RecipeCard = ({
         )}
 
         <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-            <span className="truncate text-sm sm:text-base font-bold text-stone-900">{recipe.recipeTitle}</span>
+          <span className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
+            <span className="min-w-0 max-w-full truncate text-sm sm:text-base font-bold text-stone-900">{recipe.recipeTitle}</span>
             {recipe.proteinSubtype && (
               <span className="rounded-full bg-green-50 px-2 py-0.5 text-[11px] sm:text-xs font-semibold text-[#1E7538]">
                 {recipe.proteinSubtype}
@@ -99,7 +99,7 @@ export const RecipeCard = ({
             />
           )}
 
-          <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 [&>section]:min-w-0">
             <section>
               <h3 className="mb-2.5 sm:mb-3 text-sm sm:text-base font-bold text-stone-900">
                 Promotional Deals &amp; Fresh Ingredients
@@ -143,13 +143,13 @@ export const RecipeCard = ({
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-100 text-xs font-bold text-stone-700">
                     {instructionIndex + 1}
                   </span>
-                  <span className="pt-0.5">{instruction}</span>
+                  <span className="min-w-0 break-words pt-0.5">{instruction}</span>
                 </li>
               ))}
             </ol>
           </section>
 
-          <div className="mt-5 sm:mt-6 flex flex-col sm:flex-row flex-wrap gap-2.5 sm:gap-3 border-t border-stone-100 pt-4 sm:pt-5">
+          <div className="mt-5 sm:mt-6 flex flex-col sm:flex-row flex-wrap [&>button]:max-w-full gap-2.5 sm:gap-3 border-t border-stone-100 pt-4 sm:pt-5">
             {recipe.isKept ? (
               <span
                 role="status"

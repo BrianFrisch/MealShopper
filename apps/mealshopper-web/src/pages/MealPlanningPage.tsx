@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CalendarPlus, Check, Loader2, Plus, X } from 'lucide-react';
+import { CalendarPlus, Check, ChevronDown, ChevronUp, Loader2, Plus, X } from 'lucide-react';
 import { DealImageTooltip } from '../components/DealImageTooltip';
 import { Header } from '../components/Header';
 import { RecipeCard } from '../components/RecipeCard';
@@ -83,6 +83,8 @@ export const MealPlanningPage = () => {
   const [avoidIngredients, setAvoidIngredients] = useState<string[]>([]);
   const [ingredientInput, setIngredientInput] = useState('');
   const [servingsCount, setServingsCount] = useState(4);
+  const [isDealsCollapsed, setIsDealsCollapsed] = useState(false);
+  const [isRequirementsCollapsed, setIsRequirementsCollapsed] = useState(false);
   const [recipes, setRecipes] = useState<RecipeCardDto[]>([]);
   const [estimatedTotalTripCost, setEstimatedTotalTripCost] = useState(0);
   const [generationJob, setGenerationJob] = useState<{ jobId: string; token: string } | null>(null);
@@ -249,6 +251,8 @@ export const MealPlanningPage = () => {
     setRecipes([]);
     setEstimatedTotalTripCost(0);
     setCompletedJobId(null);
+    setIsDealsCollapsed(true);
+    setIsRequirementsCollapsed(true);
     try {
       const { jobId } = await mealPlanApi.startGeneration(request, token);
       setGenerationJob({ jobId, token });
@@ -424,15 +428,28 @@ export const MealPlanningPage = () => {
                 YOUR SELECTED DEALS ({selectedDeals.length} Items across {storeCount} Stores)
               </h1>
             </div>
-            <Link
-              to="/discover"
-              className="font-semibold text-[#1E7538] underline hover:text-green-800"
-            >
-              ← Back to Discover
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link
+                to="/discover"
+                className="font-semibold text-[#1E7538] underline hover:text-green-800"
+              >
+                ← Back to Discover
+              </Link>
+              <button
+                type="button"
+                aria-expanded={!isDealsCollapsed}
+                aria-label={isDealsCollapsed ? 'Expand selected deals' : 'Collapse selected deals'}
+                onClick={() => setIsDealsCollapsed(collapsed => !collapsed)}
+                className="rounded-full p-1.5 text-stone-500 transition hover:bg-stone-100"
+              >
+                {isDealsCollapsed
+                  ? <ChevronDown aria-hidden="true" className="h-5 w-5" />
+                  : <ChevronUp aria-hidden="true" className="h-5 w-5" />}
+              </button>
+            </div>
           </div>
 
-          {selectedDeals.length > 0 ? (
+          {isDealsCollapsed ? null : selectedDeals.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[760px] text-left text-sm">
                 <thead className="border-b border-stone-200 text-xs uppercase tracking-wide text-stone-500">
@@ -499,13 +516,27 @@ export const MealPlanningPage = () => {
           </p>
         )}
 
-        <div className="grid items-start gap-8 lg:grid-cols-[minmax(300px,0.85fr)_minmax(0,1.5fr)]">
-          <section className="space-y-6 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
-            <div>
-              <h2 className="text-xl font-bold text-stone-900">Planning Requirements</h2>
-              <p className="mt-1 text-sm text-stone-500">Personalize your meals before the chef gets started.</p>
+        <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(300px,0.85fr)_minmax(0,1.5fr)]">
+          <section className="min-w-0 space-y-6 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-stone-900">Planning Requirements</h2>
+                <p className="mt-1 text-sm text-stone-500">Personalize your meals before the chef gets started.</p>
+              </div>
+              <button
+                type="button"
+                aria-expanded={!isRequirementsCollapsed}
+                aria-label={isRequirementsCollapsed ? 'Expand planning requirements' : 'Collapse planning requirements'}
+                onClick={() => setIsRequirementsCollapsed(collapsed => !collapsed)}
+                className="shrink-0 rounded-full p-1.5 text-stone-500 transition hover:bg-stone-100"
+              >
+                {isRequirementsCollapsed
+                  ? <ChevronDown aria-hidden="true" className="h-5 w-5" />
+                  : <ChevronUp aria-hidden="true" className="h-5 w-5" />}
+              </button>
             </div>
 
+            <div className={isRequirementsCollapsed ? 'hidden' : 'space-y-6'}>
             <fieldset>
               <legend className="mb-3 text-sm font-bold text-stone-800">Dietary Requirements</legend>
               <div className="flex flex-wrap gap-2">
@@ -616,6 +647,7 @@ export const MealPlanningPage = () => {
                 {[1, 2, 3, 4, 5, 6, 7, 8].map(count => <option key={count} value={count}>{count}</option>)}
               </select>
             </div>
+            </div>
 
             <button
               type="button"
@@ -628,7 +660,7 @@ export const MealPlanningPage = () => {
             </button>
           </section>
 
-          <section className="space-y-4">
+          <section className="min-w-0 space-y-4">
             <div>
               <h2 className="text-2xl font-bold text-stone-900">Chef-Synthesized Meals</h2>
               <p className="mt-1 text-sm text-stone-500">Choose which recipes you want to keep in your plan.</p>

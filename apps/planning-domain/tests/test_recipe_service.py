@@ -37,6 +37,10 @@ class FakeConnection:
         return "SELECT 1"
 
     async def fetchrow(self, query: str, *args: Any) -> dict[str, Any] | None:
+        if "user_recipe" in query:
+            assert len(args) == 2
+            assert args[0] == self.next_recipe_id
+            return self.fetchrow_result
         assert "fn_get_recipe" in query
         assert len(args) == 1
         assert args[0] == self.next_recipe_id
@@ -131,6 +135,29 @@ async def test_get_recipe_deserializes_json_fields() -> None:
     assert recipe["image_url"] == "https://example.com/chicken.jpg"
     assert recipe["ingredients"][0]["name"] == "Chicken"
     assert recipe["directions"] == ["Cook chicken."]
+
+
+@pytest.mark.asyncio
+async def test_get_recipe_for_user_checks_user_association() -> None:
+    connection = FakeConnection()
+    connection.fetchrow_result = {
+        "recipe_id": connection.next_recipe_id,
+        "title": "Herb chicken",
+        "description": "Chicken with herbs",
+        "protein_subtype": "Chicken",
+        "cuisine": "Mediterranean",
+        "image_url": "https://example.com/chicken.jpg",
+        "ingredients": '[{"name":"Chicken","quantity":"1 lb"}]',
+        "directions": '["Cook chicken."]',
+        "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+    }
+    service = RecipeService("unused", pool=FakePool(connection))  # type: ignore[arg-type]
+    user_id = UUID("207d2de7-919d-4f48-b6f2-4a475ae96426")
+
+    recipe = await service.get_recipe_for_user(connection.next_recipe_id, user_id)
+
+    assert recipe is not None
+    assert recipe["recipe_id"] == str(connection.next_recipe_id)
 
 
 @pytest.mark.asyncio
@@ -481,3 +508,38 @@ async def test_list_meal_plans_for_user_includes_recipe_count(
     assert listed[0].meal_plan_id == str(meal_plan_id)
     assert listed[0].meal_plan_name == "Oct 25, 2026"
     assert listed[0].recipe_count == 3
+
+
+@pytest.mark.asyncio
+async def test_get_recipe_by_id_returns_only_recipe_owned_by_request_user(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = UUID("207d2de7-919d-4f48-b6f2-4a475ae96426")
+    recipe_id = UUID("33333333-3333-3333-3333-333333333333")
+    expected_recipe = {
+        "recipe_id": str(recipe_id),
+        "title": "Herb chicken",
+        "description": "Chicken with herbs",
+        "protein_subtype": "Chicken",
+        "cuisine": "Mediterranean",
+        "image_url": None,
+        "ingredients": [{"name": "Chicken", "quantity": "1 lb"}],
+        "directions": ["Cook chicken."],
+        "created_at": "2026-01-01T00:00:00+00:00",
+    }
+
+    class StubRecipeService:
+        async def get_recipe_for_user(
+            self,
+            requested_recipe_id: UUID,
+            requested_user_id: UUID,
+        ) -> dict[str, Any] | None:
+            assert requested_recipe_id == recipe_id
+            assert requested_user_id == user_id
+            return expected_recipe
+
+    monkeypatch.setattr(main, "recipe_service", StubRecipeService())
+
+    result = await main.get_recipe_by_id(recipe_id, x_user_id=str(user_id))
+
+    assert result == expected_recipe

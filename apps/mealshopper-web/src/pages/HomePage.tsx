@@ -1,5 +1,6 @@
 // apps/mealshopper-web/src/pages/HomePage.tsx
 import React, { useState } from 'react';
+import { Header } from '../components/Header';
 import { authApi } from '../services/authApi';
 
 interface HomePageProps {
@@ -45,50 +46,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLoginSuccess }) => {
   return (
     <div className="min-h-screen bg-[#FDFDF9] text-stone-900 flex flex-col justify-between">
       {/* 1. SITE HEADER */}
-      <header className="border-b border-stone-200 bg-white/80 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between">
-          <button
-            aria-label="Menu"
-            className="p-2 text-stone-600 hover:text-stone-900 rounded-lg hover:bg-stone-100 transition"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="w-6 h-6"
-            >
-              <path d="M4 5h16" />
-              <path d="M4 12h16" />
-              <path d="M4 19h16" />
-            </svg>
-          </button>
-
-          <div
-            className="flex items-center justify-center cursor-pointer"
-            onClick={() => navigate('/')}
-          >
-            <img
-              src="/logo.png"
-              alt="MealShopper"
-              className="h-12 w-auto object-contain"
-            />
-          </div>
-
-          <button
-            aria-label="Find Deals Directly"
-            onClick={() => navigate('/profile')}
-            className="text-xs font-bold text-[#1E7538] hover:text-[#165a2b] transition px-3 py-1.5 rounded-full border border-stone-200 hover:bg-stone-50"
-          >
-            Account &rarr;
-          </button>
-        </div>
-      </header>
+      <Header />
 
       {/* 2. HERO & VALUE PROPOSITION */}
       <main className="max-w-6xl mx-auto px-4 py-12 flex-1 w-full">

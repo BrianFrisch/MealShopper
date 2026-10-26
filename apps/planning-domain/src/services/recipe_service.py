@@ -281,6 +281,26 @@ class RecipeService:
             row = await connection.fetchrow("SELECT * FROM fn_get_recipe($1);", recipe_id)
         return self._to_stored_recipe(row) if row is not None else None
 
+    async def get_recipe_for_user(
+        self,
+        recipe_id: UUID,
+        user_id: UUID,
+    ) -> StoredRecipe | None:
+        pool = self._require_pool()
+        async with pool.acquire() as connection:
+            row = await connection.fetchrow(
+                """
+                SELECT r.*
+                FROM recipe AS r
+                INNER JOIN user_recipe AS ur ON ur.recipe_id = r.recipe_id
+                WHERE r.recipe_id = $1
+                  AND ur.user_id = $2
+                """,
+                recipe_id,
+                user_id,
+            )
+        return self._to_stored_recipe(row) if row is not None else None
+
     async def get_recipes_for_user(self, user_id: UUID) -> list[StoredRecipe]:
         pool = self._require_pool()
         async with pool.acquire() as connection:

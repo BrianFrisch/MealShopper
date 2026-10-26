@@ -38,6 +38,26 @@ export interface MealPlanIngredientDto {
   updated_at: string;
 }
 
+export interface StoredRecipeIngredientDto {
+  name: string;
+  quantity: string;
+  is_promotional?: boolean;
+  deal_id?: string | null;
+  store_name?: string | null;
+}
+
+export interface MealPlanRecipeDto {
+  recipe_id: string;
+  title: string;
+  description: string | null;
+  protein_subtype: string | null;
+  cuisine: string | null;
+  image_url: string | null;
+  ingredients: StoredRecipeIngredientDto[];
+  directions: string[];
+  created_at: string;
+}
+
 export const mealPlanApi = {
   async getMealPlans(token: string): Promise<MealPlanRecordDto[]> {
     const response = await apiClient.get<MealPlanRecordDto[]>(
@@ -47,9 +67,17 @@ export const mealPlanApi = {
     return response.data;
   },
 
-  async getMealPlanRecipes(mealPlanId: string, token: string): Promise<unknown[]> {
-    const response = await apiClient.get<unknown[]>(
+  async getMealPlanRecipes(mealPlanId: string, token: string): Promise<MealPlanRecipeDto[]> {
+    const response = await apiClient.get<MealPlanRecipeDto[]>(
       `/v1/planner/meal-plans/${mealPlanId}/recipes`,
+      authorizationHeaders(token)
+    );
+    return response.data;
+  },
+
+  async getRecipe(recipeId: string, token: string): Promise<MealPlanRecipeDto> {
+    const response = await apiClient.get<MealPlanRecipeDto>(
+      `/v1/planner/recipes/${recipeId}`,
       authorizationHeaders(token)
     );
     return response.data;

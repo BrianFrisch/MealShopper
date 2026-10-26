@@ -340,6 +340,21 @@ async def get_meal_plan_by_id(
     return MealPlanRecordResponse(**plan_data)
 
 
+@app.get("/v1/planner/recipes/{recipe_id}")
+async def get_recipe_by_id(
+    recipe_id: UUID,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> dict[str, object]:
+    user_id = _resolve_request_user_id(x_user_id)
+    recipe = await recipe_service.get_recipe_for_user(recipe_id, user_id)
+    if recipe is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Recipe {recipe_id} not found.",
+        )
+    return dict(recipe)
+
+
 @app.get("/v1/planner/meal-plans/{meal_plan_id}/recipes")
 async def list_recipes_for_meal_plan(
     meal_plan_id: UUID,

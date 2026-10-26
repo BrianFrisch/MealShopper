@@ -3,6 +3,7 @@ import { DealDiscoveryPage } from './pages/DealDiscoveryPage';
 import { HomePage } from './pages/HomePage';
 import { MealPlanningPage } from './pages/MealPlanningPage';
 import { MealPlansPage } from './pages/MealPlansPage';
+import { MealPlanRecipesPage } from './pages/MealPlanRecipesPage';
 import { MealPlanShoppingListPage } from './pages/MealPlanShoppingListPage';
 import { ShoppingListPage } from './pages/ShoppingListPage';
 
@@ -13,6 +14,7 @@ function App() {
       <Route path="/discover" element={<DealDiscoveryPage />} />
       <Route path="/plan" element={<MealPlanningPage />} />
       <Route path="/meal-plans" element={<MealPlansPage />} />
+      <Route path="/recipes/:recipeId" element={<MealPlanRecipesPage />} />
       <Route path="/meal-plans/:mealPlanId/shopping-list" element={<MealPlanShoppingListPage />} />
       <Route path="/shopping-list/:taskId" element={<ShoppingListPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
