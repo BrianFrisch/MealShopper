@@ -70,7 +70,10 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
   const [stageDescription, setStageDescription] = useState<string | null>(null);
   const [discoveredStores, setDiscoveredStores] = useState<Store[]>([]);
   const [discoveredDeals, setDiscoveredDeals] = useState<Deal[]>([]);
-  const [selectedDeals, setSelectedDeals] = useState<Deal[]>([]);
+  const [selectedDeals, setSelectedDeals] = useState<Deal[]>(() => {
+    const storedSelectedDeals = localStorage.getItem(SELECTED_DEALS_STORAGE_KEY);
+    return storedSelectedDeals === null ? [] : JSON.parse(storedSelectedDeals) as Deal[];
+  });
   const [selectedSubtype, setSelectedSubtype] = useState<'All' | ProteinSubtype>('All');
   const [expandedStoreId, setExpandedStoreId] = useState<string | null>(null);
   const [isSearchHidden, setIsSearchHidden] = useState(false);
@@ -81,11 +84,6 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
   const [isLoginOpen, setIsLoginOpen] = useState(false);
 
   useEffect(() => {
-    const storedSelectedDeals = localStorage.getItem(SELECTED_DEALS_STORAGE_KEY);
-    if (storedSelectedDeals !== null) {
-      setSelectedDeals(JSON.parse(storedSelectedDeals) as Deal[]);
-    }
-
     return () => {
       if (pollIntervalRef.current !== null) {
         clearInterval(pollIntervalRef.current);
