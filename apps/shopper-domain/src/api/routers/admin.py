@@ -22,7 +22,7 @@ async def import_stores_admin(
 ) -> Dict[str, Any]:
     importer = StoreImportService(db_url=SHOPPER_DATABASE_URL)
     try:
-        result = await importer.run_import_alltheplaces(
+        result = await importer.run_import(
             chain_id=payload.chain_id,
             region_state=payload.region,
             include_all_brands=payload.all_brands,

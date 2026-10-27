@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.services.store_importer import (
     ParsedStore,
@@ -234,11 +234,14 @@ class TestStoreImportService(unittest.IsolatedAsyncioTestCase):
             ]
         }
 
-        with patch.object(service, "get_chain_metadata", new=AsyncMock(return_value=mock_meta)), \
-             patch.object(service, "_fetch_geojson", new=AsyncMock(return_value=mock_geojson)), \
-             patch.object(service, "_persist_stores", new=AsyncMock()) as mock_persist:
+        mock_importer = MagicMock()
+        mock_importer.fetch_geojson = AsyncMock(return_value=mock_geojson)
 
-            result = await service.run_import_alltheplaces("aldi", "CA")
+        with patch.object(service, "get_chain_metadata", new=AsyncMock(return_value=mock_meta)), \
+             patch("src.services.store_importer.create_store_importer", return_value=mock_importer), \
+             patch.object(service, "_persist_stores", new=AsyncMock()) as mock_persist:
+    
+            result = await service.run_import("aldi", "CA")
 
             self.assertEqual(result["chain_id"], "aldi")
             self.assertEqual(result["display_name"], "ALDI")

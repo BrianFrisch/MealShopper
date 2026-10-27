@@ -3,7 +3,6 @@ import json
 import logging
 import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple, TypedDict
-import httpx
 
 try:
     import asyncpg  # type: ignore
@@ -15,12 +14,12 @@ except ImportError:
 
 try:
     from src.services.grocery_chain_service import GroceryChainService
+    from src.services.store_importer_factory import create_store_importer
 except ImportError:
     from .grocery_chain_service import GroceryChainService
+    from .store_importer_factory import create_store_importer
 
 logger = logging.getLogger(__name__)
-
-ALL_THE_PLACES_BASE = "https://data.alltheplaces.xyz/runs/latest/output"
 
 
 class ParsedStore(TypedDict):
@@ -104,17 +103,23 @@ def parse_geojson_feature(
     if not coords or len(coords) < 2:
         return None
 
+    if props.get("addr:country") and props.get("addr:country").strip().upper() != "US":
+        logger.info("Skipping non-US store: %s", props.get("addr:country"))
+        return None
+
     lon, lat = float(coords[0]), float(coords[1])
     store_state = (
         props.get("addr:state") or props.get("state") or props.get("addr:province") or ""
     ).strip().upper()
 
     if not is_matching_state(store_state, target_state):
+        logger.info("Skipping store not in target state: %s (target: %s)", store_state, target_state)
         return None
 
     brand = (props.get("brand") or props.get("name") or "").strip()
     target_banner = meta["display_name"].lower()
     if not is_matching_banner(brand, target_banner) and not include_all_brands:
+        logger.info("Skipping store not matching target banner: %s (target: %s)", brand, target_banner)
         return None
 
     raw_num = props.get("ref") or props.get("store_number") or props.get("@id")
@@ -161,18 +166,6 @@ class StoreImportService:
         """Retrieve grocery chain metadata through the shared chain service."""
         return await self.chain_service.get_chain_metadata(chain_id)
 
-    async def _fetch_geojson(self, spider: str) -> Dict[str, Any]:
-        spider_file = f"{spider}.geojson"
-        url = f"{ALL_THE_PLACES_BASE}/{spider_file}"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "application/json",
-        }
-        async with httpx.AsyncClient(timeout=45.0, follow_redirects=True) as client:
-            resp = await client.get(url, headers=headers)
-            resp.raise_for_status()
-            return resp.json()
-
     async def _persist_stores(
         self, chain_key: str, meta: Dict[str, str], stores: List[ParsedStore]
     ) -> None:
@@ -192,13 +185,14 @@ class StoreImportService:
         finally:
             await conn.close()
 
-    async def run_import_alltheplaces(self, chain_id: str, region_state: str = "CA", include_all_brands: bool = False) -> Dict[str, Any]:
+    async def run_import(self, chain_id: str, region_state: str = "CA", include_all_brands: bool = False) -> Dict[str, Any]:
         meta = await self.get_chain_metadata(chain_id)
         chain_key = meta["chain_id"]
         target_state = normalize_state(region_state)
 
         logger.info("Fetching store dataset for %s (spider: %s, region: %s)...", chain_key, meta["spider"], target_state)
-        geojson = await self._fetch_geojson(meta["spider"])
+        importer = create_store_importer(meta["spider"])
+        geojson = await importer.fetch_geojson()
 
         features = geojson.get("features", [])
         parsed_stores: List[ParsedStore] = []

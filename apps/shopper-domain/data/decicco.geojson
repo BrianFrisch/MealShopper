@@ -1,0 +1,233 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "DeCicco & Sons",
+        "ref": "decicco-21centerstreet",
+        "addr:street_address": "21 Center Street",
+        "addr:city": "Ardsley",
+        "addr:state": "NY",
+        "addr:postcode": "10502",
+        "brand": "decicco & sons"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -73.8436,
+          41.0118
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "DeCicco & Sons",
+        "ref": "decicco-17mapleave",
+        "addr:street_address": "17 Maple Ave",
+        "addr:city": "Armonk",
+        "addr:state": "NY",
+        "addr:postcode": "10504",
+        "brand": "decicco & sons"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -73.7153,
+          41.1275
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "DeCicco & Sons",
+        "ref": "decicco-422oldpostrd",
+        "addr:street_address": "422 Old Post Rd",
+        "addr:city": "Bedford",
+        "addr:state": "NY",
+        "addr:postcode": "10506",
+        "brand": "decicco & sons"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -73.6422,
+          41.2031
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "DeCicco & Sons",
+        "ref": "decicco-50independentway",
+        "addr:street_address": "50 Independent Way",
+        "addr:city": "Brewster",
+        "addr:state": "NY",
+        "addr:postcode": "10509",
+        "brand": "decicco & sons"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -73.6145,
+          41.398
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "DeCicco & Sons",
+        "ref": "decicco-777whiteplainsrd",
+        "addr:street_address": "777 White Plains Rd",
+        "addr:city": "Eastchester",
+        "addr:state": "NY",
+        "addr:postcode": "10583",
+        "brand": "decicco & sons"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -73.8052,
+          40.9634
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "DeCicco & Sons",
+        "ref": "decicco-21glenvillest",
+        "addr:street_address": "21 Glenville St",
+        "addr:city": "Greenwich",
+        "addr:state": "CT",
+        "addr:postcode": "06831",
+        "brand": "decicco & sons"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -73.6628,
+          41.0425
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "DeCicco & Sons",
+        "ref": "decicco-7halsteadave",
+        "addr:street_address": "7 Halstead Ave",
+        "addr:city": "Harrison",
+        "addr:state": "NY",
+        "addr:postcode": "10528",
+        "brand": "decicco & sons"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -73.7126,
+          40.9691
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "DeCicco & Sons",
+        "ref": "decicco-2141palmerave",
+        "addr:street_address": "2141 Palmer Ave",
+        "addr:city": "Larchmont",
+        "addr:state": "NY",
+        "addr:postcode": "10538",
+        "brand": "decicco & sons"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -73.7583,
+          40.9304
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "DeCicco & Sons",
+        "ref": "decicco-230sawmillriverrd",
+        "addr:street_address": "230 Saw Mill River Rd",
+        "addr:city": "Millwood",
+        "addr:state": "NY",
+        "addr:postcode": "10546",
+        "brand": "decicco & sons"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -73.7915,
+          41.1965
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "DeCicco & Sons",
+        "ref": "decicco-43fifthave",
+        "addr:street_address": "43 Fifth Ave",
+        "addr:city": "Pelham",
+        "addr:state": "NY",
+        "addr:postcode": "10803",
+        "brand": "decicco & sons"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -73.8078,
+          40.9121
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "DeCicco & Sons",
+        "ref": "decicco-266us202",
+        "addr:street_address": "266 US-202",
+        "addr:city": "Somers",
+        "addr:state": "NY",
+        "addr:postcode": "10589",
+        "brand": "decicco & sons"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -73.6936,
+          41.3284
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "DeCicco & Sons",
+        "ref": "decicco-1legenddr",
+        "addr:street_address": "1 Legend Dr",
+        "addr:city": "Sleepy Hollow",
+        "addr:state": "NY",
+        "addr:postcode": "10591",
+        "brand": "decicco & sons"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -73.8647,
+          41.0898
+        ]
+      }
+    }
+  ]
+}
