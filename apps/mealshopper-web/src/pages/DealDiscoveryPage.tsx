@@ -24,6 +24,7 @@ const SUBTYPE_ICONS: Record<ProteinSubtype, string> = {
 };
 const SELECTED_DEALS_STORAGE_KEY = 'mealshopper_selected_deals';
 const USER_ADDRESS_STORAGE_KEY = 'mealshopper_user_address';
+const MAX_SELECTED_DEALS = 7;
 
 const DEFAULT_ADDRESS: Address = {
   street: '123 Main St',
@@ -130,7 +131,11 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
 
   const handleToggleDeal = (deal: Deal) => {
     const dealKey = getDealKey(deal);
-    const nextSelectedDeals = selectedDeals.some(selected => getDealKey(selected) === dealKey)
+    const alreadySelected = selectedDeals.some(selected => getDealKey(selected) === dealKey);
+    if (!alreadySelected && selectedDeals.length >= MAX_SELECTED_DEALS) {
+      return;
+    }
+    const nextSelectedDeals = alreadySelected
       ? selectedDeals.filter(selected => getDealKey(selected) !== dealKey)
       : [...selectedDeals, deal];
     setSelectedDeals(nextSelectedDeals);
@@ -259,6 +264,7 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
   };
 
   const selectedStoreCount = new Set(selectedDeals.map(getDealStoreKey).filter(Boolean)).size;
+  const isDealLimitReached = selectedDeals.length >= MAX_SELECTED_DEALS;
   const selectedDealsSummary = `Selected ${selectedDeals.length} ${selectedDeals.length === 1 ? 'deal' : 'deals'} across ${selectedStoreCount} ${selectedStoreCount === 1 ? 'store' : 'stores'}`;
 
   return (
@@ -405,6 +411,11 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
               <p className="text-[11px] sm:text-xs font-medium text-stone-600">
                 {selectedDealsSummary}
               </p>
+              {isDealLimitReached && (
+                <p role="status" className="w-full text-[11px] sm:text-xs font-semibold text-[#E66E1D]">
+                  Maximum of {MAX_SELECTED_DEALS} deals allowed. Remove a deal to select another.
+                </p>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -646,6 +657,7 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
                                   const isSelected = selectedDeals.some(
                                     selected => getDealKey(selected) === dealKey
                                   );
+                                  const isDisabled = isDealLimitReached && !isSelected;
                                   const title = getDealTitle(deal);
                                   const price = getDealPrice(deal);
                                   const subtype = deal.protein_subtype || 'Other';
@@ -654,14 +666,18 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
                                     <tr
                                       key={dealKey}
                                       onClick={() => handleToggleDeal(deal)}
-                                      className={`cursor-pointer transition ${
-                                        isSelected ? 'bg-green-50' : 'hover:bg-stone-50'
+                                      aria-disabled={isDisabled}
+                                      className={`transition ${
+                                        isDisabled
+                                          ? 'cursor-not-allowed opacity-50'
+                                          : `cursor-pointer ${isSelected ? 'bg-green-50' : 'hover:bg-stone-50'}`
                                       }`}
                                     >
                                       <td className="px-1.5 py-2 sm:px-2.5 sm:py-2.5">
                                         <input
                                           type="checkbox"
                                           checked={isSelected}
+                                          disabled={isDisabled}
                                           aria-label={`Select ${title}`}
                                           onClick={event => event.stopPropagation()}
                                           onChange={() => handleToggleDeal(deal)}

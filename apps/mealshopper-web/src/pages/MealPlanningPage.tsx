@@ -287,7 +287,8 @@ export const MealPlanningPage = () => {
       cuisines,
       dietaryPreferences,
       avoidIngredients,
-      daysCount: selectedDeals.length,
+      // The API accepts 1-5 days.
+      daysCount: Math.min(Math.max(selectedDeals.length, 1), 5),
       servingsCount
     };
 
@@ -453,7 +454,7 @@ export const MealPlanningPage = () => {
         recipes.filter(recipe => recipe.isKept).map(recipe => recipe.recipeId),
         token
       );
-      navigate(`/shopping-list/${completedJobId}`);
+      navigate('/meal-plans');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to save the meal plan.');
       setIsSaving(false);
