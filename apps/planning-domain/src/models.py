@@ -92,6 +92,7 @@ class MealPlanRequest(BaseModel):
         validation_alias=AliasChoices("preferred_cuisines", "cuisines"),
     )
     dietary_restrictions: List[str] = Field(default_factory=list)
+    main_ingredient: Optional[str] = None
     avoid_ingredients: List[str] = Field(default_factory=list)
 
 

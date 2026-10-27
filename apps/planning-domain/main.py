@@ -113,7 +113,8 @@ async def generate_plan(request: MealPlanRequest) -> MealPlanResponse:
                 top_deals=request.scored_deals,
                 days_count=request.target_meal_count or 3,
                 dietary_restrictions=request.dietary_restrictions,
-                servings_count=request.household_size
+                servings_count=request.household_size,
+                main_ingredient=request.main_ingredient
             )
         except Exception as ex:
             logger.exception("Meal plan generation failed.")

@@ -1,6 +1,7 @@
 export interface MealPlanSynthesisRequest {
   selectedStoreIds: string[];
   selectedDealIds: string[];
+  mainIngredient?: string;
   cuisines: string[];
   dietaryPreferences: string[];
   avoidIngredients: string[];

@@ -4,6 +4,7 @@ import { DealDiscoveryPage } from './pages/DealDiscoveryPage';
 import { HomePage } from './pages/HomePage';
 import { MealPlanningPage } from './pages/MealPlanningPage';
 import { MealPlansPage } from './pages/MealPlansPage';
+import { CustomRecipePage } from './pages/CustomRecipePage';
 import { MealPlanRecipesPage } from './pages/MealPlanRecipesPage';
 import { MealPlanShoppingListPage } from './pages/MealPlanShoppingListPage';
 import { ShoppingListPage } from './pages/ShoppingListPage';
@@ -14,6 +15,7 @@ function App() {
       <Route path="/" element={<HomePage />} />
       <Route path="/discover" element={<RequireAuth><DealDiscoveryPage /></RequireAuth>} />
       <Route path="/plan" element={<RequireAuth><MealPlanningPage /></RequireAuth>} />
+      <Route path="/custom-recipe" element={<RequireAuth><CustomRecipePage /></RequireAuth>} />
       <Route path="/meal-plans" element={<RequireAuth><MealPlansPage /></RequireAuth>} />
       <Route path="/recipes/:recipeId" element={<RequireAuth><MealPlanRecipesPage /></RequireAuth>} />
       <Route path="/meal-plans/:mealPlanId/shopping-list" element={<RequireAuth><MealPlanShoppingListPage /></RequireAuth>} />

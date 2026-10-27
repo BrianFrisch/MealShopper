@@ -366,6 +366,20 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             }
 
             var payload = job.GetPayload<MealPlanGenerationRequest>()!;
+            var mainIngredient = payload.MainIngredient?.Trim();
+            var isCustomRecipe = !string.IsNullOrWhiteSpace(mainIngredient);
+            TopDealsResponse topDeals;
+            if (isCustomRecipe)
+            {
+                topDeals = new TopDealsResponse
+                {
+                    Timestamp = DateTimeOffset.UtcNow,
+                    RegionContext = new RegionContextDto { StoreIds = [] },
+                    Deals = []
+                };
+            }
+            else
+            {
             var selectedDealLookups = BuildSelectedDealLookups(payload);
             var batchLookupResponse = await _shopperClient.BatchLookupDealsAsync(selectedDealLookups, ct);
             if (batchLookupResponse.Deals.Count != selectedDealLookups.Items.Count)
@@ -375,7 +389,7 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                     "Return to Discover and select current deals again.");
             }
 
-            var topDeals = new TopDealsResponse
+            topDeals = new TopDealsResponse
             {
                 Timestamp = DateTimeOffset.UtcNow,
                 RegionContext = new RegionContextDto { StoreIds = payload.SelectedStoreIds.Distinct().ToList() },
@@ -393,6 +407,7 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                     ValueScore = deal.DealScore ?? 0
                 }).ToList()
             };
+            }
 
             var draft = await GenerateMealPlanStageAsync(
                 job.JobId,
@@ -403,13 +418,17 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                 ct,
                 payload.DietaryPreferences,
                 payload.DaysCount,
-                payload.ServingsCount);
+                payload.ServingsCount,
+                isCustomRecipe ? mainIngredient : null);
 
-            ApplySelectedDealMatches(draft.Meals, topDeals.Deals);
+            var matchedDeals = new List<MatchedIngredientDealDto>();
+            if (!isCustomRecipe)
+            {
+                ApplySelectedDealMatches(draft.Meals, topDeals.Deals);
 
-            // 4. Phase 6 Loop-Back: Resolve missing primary ingredients
-            var candidateStoreIds = payload.SelectedStoreIds;
-            var matchedDeals = await ResolveMissingIngredientsStageAsync(job.JobId, draft, candidateStoreIds, ct);
+                // 4. Phase 6 Loop-Back: Resolve missing primary ingredients
+                matchedDeals = await ResolveMissingIngredientsStageAsync(job.JobId, draft, payload.SelectedStoreIds, ct);
+            }
 
             // 5. Assemble Final Result (MealPlanResultDto)
             var finalResultDto = AssembleFinalResult(draft, topDeals, matchedDeals);
@@ -761,7 +780,8 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
         CancellationToken ct,
         List<string>? dietaryPreferences = null,
         int daysCount = 3,
-        int servingsCount = 2)
+        int servingsCount = 2,
+        string? mainIngredient = null)
     {
         await _jobStateStore!.UpdateJobStatusAsync(
             jobId,
@@ -777,7 +797,8 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             TopDeals = topDeals.Deals ?? [],
             DietaryRestrictions = dietaryPreferences ?? [],
             DaysCount = daysCount,
-            HouseholdSize = servingsCount
+            HouseholdSize = servingsCount,
+            MainIngredient = mainIngredient
         };
 
         var draft = await _legacyPlanningClient!.GenerateMealPlanAsync(generateRequest, ct);

@@ -22,10 +22,28 @@ class GeminiPlannerService:
         top_deals: List[DealInput],
         days_count: int = 3,
         dietary_restrictions: List[str] | None = None,
-        servings_count: int = 2
+        servings_count: int = 2,
+        main_ingredient: str | None = None
     ) -> MealPlanResponse:
         if not self.client:
             raise RuntimeError("GEMINI_API_KEY not configured. Live planner unavailable.")
+
+        if main_ingredient and main_ingredient.strip():
+            prompt = f"""
+You are an expert chef and meal planner.
+Create {days_count} custom dinner recipe(s) built around the main ingredient: {main_ingredient.strip()}
+
+CONSTRAINTS:
+1. Target Cuisines: {', '.join(cuisines) if cuisines else 'Any cuisine'}
+2. Dietary Requirements: {', '.join(dietary_restrictions or []) if dietary_restrictions else 'None'}
+3. Strictly Avoid Ingredients: {', '.join(avoid_ingredients) if avoid_ingredients else 'None'}
+4. Each meal must serve {servings_count} people.
+5. The main ingredient must be the core of the dish and listed as an ingredient.
+6. No promotional deals apply: set 'store_name' and 'deal_id' to null and 'is_promotional' to false for every ingredient, and leave 'missing_primary_ingredients' empty.
+7. RECIPE NAMING: Name the actual dish, not a generic placeholder.
+8. PREPARED FOODS: If the main ingredient is fully prepared or frozen, cook it per package directions and pair it with a fresh side.
+"""
+            return await self._generate(prompt)
 
         deals_context = json.dumps([
             {
@@ -60,7 +78,9 @@ CONSTRAINTS:
 AVAILABLE PROMOTIONAL DEALS:
 {deals_context}
 """
+        return await self._generate(prompt)
 
+    async def _generate(self, prompt: str) -> MealPlanResponse:
         logger.info("Sending prompt to Gemini model: %s", prompt)
         response = await self.client.aio.models.generate_content(
             model=self.model_name,

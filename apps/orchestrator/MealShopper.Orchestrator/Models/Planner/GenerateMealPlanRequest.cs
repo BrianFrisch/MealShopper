@@ -39,6 +39,12 @@ public class GenerateMealPlanRequest
     [JsonPropertyName("household_size")]
     public int HouseholdSize { get; set; } = 2;
 
+    /// <summary>
+    /// Optional main ingredient for a custom recipe that is not based on deals.
+    /// </summary>
+    [JsonPropertyName("main_ingredient")]
+    public string? MainIngredient { get; set; }
+
     [JsonPropertyName("dietary_restrictions")]
     public List<string> DietaryRestrictions { get; set; } = [];
 }
