@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Check, Loader2, ShoppingCart } from 'lucide-react';
+import { ArrowLeft, Check, Loader2, ShoppingCart, Trash2 } from 'lucide-react';
 import { Header } from '../components/Header';
 import { LoginModal } from '../components/LoginModal';
 import { authApi } from '../services/authApi';
@@ -102,6 +102,11 @@ export const MealPlanShoppingListPage = () => {
   const [updatingIngredientId, setUpdatingIngredientId] = useState<string | null>(null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [reloadCount, setReloadCount] = useState(0);
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemQuantity, setNewItemQuantity] = useState('');
+  const [isAddingItem, setIsAddingItem] = useState(false);
+  const [removingIngredientId, setRemovingIngredientId] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     const token = authApi.getToken();
@@ -221,10 +226,70 @@ export const MealPlanShoppingListPage = () => {
     setUpdatingIngredientId(null);
   };
 
+  const handleAddItem = async (event: FormEvent) => {
+    event.preventDefault();
+    const token = authApi.getToken();
+    if (!mealPlanId || !token) {
+      setErrorMessage('Please sign in to update this shopping list.');
+      setIsLoginOpen(true);
+      return;
+    }
+
+    const ingredientName = newItemName.trim();
+    const ingredientQuantity = newItemQuantity.trim();
+    if (!ingredientName || !ingredientQuantity) {
+      setFormError('Enter both a name and a quantity.');
+      return;
+    }
+
+    setIsAddingItem(true);
+    setFormError(null);
+    try {
+      const added = await mealPlanApi.addMealPlanShoppingListItem(
+        mealPlanId,
+        ingredientName,
+        ingredientQuantity,
+        token
+      );
+      setIngredients(current => [...current, added]);
+      setNewItemName('');
+      setNewItemQuantity('');
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Unable to add this item.');
+    } finally {
+      setIsAddingItem(false);
+    }
+  };
+
+  const handleRemoveItem = async (ingredient: ShoppingListDisplayIngredient) => {
+    const token = authApi.getToken();
+    if (!mealPlanId || !token) {
+      setErrorMessage('Please sign in to update this shopping list.');
+      setIsLoginOpen(true);
+      return;
+    }
+
+    const ids = ingredient.ingredients.map(item => item.meal_plan_ingredient_id);
+    setRemovingIngredientId(ids.join(','));
+    setFormError(null);
+    const results = await Promise.allSettled(
+      ids.map(id => mealPlanApi.removeMealPlanShoppingListItem(mealPlanId, id, token))
+    );
+    const removedIds = new Set(ids.filter((_, index) => results[index].status === 'fulfilled'));
+    setIngredients(current => current.filter(item => !removedIds.has(item.meal_plan_ingredient_id)));
+    const failed = results.find(result => result.status === 'rejected');
+    if (failed?.status === 'rejected') {
+      setFormError(failed.reason instanceof Error ? failed.reason.message : 'Unable to remove this item.');
+    }
+    setRemovingIngredientId(null);
+  };
+
   const renderIngredient = (ingredient: ShoppingListDisplayIngredient) => {
     const ingredientIds = ingredient.ingredients.map(item => item.meal_plan_ingredient_id);
     const isPurchased = ingredient.ingredients.every(item => item.is_purchased);
     const isUpdating = updatingIngredientId === ingredientIds.join(',');
+    const isCustomItem = ingredient.ingredients.every(item => item.recipe_id === null);
+    const isRemoving = removingIngredientId === ingredientIds.join(',');
     return (
       <li
         key={ingredientIds.join(',')}
@@ -248,6 +313,19 @@ export const MealPlanShoppingListPage = () => {
         <span className="shrink-0 text-right text-sm text-stone-500">
           {ingredient.ingredient_quantity}
         </span>
+        {isCustomItem && (
+          <button
+            type="button"
+            disabled={isRemoving}
+            onClick={() => { void handleRemoveItem(ingredient); }}
+            aria-label={`Remove ${ingredient.ingredient_name}`}
+            className="shrink-0 rounded-md p-1.5 text-stone-400 transition hover:bg-rose-50 hover:text-rose-700 disabled:cursor-wait disabled:opacity-60"
+          >
+            {isRemoving
+              ? <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+              : <Trash2 aria-hidden="true" className="h-4 w-4" />}
+          </button>
+        )}
       </li>
     );
   };
@@ -272,6 +350,40 @@ export const MealPlanShoppingListPage = () => {
       </section>
     );
   };
+
+  const addItemForm = (
+    <section className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+      <h2 className="text-lg font-bold">Add shopping list item</h2>
+      <form onSubmit={event => { void handleAddItem(event); }} className="mt-3 grid gap-3 md:grid-cols-[1fr_220px_auto]">
+        <input
+          type="text"
+          value={newItemName}
+          onChange={event => setNewItemName(event.target.value)}
+          placeholder="Item name (e.g. Eggo Waffles)"
+          aria-label="Item name"
+          className="rounded-lg border border-stone-300 px-3 py-2 text-sm"
+        />
+        <input
+          type="text"
+          value={newItemQuantity}
+          onChange={event => setNewItemQuantity(event.target.value)}
+          placeholder="Quantity (e.g. 1 box)"
+          aria-label="Item quantity"
+          className="rounded-lg border border-stone-300 px-3 py-2 text-sm"
+        />
+        <button
+          type="submit"
+          disabled={isAddingItem}
+          className="rounded-lg bg-[#1E7538] px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-60"
+        >
+          {isAddingItem ? 'Adding...' : 'Add item'}
+        </button>
+      </form>
+      {formError && (
+        <p role="alert" className="mt-3 text-sm text-rose-700">{formError}</p>
+      )}
+    </section>
+  );
 
   return (
     <div className="min-h-screen bg-[#FDFDF9] pb-12 text-stone-900">
@@ -325,15 +437,19 @@ export const MealPlanShoppingListPage = () => {
             )}
           </div>
         ) : ingredients.length === 0 ? (
-          <section className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center">
-            <ShoppingCart aria-hidden="true" className="mx-auto h-8 w-8 text-stone-400" />
-            <h2 className="mt-3 font-semibold text-stone-800">No ingredients in this meal plan yet</h2>
-            <p className="mt-1 text-sm text-stone-500">
-              Add recipes to this plan to build its shopping list.
-            </p>
-          </section>
+          <>
+            {addItemForm}
+            <section className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center">
+              <ShoppingCart aria-hidden="true" className="mx-auto h-8 w-8 text-stone-400" />
+              <h2 className="mt-3 font-semibold text-stone-800">No ingredients in this meal plan yet</h2>
+              <p className="mt-1 text-sm text-stone-500">
+                Add recipes to this plan or add your own items above.
+              </p>
+            </section>
+          </>
         ) : (
           <>
+            {addItemForm}
             {errorMessage && (
               <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
                 {errorMessage}

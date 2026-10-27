@@ -279,10 +279,12 @@ export const mealPlanApi = {
   },
 
   async getMealPlan(
-    jobId: string
+    jobId: string,
+    token: string
   ): Promise<TaskStatusResponse<MealPlanSynthesisResponse>> {
     const response = await apiClient.get<TaskStatusResponse<MealPlanSynthesisResponse>>(
-      `/v1/tasks/${jobId}`
+      `/v1/tasks/${jobId}`,
+      authorizationHeaders(token)
     );
     return response.data;
   },

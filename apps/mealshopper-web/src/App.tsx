@@ -7,7 +7,6 @@ import { MealPlansPage } from './pages/MealPlansPage';
 import { CustomRecipePage } from './pages/CustomRecipePage';
 import { MealPlanRecipesPage } from './pages/MealPlanRecipesPage';
 import { MealPlanShoppingListPage } from './pages/MealPlanShoppingListPage';
-import { ShoppingListPage } from './pages/ShoppingListPage';
 
 function App() {
   return (
@@ -19,7 +18,6 @@ function App() {
       <Route path="/meal-plans" element={<RequireAuth><MealPlansPage /></RequireAuth>} />
       <Route path="/recipes/:recipeId" element={<RequireAuth><MealPlanRecipesPage /></RequireAuth>} />
       <Route path="/meal-plans/:mealPlanId/shopping-list" element={<RequireAuth><MealPlanShoppingListPage /></RequireAuth>} />
-      <Route path="/shopping-list/:taskId" element={<RequireAuth><ShoppingListPage /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
