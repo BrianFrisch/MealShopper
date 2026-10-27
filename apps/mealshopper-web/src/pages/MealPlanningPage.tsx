@@ -51,6 +51,40 @@ const readStoredDeals = (): StoredDealsState => {
   }
 };
 
+const PLANNING_REQUIREMENTS_STORAGE_KEY = 'mealshopper_planning_requirements';
+
+interface StoredPlanningRequirements {
+  dietaryPreferences: string[];
+  cuisines: string[];
+  avoidIngredients: string[];
+  servingsCount: number;
+}
+
+const toStringArray = (value: unknown): string[] => (
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+);
+
+const readStoredRequirements = (): StoredPlanningRequirements => {
+  const defaults: StoredPlanningRequirements = {
+    dietaryPreferences: [], cuisines: [], avoidIngredients: [], servingsCount: 4
+  };
+  try {
+    const raw = localStorage.getItem(PLANNING_REQUIREMENTS_STORAGE_KEY);
+    if (!raw) return defaults;
+    const parsed = JSON.parse(raw) as Partial<Record<keyof StoredPlanningRequirements, unknown>> | null;
+    if (!parsed || typeof parsed !== 'object') return defaults;
+    const servings = Number(parsed.servingsCount);
+    return {
+      dietaryPreferences: toStringArray(parsed.dietaryPreferences),
+      cuisines: toStringArray(parsed.cuisines),
+      avoidIngredients: toStringArray(parsed.avoidIngredients),
+      servingsCount: Number.isFinite(servings) && servings > 0 ? servings : defaults.servingsCount
+    };
+  } catch {
+    return defaults;
+  }
+};
+
 const getDealKey = (deal: Deal) => (
   deal.deal_id || deal.dealId ||
   `${deal.store_id || deal.storeId || ''}:${deal.item_name || deal.itemName || deal.clean_name || ''}:${deal.deal_price ?? deal.dealPrice ?? ''}:${deal.unit || ''}`
@@ -77,12 +111,13 @@ export const MealPlanningPage = () => {
   const navigate = useNavigate();
   const [storedDealsState, setStoredDealsState] = useState(readStoredDeals);
   const { deals: selectedDeals } = storedDealsState;
-  const [dietaryPreferences, setDietaryPreferences] = useState<string[]>([]);
-  const [cuisines, setCuisines] = useState<string[]>([]);
+  const [initialRequirements] = useState(readStoredRequirements);
+  const [dietaryPreferences, setDietaryPreferences] = useState<string[]>(initialRequirements.dietaryPreferences);
+  const [cuisines, setCuisines] = useState<string[]>(initialRequirements.cuisines);
   const [showAllCuisines, setShowAllCuisines] = useState(false);
-  const [avoidIngredients, setAvoidIngredients] = useState<string[]>([]);
+  const [avoidIngredients, setAvoidIngredients] = useState<string[]>(initialRequirements.avoidIngredients);
   const [ingredientInput, setIngredientInput] = useState('');
-  const [servingsCount, setServingsCount] = useState(4);
+  const [servingsCount, setServingsCount] = useState(initialRequirements.servingsCount);
   const [isDealsCollapsed, setIsDealsCollapsed] = useState(false);
   const [isRequirementsCollapsed, setIsRequirementsCollapsed] = useState(false);
   const [recipes, setRecipes] = useState<RecipeCardDto[]>([]);
@@ -218,6 +253,14 @@ export const MealPlanningPage = () => {
     setErrorMessage(null);
     if (selectedDeals.length === 0) {
       return;
+    }
+
+    try {
+      localStorage.setItem(PLANNING_REQUIREMENTS_STORAGE_KEY, JSON.stringify({
+        dietaryPreferences, cuisines, avoidIngredients, servingsCount
+      }));
+    } catch {
+      // Persistence is best-effort; generation should still proceed.
     }
 
     const selectedDealLookups = selectedDeals.flatMap(deal => {
