@@ -18,12 +18,14 @@ from fastapi import FastAPI, Header, HTTPException, status
 
 from src.config import PLANNER_DATABASE_URL
 from src.models import (
+    AddShoppingListItemRequest,
     AssociateMealPlanRecipeRequest,
     CreateMealPlanRequest,
     MealPlanRecordResponse,
     MealPlanIngredientResponse,
     MealPlanRequest,
     MealPlanResponse,
+    RemoveShoppingListItemResponse,
     UpdateMealPlanNameRequest,
     UpdateIngredientPurchaseRequest,
 )
@@ -442,6 +444,91 @@ async def update_meal_plan_ingredient_purchase(
             detail=f"Ingredient {ingredient_id} was not found in meal plan {meal_plan_id}.",
         )
     return MealPlanIngredientResponse(**ingredient)
+
+
+@app.post(
+    "/v1/planner/meal-plans/{meal_plan_id}/shopping-list/items",
+    response_model=MealPlanIngredientResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_meal_plan_shopping_list_item(
+    meal_plan_id: UUID,
+    request: AddShoppingListItemRequest,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> MealPlanIngredientResponse:
+    stored = await recipe_service.get_meal_plan(meal_plan_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Meal plan {meal_plan_id} not found.",
+        )
+    if x_user_id and stored["user_id"].lower() != x_user_id.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to modify this meal plan.",
+        )
+
+    ingredient_name = request.ingredient_name.strip()
+    ingredient_quantity = request.ingredient_quantity.strip()
+    if not ingredient_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ingredient name is required.",
+        )
+    if not ingredient_quantity:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ingredient quantity is required.",
+        )
+
+    added = await recipe_service.add_shopping_list_item(
+        meal_plan_id=meal_plan_id,
+        ingredient_name=ingredient_name,
+        ingredient_quantity=ingredient_quantity,
+    )
+    if added is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to add shopping list item.",
+        )
+    return MealPlanIngredientResponse(**added)
+
+
+@app.delete(
+    "/v1/planner/meal-plans/{meal_plan_id}/shopping-list/items/{ingredient_id}",
+    response_model=RemoveShoppingListItemResponse,
+)
+async def remove_meal_plan_shopping_list_item(
+    meal_plan_id: UUID,
+    ingredient_id: UUID,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> RemoveShoppingListItemResponse:
+    stored = await recipe_service.get_meal_plan(meal_plan_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Meal plan {meal_plan_id} not found.",
+        )
+    if x_user_id and stored["user_id"].lower() != x_user_id.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to modify this meal plan.",
+        )
+
+    removal_status = await recipe_service.remove_shopping_list_item(
+        meal_plan_id=meal_plan_id,
+        ingredient_id=ingredient_id,
+    )
+    if removal_status is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Ingredient {ingredient_id} was not found in meal plan {meal_plan_id}.",
+        )
+
+    return RemoveShoppingListItemResponse(
+        status=removal_status,
+        meal_plan_ingredient_id=str(ingredient_id),
+    )
 
 
 if __name__ == "__main__":

@@ -153,7 +153,7 @@ class MealPlanRecordResponse(BaseModel):
 class MealPlanIngredientResponse(BaseModel):
     meal_plan_ingredient_id: str
     meal_plan_id: str
-    recipe_id: str
+    recipe_id: Optional[str] = None
     deal_id: Optional[str] = None
     store_id: Optional[str] = None
     is_promotional: bool
@@ -166,3 +166,21 @@ class MealPlanIngredientResponse(BaseModel):
 
 class UpdateIngredientPurchaseRequest(BaseModel):
     is_purchased: bool
+
+
+class AddShoppingListItemRequest(BaseModel):
+    ingredient_name: str = Field(
+        ...,
+        min_length=1,
+        validation_alias=AliasChoices("ingredient_name", "ingredientName", "name"),
+    )
+    ingredient_quantity: str = Field(
+        ...,
+        min_length=1,
+        validation_alias=AliasChoices("ingredient_quantity", "ingredientQuantity", "quantity"),
+    )
+
+
+class RemoveShoppingListItemResponse(BaseModel):
+    status: str
+    meal_plan_ingredient_id: str

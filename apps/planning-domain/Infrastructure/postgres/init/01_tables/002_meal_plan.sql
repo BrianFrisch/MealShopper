@@ -24,7 +24,7 @@ CREATE INDEX IF NOT EXISTS ix_meal_plan_recipe_recipe_id ON meal_plan_recipe (re
 CREATE TABLE IF NOT EXISTS meal_plan_ingredient (
     meal_plan_ingredient_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     meal_plan_id UUID NOT NULL REFERENCES meal_plan (meal_plan_id) ON DELETE CASCADE,
-    recipe_id UUID NOT NULL REFERENCES recipe (recipe_id) ON DELETE CASCADE,
+    recipe_id UUID REFERENCES recipe (recipe_id) ON DELETE CASCADE,
     ingredient_index INTEGER NOT NULL,
     deal_id TEXT,
     is_promotional BOOLEAN NOT NULL DEFAULT FALSE,
@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS meal_plan_ingredient (
 
 ALTER TABLE meal_plan_ingredient
     ADD COLUMN IF NOT EXISTS ingredient_index INTEGER;
+
+ALTER TABLE meal_plan_ingredient
+    ALTER COLUMN recipe_id DROP NOT NULL;
 
 WITH ranked_ingredients AS (
     SELECT meal_plan_ingredient_id,

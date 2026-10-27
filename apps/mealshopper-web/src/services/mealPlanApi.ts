@@ -35,7 +35,7 @@ export interface MealPlanRecordDto {
 export interface MealPlanIngredientDto {
   meal_plan_ingredient_id: string;
   meal_plan_id: string;
-  recipe_id: string;
+  recipe_id: string | null;
   deal_id: string | null;
   store_id: string | null;
   is_promotional: boolean;
@@ -127,6 +127,35 @@ export const mealPlanApi = {
     const response = await apiClient.patch<MealPlanIngredientDto>(
       `/v1/planner/meal-plans/${mealPlanId}/shopping-list/${ingredientId}`,
       { is_purchased: isPurchased },
+      authorizationHeaders(token)
+    );
+    return response.data;
+  },
+
+  async addMealPlanShoppingListItem(
+    mealPlanId: string,
+    ingredientName: string,
+    ingredientQuantity: string,
+    token: string
+  ): Promise<MealPlanIngredientDto> {
+    const response = await apiClient.post<MealPlanIngredientDto>(
+      `/v1/planner/meal-plans/${mealPlanId}/shopping-list/items`,
+      {
+        ingredient_name: ingredientName,
+        ingredient_quantity: ingredientQuantity,
+      },
+      authorizationHeaders(token)
+    );
+    return response.data;
+  },
+
+  async removeMealPlanShoppingListItem(
+    mealPlanId: string,
+    ingredientId: string,
+    token: string
+  ): Promise<{ status: 'removed' | 'purchased'; meal_plan_ingredient_id: string }> {
+    const response = await apiClient.delete<{ status: 'removed' | 'purchased'; meal_plan_ingredient_id: string }>(
+      `/v1/planner/meal-plans/${mealPlanId}/shopping-list/items/${ingredientId}`,
       authorizationHeaders(token)
     );
     return response.data;
