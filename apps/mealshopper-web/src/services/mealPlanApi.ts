@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { AUTH_REQUIRED_EVENT } from './authApi';
 import type { MealPlanDiscoveryRequest, DiscoveryJobResult, StoreDto, TaskStatusResponse } from '../types/discovery';
 import type { MealPlanSynthesisRequest, MealPlanSynthesisResponse } from '../types/mealPlan';
 
@@ -8,6 +9,13 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+apiClient.interceptors.response.use(undefined, (error: unknown) => {
+  if (axios.isAxiosError(error) && error.response?.status === 401) {
+    window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT));
+  }
+  return Promise.reject(error);
 });
 
 const authorizationHeaders = (token: string) => ({

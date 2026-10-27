@@ -17,6 +17,9 @@ export interface CreateUserResponse {
 const ACCESS_TOKEN_KEY = 'access_token';
 const LEGACY_REFRESH_TOKEN_KEY = 'refresh_token';
 const ACCESS_TOKEN_EXPIRY_KEY = 'access_token_expiry';
+const SESSION_EXPIRY_KEY = 'session_expiry';
+const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+export const AUTH_REQUIRED_EVENT = 'mealshopper:auth-required';
 const REFRESH_BEFORE_EXPIRY_MS = 60_000;
 const REFRESH_RETRY_DELAY_MS = 30_000;
 
@@ -36,6 +39,7 @@ function saveTokens(tokens: TokenResponse): string {
   const expiresAt = Date.now() + tokens.expires_in * 1000;
   localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
   localStorage.setItem(ACCESS_TOKEN_EXPIRY_KEY, String(expiresAt));
+  localStorage.setItem(SESSION_EXPIRY_KEY, String(Date.now() + SESSION_LIFETIME_MS));
   scheduleRefresh();
   return tokens.access_token;
 }
@@ -165,10 +169,32 @@ export const authApi = {
   },
 
   getToken(): string | null {
+    const sessionExpiry = localStorage.getItem(SESSION_EXPIRY_KEY);
+    if (sessionExpiry && Number(sessionExpiry) <= Date.now()) {
+      authApi.logout();
+      return null;
+    }
     return localStorage.getItem(ACCESS_TOKEN_KEY);
   },
 
+  async ensureSession(): Promise<boolean> {
+    if (!authApi.getToken()) {
+      return false;
+    }
+    const expiresAt = Number(localStorage.getItem(ACCESS_TOKEN_EXPIRY_KEY));
+    if (expiresAt - Date.now() > 0) {
+      return true;
+    }
+    try {
+      await refreshAccessToken();
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
   logout(): void {
+    localStorage.removeItem(SESSION_EXPIRY_KEY);
     if (refreshTimer !== undefined) {
       clearTimeout(refreshTimer);
       refreshTimer = undefined;
