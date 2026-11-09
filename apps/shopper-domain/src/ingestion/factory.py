@@ -6,11 +6,13 @@ try:
     from src.ingestion.adapters.base import BaseDealAdapter
     from src.ingestion.adapters.flipp_adapter import FlippAdapter, DEFAULT_TIMEOUT
     from src.ingestion.adapters.aldi_adapter import AldiAdapter
+    from src.ingestion.adapters.trader_joes_adapter import TraderJoesAdapter
     from src.services.grocery_chain_service import GroceryChainService
 except ImportError:
     from .adapters.base import BaseDealAdapter
     from .adapters.flipp_adapter import FlippAdapter, DEFAULT_TIMEOUT
     from .adapters.aldi_adapter import AldiAdapter
+    from .adapters.trader_joes_adapter import TraderJoesAdapter
     from ..services.grocery_chain_service import GroceryChainService
 
 logger = logging.getLogger(__name__)
@@ -42,6 +44,8 @@ class DealAdapterFactory:
 
         if adapter_name == "aldi" or "aldi" in adapter_name:
             return AldiAdapter(client=self._client, timeout=self._timeout)
+        if adapter_name  == "trader-joes":
+            return TraderJoesAdapter(client=self._client, timeout=self._timeout)
         return FlippAdapter(
             client=self._client,
             timeout=self._timeout,

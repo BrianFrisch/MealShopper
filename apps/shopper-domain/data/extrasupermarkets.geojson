@@ -1,0 +1,100 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Extra Supermarket - Jersey City",
+        "ref": "extrasuper-360martinlutherki",
+        "addr:street_address": "360 Martin Luther King Dr",
+        "addr:city": "Jersey City",
+        "addr:state": "NJ",
+        "addr:postcode": "07305",
+        "brand": "extra supermarkets"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -74.0772,
+          40.7115
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Extra Supermarket - Newark (Avon)",
+        "ref": "extrasuper-125avonave",
+        "addr:street_address": "125 Avon Ave",
+        "addr:city": "Newark",
+        "addr:state": "NJ",
+        "addr:postcode": "07108",
+        "brand": "extra supermarkets"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -74.1925,
+          40.7228
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Extra Supermarket - Newark (Lyons)",
+        "ref": "extrasuper-327lyonsave",
+        "addr:street_address": "327 Lyons Ave",
+        "addr:city": "Newark",
+        "addr:state": "NJ",
+        "addr:postcode": "07112",
+        "brand": "extra supermarkets"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -74.2239,
+          40.7121
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Extra Supermarket - East Orange",
+        "ref": "extrasuper-563centralave",
+        "addr:street_address": "563 Central Ave",
+        "addr:city": "East Orange",
+        "addr:state": "NJ",
+        "addr:postcode": "07018",
+        "brand": "extra supermarkets"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -74.2201,
+          40.7538
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Extra Supermarket - Elizabeth",
+        "ref": "extrasuper-838egrandst",
+        "addr:street_address": "838 E Grand St",
+        "addr:city": "Elizabeth",
+        "addr:state": "NJ",
+        "addr:postcode": "07201",
+        "brand": "extra supermarkets"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -74.1914,
+          40.6659
+        ]
+      }
+    }
+  ]
+}
