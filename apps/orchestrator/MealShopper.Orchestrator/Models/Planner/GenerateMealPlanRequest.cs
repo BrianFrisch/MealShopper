@@ -25,6 +25,12 @@ public class GenerateMealPlanRequest
     public List<string> AvoidIngredients { get; set; } = [];
 
     /// <summary>
+    /// Optional ingredients to use in one recipe each when suitable.
+    /// </summary>
+    [JsonPropertyName("include_ingredients")]
+    public List<string> IncludeIngredients { get; set; } = [];
+
+    /// <summary>
     /// Top evaluated promotional deals from regional grocery stores to optimize meal recipes around.
     /// </summary>
     [JsonPropertyName("top_deals")]

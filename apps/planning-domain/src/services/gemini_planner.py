@@ -23,10 +23,18 @@ class GeminiPlannerService:
         days_count: int = 3,
         dietary_restrictions: List[str] | None = None,
         servings_count: int = 2,
-        main_ingredient: str | None = None
+        main_ingredient: str | None = None,
+        include_ingredients: List[str] | None = None,
     ) -> MealPlanResponse:
         if not self.client:
             raise RuntimeError("GEMINI_API_KEY not configured. Live planner unavailable.")
+
+        include_constraint = (
+            f"Optional ingredients to include: {', '.join(include_ingredients or []) if include_ingredients else 'None'}. "
+            "For each optional ingredient, include it in exactly one recipe if it fits naturally; "
+            "otherwise omit it. Do not include it in multiple recipes. Strict avoidance and dietary "
+            "requirements take precedence."
+        )
 
         if main_ingredient and main_ingredient.strip():
             prompt = f"""
@@ -42,6 +50,7 @@ CONSTRAINTS:
 6. No promotional deals apply: set 'store_name' and 'deal_id' to null and 'is_promotional' to false for every ingredient, and leave 'missing_primary_ingredients' empty.
 7. RECIPE NAMING: Name the actual dish, not a generic placeholder.
 8. PREPARED FOODS: If the main ingredient is fully prepared or frozen, cook it per package directions and pair it with a fresh side.
+9. {include_constraint}
 """
             return await self._generate(prompt)
 
@@ -74,6 +83,7 @@ CONSTRAINTS:
 7. Common pantry staples (oil, salt, pepper, flour, vinegar, standard dried spices) should have 'store_name' and 'deal_id' set to null, 'is_promotional' to false, and must NOT be added to 'missing_primary_ingredients'.
 8. RECIPE NAMING: Do not use generic placeholders like "Protein" or "Meat" in your recipe titles. Name the actual dish (e.g., "Garlic Butter Ribeye" or "DiGiorno Pizza with Side Salad").
 9. PREPARED FOODS: If an ingredient is a fully prepared or frozen food (like a frozen pizza, lasagna, or chicken nuggets), DO NOT treat it as a raw ingredient to be seared, marinated, or heavily prepped. Instruct the user to cook it according to package directions and pair it with a fresh side.
+10. {include_constraint}
 
 AVAILABLE PROMOTIONAL DEALS:
 {deals_context}

@@ -5,6 +5,7 @@ export interface MealPlanSynthesisRequest {
   cuisines: string[];
   dietaryPreferences: string[];
   avoidIngredients: string[];
+  includeIngredients: string[];
   daysCount: number;
   servingsCount: number;
 }

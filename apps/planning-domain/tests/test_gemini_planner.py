@@ -8,7 +8,10 @@ from src.services.gemini_planner import GeminiPlannerService
 
 
 @pytest.mark.asyncio
-async def test_generate_plan_prompt_includes_selected_deals_and_preferences() -> None:
+@pytest.mark.parametrize("main_ingredient", [None, "chicken"])
+async def test_generate_plan_prompt_includes_selected_deals_and_preferences(
+    main_ingredient: str | None,
+) -> None:
     class FakeModels:
         prompt: str | None = None
 
@@ -30,6 +33,8 @@ async def test_generate_plan_prompt_includes_selected_deals_and_preferences() ->
         dietary_restrictions=["Keto"],
         days_count=3,
         servings_count=4,
+        main_ingredient=main_ingredient,
+        include_ingredients=["mushrooms", "spinach"],
         top_deals=[
             DealInput(
                 deal_id="groceryoutlet-387_1047303061_1",
@@ -48,7 +53,14 @@ async def test_generate_plan_prompt_includes_selected_deals_and_preferences() ->
     assert "Southern, Classic American, Comfort Food" in models.prompt
     assert "Keto" in models.prompt
     assert "onions, corn, mango" in models.prompt
-    assert '"dealId": "groceryoutlet-387_1047303061_1"' in models.prompt
-    assert '"primaryIngredient": "Chicken Breast"' in models.prompt
-    assert "Use each deal's 'primaryIngredient' as the ingredient name" in models.prompt
-    assert "'deal_id'" in models.prompt
+    assert "Optional ingredients to include: mushrooms, spinach" in models.prompt
+    assert "include it in exactly one recipe if it fits naturally" in models.prompt
+    assert "otherwise omit it" in models.prompt
+    assert "Strict avoidance and dietary requirements take precedence" in models.prompt
+    if main_ingredient:
+        assert "built around the main ingredient: chicken" in models.prompt
+    else:
+        assert '"dealId": "groceryoutlet-387_1047303061_1"' in models.prompt
+        assert '"primaryIngredient": "Chicken Breast"' in models.prompt
+        assert "Use each deal's 'primaryIngredient' as the ingredient name" in models.prompt
+        assert "'deal_id'" in models.prompt

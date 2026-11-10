@@ -13,7 +13,8 @@ public record PlanGenerationWorkflowRequest(
     int TargetMealCount,
     List<string> PreferredCuisines,
     List<string> DietaryRestrictions,
-    List<string> AvoidIngredients
+    List<string> AvoidIngredients,
+    List<string>? IncludeIngredients = null
 );
 
 /// <summary>

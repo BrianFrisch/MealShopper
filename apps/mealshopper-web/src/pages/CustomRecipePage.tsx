@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, Plus, X } from 'lucide-react';
 import { AddToMealPlanModal } from '../components/AddToMealPlanModal';
 import { Header } from '../components/Header';
+import { IncludeIngredientsField } from '../components/IncludeIngredientsField';
 import { RecipeCard } from '../components/RecipeCard';
 import { authApi } from '../services/authApi';
 import { mealPlanApi, type MealPlanRecordDto } from '../services/mealPlanApi';
@@ -58,6 +59,7 @@ export const CustomRecipePage = () => {
   const [cuisines, setCuisines] = useState<string[]>(initialRequirements.cuisines);
   const [showAllCuisines, setShowAllCuisines] = useState(false);
   const [avoidIngredients, setAvoidIngredients] = useState<string[]>(initialRequirements.avoidIngredients);
+  const [includeIngredients, setIncludeIngredients] = useState<string[]>([]);
   const [ingredientInput, setIngredientInput] = useState('');
   const [servingsCount, setServingsCount] = useState(initialRequirements.servingsCount);
   const [recipes, setRecipes] = useState<RecipeCardDto[]>([]);
@@ -179,6 +181,7 @@ export const CustomRecipePage = () => {
       cuisines,
       dietaryPreferences,
       avoidIngredients,
+      includeIngredients,
       daysCount: 1,
       servingsCount
     };
@@ -346,6 +349,8 @@ export const CustomRecipePage = () => {
                 </ul>
               )}
             </div>
+
+            <IncludeIngredientsField ingredients={includeIngredients} onChange={setIncludeIngredients} />
 
             <div>
               <label htmlFor="servings-count" className="mb-2 block text-sm font-bold text-stone-800">

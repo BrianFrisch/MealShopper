@@ -17,6 +17,7 @@ public class MealPlanGenerationRequest : IValidatableObject
     public List<string> Cuisines { get; set; } = [];
     public List<string> DietaryPreferences { get; set; } = [];
     public List<string> AvoidIngredients { get; set; } = [];
+    public List<string> IncludeIngredients { get; set; } = [];
     [Range(1, 5)]
     public int DaysCount { get; set; } = 3;
     [Range(1, 8)]

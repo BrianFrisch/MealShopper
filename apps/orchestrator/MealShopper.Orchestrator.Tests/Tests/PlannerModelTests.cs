@@ -15,6 +15,7 @@ public class PlannerModelTests
         {
             Cuisines = ["Italian", "Mexican"],
             AvoidIngredients = ["peanuts", "shellfish"],
+            IncludeIngredients = ["mushrooms", "spinach"],
             DaysCount = 4,
             TopDeals =
             [
@@ -44,6 +45,9 @@ public class PlannerModelTests
 
         root.TryGetProperty("avoid_ingredients", out var avoidIngredients).Should().BeTrue();
         avoidIngredients.GetArrayLength().Should().Be(2);
+
+        root.GetProperty("include_ingredients").EnumerateArray().Select(item => item.GetString())
+            .Should().Equal("mushrooms", "spinach");
 
         root.TryGetProperty("days_count", out var daysCount).Should().BeTrue();
         daysCount.GetInt32().Should().Be(4);

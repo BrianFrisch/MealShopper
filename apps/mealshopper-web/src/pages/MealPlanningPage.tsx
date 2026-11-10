@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { CalendarPlus, Check, ChevronDown, ChevronUp, Loader2, Plus, X } from 'lucide-react';
 import { DealImageTooltip } from '../components/DealImageTooltip';
 import { Header } from '../components/Header';
+import { IncludeIngredientsField } from '../components/IncludeIngredientsField';
 import { RecipeCard } from '../components/RecipeCard';
 import { authApi } from '../services/authApi';
 import { mealPlanApi, type MealPlanRecordDto } from '../services/mealPlanApi';
@@ -116,6 +117,7 @@ export const MealPlanningPage = () => {
   const [cuisines, setCuisines] = useState<string[]>(initialRequirements.cuisines);
   const [showAllCuisines, setShowAllCuisines] = useState(false);
   const [avoidIngredients, setAvoidIngredients] = useState<string[]>(initialRequirements.avoidIngredients);
+  const [includeIngredients, setIncludeIngredients] = useState<string[]>([]);
   const [ingredientInput, setIngredientInput] = useState('');
   const [servingsCount, setServingsCount] = useState(initialRequirements.servingsCount);
   const [isDealsCollapsed, setIsDealsCollapsed] = useState(false);
@@ -287,6 +289,7 @@ export const MealPlanningPage = () => {
       cuisines,
       dietaryPreferences,
       avoidIngredients,
+      includeIngredients,
       // The API accepts 1-5 days.
       daysCount: Math.min(Math.max(selectedDeals.length, 1), 5),
       servingsCount
@@ -462,20 +465,20 @@ export const MealPlanningPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFDF9] pb-36 text-stone-900">
+    <div className="min-h-screen bg-[#FDFDF9] pb-40 sm:pb-36 text-stone-900">
       <Header />
-      <main className="mx-auto max-w-7xl space-y-8 px-4 py-8">
-        <section className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+      <main className="mx-auto max-w-7xl space-y-6 sm:space-y-8 px-3 sm:px-4 py-6 sm:py-8">
+        <section className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-5 shadow-sm">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h1 className="text-lg font-bold tracking-wide text-stone-900">
+              <h1 className="text-base sm:text-lg font-bold tracking-wide text-stone-900">
                 YOUR SELECTED DEALS ({selectedDeals.length} Items across {storeCount} Stores)
               </h1>
             </div>
             <div className="flex items-center gap-3">
               <Link
                 to="/discover"
-                className="font-semibold text-[#1E7538] underline hover:text-green-800"
+                className="text-xs sm:text-sm font-semibold text-[#1E7538] underline hover:text-green-800"
               >
                 ← Back to Discover
               </Link>
@@ -494,54 +497,96 @@ export const MealPlanningPage = () => {
           </div>
 
           {isDealsCollapsed ? null : selectedDeals.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="border-b border-stone-200 text-xs uppercase tracking-wide text-stone-500">
-                  <tr>
-                    <th className="px-3 py-2">Del</th>
-                    <th className="px-3 py-2">Store</th>
-                    <th className="px-3 py-2">Subtype</th>
-                    <th className="px-3 py-2">Item Name</th>
-                    <th className="px-3 py-2">Price / Unit</th>
-                    <th className="px-3 py-2">Image</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100">
-                  {selectedDeals.map(deal => {
-                    const title = getDealTitle(deal);
-                    return (
-                      <tr key={getDealKey(deal)} className="align-middle">
-                        <td className="px-3 py-3">
-                          <button
-                            type="button"
-                            aria-label={`Remove ${title}`}
-                            onClick={() => removeSelectedDeal(deal)}
-                            className="rounded px-2 text-lg font-bold leading-none text-rose-600 hover:bg-rose-50"
-                          >
-                            ×
-                          </button>
-                        </td>
-                        <td className="px-3 py-3 font-medium text-stone-800">
-                          {deal.store_name || deal.storeName || 'Unknown store'}
-                        </td>
-                        <td className="px-3 py-3">
-                          <span className="rounded-full bg-green-50 px-2 py-1 text-xs font-semibold text-[#1E7538]">
-                            {deal.protein_subtype || 'Other'}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 font-medium text-stone-800">{title}</td>
-                        <td className="whitespace-nowrap px-3 py-3 text-stone-700">
-                          {formatCurrency(getDealPrice(deal))} / {deal.unit || 'each'}
-                        </td>
-                        <td className="px-3 py-3">
-                          <DealImageTooltip imageUrl={deal.image_url} itemName={title} />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <>
+              {/* Mobile Selected Deals View */}
+              <div className="sm:hidden divide-y divide-stone-100">
+                {selectedDeals.map(deal => {
+                  const title = getDealTitle(deal);
+                  return (
+                    <div key={getDealKey(deal)} className="flex items-center justify-between gap-2.5 py-2.5">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <button
+                          type="button"
+                          aria-label={`Remove ${title}`}
+                          onClick={() => removeSelectedDeal(deal)}
+                          className="shrink-0 rounded px-1.5 text-lg font-bold leading-none text-rose-600 hover:bg-rose-50"
+                        >
+                          ×
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <p className="break-words text-sm font-medium text-stone-800 leading-snug">{title}</p>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-stone-500">
+                            <span>{deal.store_name || deal.storeName || 'Unknown store'}</span>
+                            <span>•</span>
+                            <span className="font-semibold text-stone-700">
+                              {formatCurrency(getDealPrice(deal))} / {deal.unit || 'each'}
+                            </span>
+                            {deal.protein_subtype && (
+                              <span className="rounded-full bg-green-50 px-1.5 py-0.5 text-[10px] font-semibold text-[#1E7538]">
+                                {deal.protein_subtype}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="shrink-0">
+                        <DealImageTooltip imageUrl={deal.image_url} itemName={title} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop Selected Deals Table */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full min-w-[760px] text-left text-sm">
+                  <thead className="border-b border-stone-200 text-xs uppercase tracking-wide text-stone-500">
+                    <tr>
+                      <th className="px-3 py-2">Del</th>
+                      <th className="px-3 py-2">Store</th>
+                      <th className="px-3 py-2">Subtype</th>
+                      <th className="px-3 py-2">Item Name</th>
+                      <th className="px-3 py-2">Price / Unit</th>
+                      <th className="px-3 py-2">Image</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {selectedDeals.map(deal => {
+                      const title = getDealTitle(deal);
+                      return (
+                        <tr key={getDealKey(deal)} className="align-middle">
+                          <td className="px-3 py-3">
+                            <button
+                              type="button"
+                              aria-label={`Remove ${title}`}
+                              onClick={() => removeSelectedDeal(deal)}
+                              className="rounded px-2 text-lg font-bold leading-none text-rose-600 hover:bg-rose-50"
+                            >
+                              ×
+                            </button>
+                          </td>
+                          <td className="px-3 py-3 font-medium text-stone-800">
+                            {deal.store_name || deal.storeName || 'Unknown store'}
+                          </td>
+                          <td className="px-3 py-3">
+                            <span className="rounded-full bg-green-50 px-2 py-1 text-xs font-semibold text-[#1E7538]">
+                              {deal.protein_subtype || 'Other'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 font-medium text-stone-800">{title}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-stone-700">
+                            {formatCurrency(getDealPrice(deal))} / {deal.unit || 'each'}
+                          </td>
+                          <td className="px-3 py-3">
+                            <DealImageTooltip imageUrl={deal.image_url} itemName={title} />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : (
             <p className="py-6 text-center text-sm text-stone-500">
               No deals selected. <Link to="/discover" className="font-semibold text-[#1E7538] underline">Discover deals</Link> to start planning.
@@ -560,12 +605,12 @@ export const MealPlanningPage = () => {
           </p>
         )}
 
-        <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(300px,0.85fr)_minmax(0,1.5fr)]">
-          <section className="min-w-0 space-y-6 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+        <div className="grid grid-cols-1 items-start gap-6 sm:gap-8 lg:grid-cols-[minmax(300px,0.85fr)_minmax(0,1.5fr)]">
+          <section className="min-w-0 space-y-5 sm:space-y-6 rounded-2xl border border-stone-200 bg-white p-4 sm:p-5 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-xl font-bold text-stone-900">Planning Requirements</h2>
-                <p className="mt-1 text-sm text-stone-500">Personalize your meals before the chef gets started.</p>
+                <h2 className="text-lg sm:text-xl font-bold text-stone-900">Planning Requirements</h2>
+                <p className="mt-1 text-xs sm:text-sm text-stone-500">Personalize your meals before the chef gets started.</p>
               </div>
               <button
                 type="button"
@@ -582,15 +627,15 @@ export const MealPlanningPage = () => {
 
             <div className={isRequirementsCollapsed ? 'hidden' : 'space-y-6'}>
             <fieldset>
-              <legend className="mb-3 text-sm font-bold text-stone-800">Dietary Requirements</legend>
-              <div className="flex flex-wrap gap-2">
+              <legend className="mb-2.5 sm:mb-3 text-xs sm:text-sm font-bold text-stone-800">Dietary Requirements</legend>
+              <div className="flex flex-wrap gap-1.5 sm:gap-2">
                 {DIETARY_REQUIREMENTS.map(option => (
                   <button
                     type="button"
                     key={option}
                     aria-pressed={dietaryPreferences.includes(option)}
                     onClick={() => toggleOption(option, dietaryPreferences, setDietaryPreferences)}
-                    className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+                    className={`rounded-full border px-2.5 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm font-medium transition ${
                       dietaryPreferences.includes(option)
                         ? 'border-[#1E7538] bg-green-50 text-[#1E7538]'
                         : 'border-stone-200 bg-white text-stone-600 hover:border-stone-400'
@@ -603,15 +648,15 @@ export const MealPlanningPage = () => {
             </fieldset>
 
             <fieldset>
-              <legend className="mb-3 text-sm font-bold text-stone-800">Cuisines to Include</legend>
-              <div className="flex flex-wrap gap-2">
+              <legend className="mb-2.5 sm:mb-3 text-xs sm:text-sm font-bold text-stone-800">Cuisines to Include</legend>
+              <div className="flex flex-wrap gap-1.5 sm:gap-2">
                 {visibleCuisineOptions.map(option => (
                   <button
                     type="button"
                     key={option}
                     aria-pressed={cuisines.includes(option)}
                     onClick={() => toggleOption(option, cuisines, setCuisines)}
-                    className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+                    className={`rounded-full border px-2.5 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm font-medium transition ${
                       cuisines.includes(option)
                         ? 'border-[#1E7538] bg-green-50 text-[#1E7538]'
                         : 'border-stone-200 bg-white text-stone-600 hover:border-stone-400'
@@ -678,6 +723,8 @@ export const MealPlanningPage = () => {
               )}
             </div>
 
+            <IncludeIngredientsField ingredients={includeIngredients} onChange={setIncludeIngredients} />
+
             <div>
               <label htmlFor="servings-count" className="mb-2 block text-sm font-bold text-stone-800">
                 Servings per Meal
@@ -706,18 +753,18 @@ export const MealPlanningPage = () => {
 
           <section className="min-w-0 space-y-4">
             <div>
-              <h2 className="text-2xl font-bold text-stone-900">Chef-Synthesized Meals</h2>
-              <p className="mt-1 text-sm text-stone-500">Choose which recipes you want to keep in your plan.</p>
+              <h2 className="text-xl sm:text-2xl font-bold text-stone-900">Chef-Synthesized Meals</h2>
+              <p className="mt-1 text-xs sm:text-sm text-stone-500">Choose which recipes you want to keep in your plan.</p>
             </div>
 
             {isGenerating ? (
-              <div role="status" className="space-y-4 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+              <div role="status" className="space-y-4 rounded-2xl border border-stone-200 bg-white p-4 sm:p-6 shadow-sm">
                 <div className="flex items-center gap-3 text-[#1E7538]">
-                  <Loader2 aria-hidden="true" className="h-6 w-6 animate-spin" />
-                  <span className="font-semibold">The chef is building your personalized meal plan...</span>
+                  <Loader2 aria-hidden="true" className="h-5 w-5 sm:h-6 sm:w-6 animate-spin shrink-0" />
+                  <span className="text-sm sm:text-base font-semibold">The chef is building your personalized meal plan...</span>
                 </div>
                 {[0, 1, 2].map(item => (
-                  <div key={item} className="h-24 animate-pulse rounded-xl bg-stone-100" />
+                  <div key={item} className="h-20 sm:h-24 animate-pulse rounded-xl bg-stone-100" />
                 ))}
               </div>
             ) : recipes.length > 0 ? (
@@ -731,9 +778,9 @@ export const MealPlanningPage = () => {
                 />
               ))
             ) : (
-              <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center">
+              <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-6 sm:p-10 text-center">
                 <h3 className="font-semibold text-stone-800">Your meal ideas will appear here</h3>
-                <p className="mx-auto mt-2 max-w-md text-sm text-stone-500">
+                <p className="mx-auto mt-2 max-w-md text-xs sm:text-sm text-stone-500">
                   Choose your dietary needs, favorite cuisines, and meal size, then generate a plan grounded in your selected deals.
                 </p>
               </div>
@@ -765,12 +812,12 @@ export const MealPlanningPage = () => {
                   <div className="shrink-0 rounded-xl bg-[#1E7538]/10 p-2 text-[#1E7538]">
                     <CalendarPlus aria-hidden="true" className="h-5 w-5" />
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <h2 id="add-to-meal-plan-title" className="text-base sm:text-lg font-bold text-stone-900">
                       Add Recipe to Meal Plan
                     </h2>
                     {modalRecipe && (
-                      <p className="truncate text-xs sm:text-sm text-stone-500">
+                      <p className="break-words text-xs sm:text-sm text-stone-500 line-clamp-2">
                         {modalRecipe.recipeTitle}
                       </p>
                     )}
@@ -940,12 +987,12 @@ export const MealPlanningPage = () => {
 
       {recipes.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-stone-200 bg-white/95 shadow-[0_-8px_24px_rgba(28,25,23,0.08)] backdrop-blur">
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4">
-            <div>
-              <p className="font-bold text-stone-900">
+          <div className="mx-auto flex max-w-7xl flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 px-4 py-3 sm:py-4">
+            <div className="flex items-center justify-between sm:block">
+              <p className="text-sm sm:text-base font-bold text-stone-900">
                 {keptRecipeCount} of {recipes.length} meals kept
               </p>
-              <p className="text-sm text-stone-500">
+              <p className="text-xs sm:text-sm text-stone-500">
                 Estimated trip cost: {formatCurrency(estimatedTotalTripCost)}
               </p>
             </div>
@@ -953,7 +1000,7 @@ export const MealPlanningPage = () => {
               type="button"
               disabled={keptRecipeCount === 0 || isSaving}
               onClick={() => { void handleSave(); }}
-              className="rounded-full bg-[#1E7538] px-6 py-3 font-bold text-white shadow-sm transition hover:bg-green-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+              className="w-full sm:w-auto rounded-full bg-[#1E7538] px-6 py-2.5 sm:py-3 text-sm sm:text-base font-bold text-white shadow-sm transition hover:bg-green-800 disabled:cursor-not-allowed disabled:bg-stone-300"
             >
               {isSaving ? 'Saving Meal Plan...' : 'Save & Complete Meal Plan'}
             </button>

@@ -122,7 +122,8 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             TargetMealCount = request.TargetMealCount,
             PreferredCuisines = request.PreferredCuisines ?? new List<string>(),
             DietaryRestrictions = request.DietaryRestrictions ?? new List<string>(),
-            AvoidIngredients = request.AvoidIngredients ?? new List<string>()
+            AvoidIngredients = request.AvoidIngredients ?? new List<string>(),
+            IncludeIngredients = request.IncludeIngredients ?? new List<string>()
         };
 
         var planRes = await _plannerClient.GeneratePlanAsync(planReq, ct);
@@ -419,7 +420,8 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                 payload.DietaryPreferences,
                 payload.DaysCount,
                 payload.ServingsCount,
-                isCustomRecipe ? mainIngredient : null);
+                isCustomRecipe ? mainIngredient : null,
+                payload.IncludeIngredients);
 
             var matchedDeals = new List<MatchedIngredientDealDto>();
             if (!isCustomRecipe)
@@ -781,7 +783,8 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
         List<string>? dietaryPreferences = null,
         int daysCount = 3,
         int servingsCount = 2,
-        string? mainIngredient = null)
+        string? mainIngredient = null,
+        List<string>? includeIngredients = null)
     {
         await _jobStateStore!.UpdateJobStatusAsync(
             jobId,
@@ -794,6 +797,7 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             UserId = userId,
             Cuisines = cuisines ?? [],
             AvoidIngredients = avoidIngredients ?? [],
+            IncludeIngredients = includeIngredients ?? [],
             TopDeals = topDeals.Deals ?? [],
             DietaryRestrictions = dietaryPreferences ?? [],
             DaysCount = daysCount,

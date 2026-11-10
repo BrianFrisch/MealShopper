@@ -40,38 +40,67 @@ export const RecipeCard = ({
         type="button"
         aria-expanded={isExpanded}
         onClick={() => setIsExpanded(expanded => !expanded)}
-        className="flex w-full items-center gap-3 p-3.5 text-left transition hover:bg-stone-50 sm:gap-4 sm:p-5"
+        className="flex w-full items-start sm:items-center gap-2.5 p-3 sm:gap-4 sm:p-5 text-left transition hover:bg-stone-50"
       >
-        <span className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-[#1E7538] text-xs sm:text-sm font-bold text-white">
+        <span className="hidden sm:flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1E7538] text-sm font-bold text-white">
           {index + 1}
         </span>
 
-        {recipe.thumbnailUrl ? (
-          <img
-            src={recipe.thumbnailUrl}
-            alt=""
-            className="h-14 w-16 sm:h-16 sm:w-20 shrink-0 rounded-lg object-cover"
-          />
-        ) : (
-          <span className="flex h-14 w-16 sm:h-16 sm:w-20 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-400">
-            <ChefHat aria-hidden="true" className="h-6 w-6 sm:h-8 sm:w-8" />
+        <span className="relative shrink-0">
+          {recipe.thumbnailUrl ? (
+            <img
+              src={recipe.thumbnailUrl}
+              alt=""
+              className="h-14 w-14 sm:h-16 sm:w-20 shrink-0 rounded-lg object-cover"
+            />
+          ) : (
+            <span className="flex h-14 w-14 sm:h-16 sm:w-20 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-400">
+              <ChefHat aria-hidden="true" className="h-6 w-6 sm:h-8 sm:w-8" />
+            </span>
+          )}
+          <span className="sm:hidden absolute -top-1.5 -left-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#1E7538] text-[10px] font-bold text-white shadow-xs">
+            {index + 1}
           </span>
-        )}
+        </span>
 
         <span className="min-w-0 flex-1">
           <span className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
-            <span className="min-w-0 max-w-full truncate text-sm sm:text-base font-bold text-stone-900">{recipe.recipeTitle}</span>
+            <span className="min-w-0 break-words text-sm sm:text-base font-bold text-stone-900 leading-snug">
+              {recipe.recipeTitle}
+            </span>
             {recipe.proteinSubtype && (
-              <span className="rounded-full bg-green-50 px-2 py-0.5 text-[11px] sm:text-xs font-semibold text-[#1E7538]">
+              <span className="hidden sm:inline-flex rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-[#1E7538]">
                 {recipe.proteinSubtype}
               </span>
             )}
           </span>
-          <span className="mt-0.5 sm:mt-1 block truncate text-xs sm:text-sm text-stone-500">{recipe.description}</span>
+
+          <span className="mt-1 flex flex-wrap items-center gap-1.5 sm:hidden">
+            {recipe.proteinSubtype && (
+              <span className="rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-[#1E7538]">
+                {recipe.proteinSubtype}
+              </span>
+            )}
+            <span
+              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                recipe.isKept
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-stone-100 text-stone-600'
+              }`}
+            >
+              {recipe.isKept
+                ? (recipe.mealPlanName ? `Added • ${recipe.mealPlanName}` : 'Added')
+                : 'Pending'}
+            </span>
+          </span>
+
+          <span className="mt-1 block text-xs sm:text-sm text-stone-500 line-clamp-2">
+            {recipe.description}
+          </span>
         </span>
 
         <span
-          className={`shrink-0 max-w-[130px] sm:max-w-[200px] truncate rounded-full px-2.5 py-1 text-[11px] sm:text-xs font-semibold ${
+          className={`hidden sm:inline-block shrink-0 max-w-[200px] truncate rounded-full px-2.5 py-1 text-xs font-semibold ${
             recipe.isKept
               ? 'bg-emerald-100 text-emerald-800'
               : 'bg-stone-100 text-stone-600'
@@ -82,7 +111,7 @@ export const RecipeCard = ({
             ? (recipe.mealPlanName ? `Added • ${recipe.mealPlanName}` : 'Added')
             : 'Pending'}
         </span>
-        <span className="shrink-0 text-stone-500">
+        <span className="shrink-0 mt-1 sm:mt-0 text-stone-500">
           {isExpanded
             ? <ChevronUp aria-hidden="true" className="h-5 w-5" />
             : <ChevronDown aria-hidden="true" className="h-5 w-5" />}

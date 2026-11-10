@@ -285,6 +285,39 @@ async def test_generate_plan_persists_mock_result_for_request_user(
 
 
 @pytest.mark.asyncio
+async def test_generate_plan_forwards_include_ingredients(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received: dict[str, Any] = {}
+
+    class RecordingPlanner:
+        client = object()
+        model_name = "test-model"
+
+        async def generate_plan(self, **kwargs: Any) -> MealPlanResponse:
+            received.update(kwargs)
+            return MealPlanResponse(plan_id="plan-1", meals=[])
+
+    class RecordingRecipeService:
+        async def persist_meal_plan(self, user_id: UUID, meal_plan: MealPlanResponse) -> None:
+            pass
+
+    monkeypatch.setenv("PLANNER_USE_MOCK", "false")
+    monkeypatch.setattr(main, "planner_service", RecordingPlanner())
+    monkeypatch.setattr(main, "recipe_service", RecordingRecipeService())
+    request = main.MealPlanRequest(
+        user_id=UUID("207d2de7-919d-4f48-b6f2-4a475ae96426"),
+        scored_deals=[],
+        include_ingredients=["mushrooms", "spinach"],
+    )
+
+    await main.generate_plan(request)
+
+    assert received["include_ingredients"] == ["mushrooms", "spinach"]
+    assert main.MealPlanRequest(user_id=request.user_id, scored_deals=[]).include_ingredients == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("generation_error", "expected_status"),
     [

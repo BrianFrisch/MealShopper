@@ -95,7 +95,8 @@ public class MealPlanOrchestratorTests
             TargetMealCount: 3,
             PreferredCuisines: new List<string> { "Mexican", "Asian" },
             DietaryRestrictions: new List<string> { "Nut-Free" },
-            AvoidIngredients: new List<string> { "Peanuts" }
+            AvoidIngredients: new List<string> { "Peanuts" },
+            IncludeIngredients: new List<string> { "Mushrooms" }
         );
 
         // Act
@@ -117,6 +118,7 @@ public class MealPlanOrchestratorTests
         mockShopper.Verify(s => s.DiscoverStoresAsync(It.Is<StoreDiscoveryRequest>(r => r.Latitude == 34.0522), It.IsAny<CancellationToken>()), Times.Once);
         mockShopper.Verify(s => s.ScoreDealsAsync(It.Is<DealScoringRequest>(r => r.AvoidIngredients.Contains("Peanuts")), It.IsAny<CancellationToken>()), Times.Once);
         mockPlanner.Verify(p => p.GeneratePlanAsync(It.Is<MealPlanRequestDto>(r => r.PreferredCuisines.Contains("Mexican") && r.DietaryRestrictions.Contains("Nut-Free")), It.IsAny<CancellationToken>()), Times.Once);
+        mockPlanner.Verify(p => p.GeneratePlanAsync(It.Is<MealPlanRequestDto>(r => r.IncludeIngredients.Contains("Mushrooms")), It.IsAny<CancellationToken>()), Times.Once);
         mockShopper.Verify(s => s.MatchIngredientsAsync(It.Is<IngredientMatchRequestDto>(r => r.MissingIngredients.Contains("Rice")), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -996,6 +998,7 @@ public class MealPlanOrchestratorTests
             Cuisines = ["Southern", "Classic American", "Comfort Food"],
             DietaryPreferences = ["Keto"],
             AvoidIngredients = ["onions", "corn", "mango"],
+            IncludeIngredients = ["mushrooms", "spinach"],
             DaysCount = 3,
             ServingsCount = 4
         };
@@ -1044,6 +1047,8 @@ public class MealPlanOrchestratorTests
             .Should().ContainSingle().Which.Should().Be("Keto");
         plannerRoot.GetProperty("avoid_ingredients").EnumerateArray().Select(item => item.GetString())
             .Should().BeEquivalentTo(["onions", "corn", "mango"]);
+        plannerRoot.GetProperty("include_ingredients").EnumerateArray().Select(item => item.GetString())
+            .Should().Equal("mushrooms", "spinach");
         plannerRoot.GetProperty("days_count").GetInt32().Should().Be(3);
         plannerRoot.GetProperty("household_size").GetInt32().Should().Be(4);
         var plannerDeals = plannerRoot.GetProperty("top_deals").EnumerateArray().ToList();
@@ -1057,6 +1062,43 @@ public class MealPlanOrchestratorTests
                 ingredient.IsPromotional &&
                 ingredient.StoreName == "Ralphs" &&
                 ingredient.DealPriceDescription == "$2.99 / lb");
+    }
+
+    [Fact]
+    public async Task ProcessGenerationJobAsync_CustomRecipeForwardsIncludeIngredients()
+    {
+        var jobStore = new InMemoryJobTracker();
+        var mockHandler = new MockHttpMessageHandler();
+        var orchestrator = new MealPlanOrchestrator(
+            new ShopperClient(new HttpClient(mockHandler) { BaseAddress = new Uri("http://localhost:8001/") }, NullLogger<ShopperClient>.Instance),
+            Mock.Of<IPlannerClient>(),
+            new PlanningClient(new HttpClient(mockHandler) { BaseAddress = new Uri("http://localhost:8002/") }, NullLogger<PlanningClient>.Instance),
+            jobStore,
+            NullLogger<MealPlanOrchestrator>.Instance,
+            Mock.Of<IGeocodingService>());
+        var jobId = Guid.NewGuid();
+        await jobStore.CreateJobAsync(new JobRecord
+        {
+            JobId = jobId,
+            JobType = JobType.PlanGeneration,
+            Status = JobStatus.Pending,
+            RequestPayloadJson = System.Text.Json.JsonSerializer.Serialize(new MealPlanGenerationRequest
+            {
+                MainIngredient = "chicken",
+                IncludeIngredients = ["mushrooms", "spinach"],
+                DaysCount = 1
+            })
+        });
+
+        await orchestrator.ProcessGenerationJobAsync(jobId);
+
+        (await jobStore.GetJobAsync(jobId))!.Status.Should().Be(JobStatus.Completed);
+        var plannerRequest = mockHandler.CapturedRequests.Single(
+            request => request.RequestUri!.ToString().Contains("v1/planner/generate"));
+        using var json = System.Text.Json.JsonDocument.Parse(await plannerRequest.Content!.ReadAsStringAsync());
+        json.RootElement.GetProperty("main_ingredient").GetString().Should().Be("chicken");
+        json.RootElement.GetProperty("include_ingredients").EnumerateArray().Select(item => item.GetString())
+            .Should().Equal("mushrooms", "spinach");
     }
 
     [Theory]

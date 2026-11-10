@@ -21,4 +21,7 @@ public class MealPlanRequestDto
 
     [JsonPropertyName("avoid_ingredients")]
     public List<string> AvoidIngredients { get; set; } = new();
+
+    [JsonPropertyName("include_ingredients")]
+    public List<string> IncludeIngredients { get; set; } = new();
 }
