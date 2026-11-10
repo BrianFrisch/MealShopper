@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 from typing import Optional
 from uuid import UUID
-from fastapi import FastAPI, Header, HTTPException, status
+from fastapi import FastAPI, Header, HTTPException, Query, status
 
 from src.config import PLANNER_DATABASE_URL
 from src.models import (
@@ -342,6 +342,17 @@ async def get_meal_plan_by_id(
         recipes = await recipe_service.get_recipes_for_meal_plan(meal_plan_id)
         plan_data["recipe_count"] = len(recipes)
     return MealPlanRecordResponse(**plan_data)
+
+
+@app.get("/v1/planner/recipes")
+async def list_user_recipes(
+    start_index: int = Query(default=0, ge=0),
+    page_size: int = Query(default=10, ge=1, le=100),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> dict[str, object]:
+    user_id = _resolve_request_user_id(x_user_id)
+    recipes, total_count = await recipe_service.get_user_recipe_page(user_id, start_index, page_size)
+    return {"recipes": recipes, "total_count": total_count}
 
 
 @app.get("/v1/planner/recipes/{recipe_id}")

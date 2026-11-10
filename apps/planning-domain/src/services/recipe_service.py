@@ -402,6 +402,27 @@ class RecipeService:
             rows = await connection.fetch("SELECT * FROM fn_get_recipes_for_user($1);", user_id)
         return [self._to_stored_recipe(row) for row in rows]
 
+    async def get_user_recipe_page(
+        self, user_id: UUID, start_index: int, page_size: int,
+    ) -> tuple[list[StoredRecipe], int]:
+        if start_index < 0 or page_size < 1:
+            raise ValueError("start_index must be non-negative and page_size must be positive.")
+        pool = self._require_pool()
+        async with pool.acquire() as connection:
+            rows = await connection.fetch(
+                """
+                SELECT page.*, totals.total_count
+                FROM (SELECT count(*) AS total_count FROM user_recipe WHERE user_id = $1) AS totals
+                LEFT JOIN LATERAL fn_get_user_recipe_page($1, $2, $3) AS page ON TRUE
+                ORDER BY page.user_recipe_created_at DESC, page.recipe_id DESC
+                """,
+                user_id, start_index, page_size,
+            )
+        return (
+            [self._to_stored_recipe(row) for row in rows if row["recipe_id"] is not None],
+            rows[0]["total_count"],
+        )
+
     async def get_recipes_for_meal_plan(self, meal_plan_id: UUID) -> list[StoredRecipe]:
         pool = self._require_pool()
         async with pool.acquire() as connection:

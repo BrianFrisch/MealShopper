@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, ChefHat, Loader2, Printer } from 'lucide-react';
 import { Header } from '../components/Header';
 import { LoginModal } from '../components/LoginModal';
@@ -8,6 +8,8 @@ import { mealPlanApi, type MealPlanRecipeDto } from '../services/mealPlanApi';
 
 export const MealPlanRecipesPage = () => {
   const { recipeId } = useParams<{ recipeId: string }>();
+  const location = useLocation();
+  const fromRecipeLibrary = location.state?.fromRecipeLibrary === true;
   const hasToken = Boolean(authApi.getToken());
   const [recipe, setRecipe] = useState<MealPlanRecipeDto | null>(null);
   const [isLoading, setIsLoading] = useState(() => Boolean(recipeId && hasToken));
@@ -92,11 +94,11 @@ export const MealPlanRecipesPage = () => {
               </button>
             )}
             <Link
-              to="/meal-plans"
+              to={fromRecipeLibrary ? '/recipes' : '/meal-plans'}
               className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#1E7538] underline hover:text-green-800"
             >
               <ArrowLeft aria-hidden="true" className="h-4 w-4" />
-              Back to Meal Plans
+              {fromRecipeLibrary ? 'Back to Recipe Library' : 'Back to Meal Plans'}
             </Link>
           </div>
         </div>

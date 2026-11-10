@@ -66,7 +66,20 @@ export interface MealPlanRecipeDto {
   created_at: string;
 }
 
+export interface RecipePageDto {
+  recipes: MealPlanRecipeDto[];
+  total_count: number;
+}
+
 export const mealPlanApi = {
+  async getUserRecipes(startIndex: number, pageSize: number, token: string): Promise<RecipePageDto> {
+    const response = await apiClient.get<RecipePageDto>(
+      '/v1/planner/recipes',
+      { ...authorizationHeaders(token), params: { start_index: startIndex, page_size: pageSize } }
+    );
+    return response.data;
+  },
+
   async getMealPlans(token: string): Promise<MealPlanRecordDto[]> {
     const response = await apiClient.get<MealPlanRecordDto[]>(
       '/v1/planner/meal-plans',

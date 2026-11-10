@@ -32,3 +32,4 @@ CREATE TABLE IF NOT EXISTS user_recipe (
 );
 
 CREATE INDEX IF NOT EXISTS ix_user_recipe_recipe_id ON user_recipe (recipe_id);
+CREATE INDEX IF NOT EXISTS ix_user_recipe_user_created ON user_recipe (user_id, created_at DESC, recipe_id DESC);

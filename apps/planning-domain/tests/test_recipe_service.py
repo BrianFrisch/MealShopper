@@ -6,6 +6,7 @@ from uuid import UUID
 
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 import main
 from src.models import MealPlanResponse, PlannedMeal
@@ -576,3 +577,61 @@ async def test_get_recipe_by_id_returns_only_recipe_owned_by_request_user(
     result = await main.get_recipe_by_id(recipe_id, x_user_id=str(user_id))
 
     assert result == expected_recipe
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("has_recipe", [True, False])
+async def test_get_user_recipe_page_returns_total_even_for_empty_page(has_recipe: bool) -> None:
+    user_id = UUID("207d2de7-919d-4f48-b6f2-4a475ae96426")
+    connection = FakeConnection()
+    recipe_row = {
+        "recipe_id": connection.next_recipe_id if has_recipe else None,
+        "total_count": 11,
+        "title": "Herb chicken",
+        "description": None,
+        "protein_subtype": None,
+        "cuisine": None,
+        "image_url": None,
+        "ingredients": "[]",
+        "directions": '["Cook chicken."]',
+        "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+    }
+
+    async def fetch_page(query: str, *args: Any) -> list[dict[str, Any]]:
+        assert "fn_get_user_recipe_page" in query
+        assert args == (user_id, 10, 10)
+        return [recipe_row]
+
+    connection.fetch = fetch_page
+    service = RecipeService("unused", pool=FakePool(connection))  # type: ignore[arg-type]
+    recipes, total = await service.get_user_recipe_page(user_id, 10, 10)
+    assert total == 11
+    assert len(recipes) == int(has_recipe)
+    if has_recipe:
+        assert recipes[0]["directions"] == ["Cook chicken."]
+
+
+def test_list_user_recipes_http_validation_and_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    user_id = UUID("207d2de7-919d-4f48-b6f2-4a475ae96426")
+    calls: list[tuple[UUID, int, int]] = []
+
+    class StubRecipeService:
+        async def get_user_recipe_page(
+            self, requested_user_id: UUID, start_index: int, page_size: int,
+        ) -> tuple[list[dict[str, Any]], int]:
+            calls.append((requested_user_id, start_index, page_size))
+            return [], 11
+
+    monkeypatch.setattr(main, "recipe_service", StubRecipeService())
+    client = TestClient(main.app)
+    assert client.get("/v1/planner/recipes").status_code == 401
+    assert client.get("/v1/planner/recipes", headers={"X-User-Id": "invalid"}).status_code == 400
+    headers = {"X-User-Id": str(user_id)}
+    for params in ({"start_index": -1}, {"page_size": 0}, {"page_size": 101}):
+        assert client.get("/v1/planner/recipes", headers=headers, params=params).status_code == 422
+    response = client.get(
+        "/v1/planner/recipes", headers=headers, params={"start_index": 10, "page_size": 10}
+    )
+    assert response.status_code == 200
+    assert response.json() == {"recipes": [], "total_count": 11}
+    assert calls == [(user_id, 10, 10)]

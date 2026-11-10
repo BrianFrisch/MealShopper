@@ -6,6 +6,7 @@
 \i /planner-postgres-init/02_functions/003_fn_get_meal_plan.sql
 \i /planner-postgres-init/02_functions/004_fn_get_meal_plans_for_user.sql
 \i /planner-postgres-init/02_functions/005_fn_get_recipes_for_meal_plan.sql
+\i /planner-postgres-init/02_functions/006_fn_get_user_recipe_page.sql
 \i /planner-postgres-init/03_procedures/001_sp_create_recipe.sql
 \i /planner-postgres-init/03_procedures/002_sp_associate_user_recipe.sql
 \i /planner-postgres-init/03_procedures/003_sp_create_meal_plan.sql
@@ -22,6 +23,7 @@ ALTER FUNCTION fn_get_recipes_for_user(UUID) OWNER TO planner_app;
 ALTER FUNCTION fn_get_meal_plan(UUID) OWNER TO planner_app;
 ALTER FUNCTION fn_get_meal_plans_for_user(UUID) OWNER TO planner_app;
 ALTER FUNCTION fn_get_recipes_for_meal_plan(UUID) OWNER TO planner_app;
+ALTER FUNCTION fn_get_user_recipe_page(UUID, INTEGER, INTEGER) OWNER TO planner_app;
 ALTER PROCEDURE sp_create_recipe(UUID, VARCHAR, TEXT, VARCHAR, VARCHAR, TEXT, JSONB, JSONB) OWNER TO planner_app;
 ALTER PROCEDURE sp_associate_user_recipe(UUID, UUID) OWNER TO planner_app;
 ALTER PROCEDURE sp_create_meal_plan(UUID, TEXT, UUID) OWNER TO planner_app;

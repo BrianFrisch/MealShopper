@@ -47,6 +47,13 @@ export const Header: React.FC<HeaderProps> = ({ onUserClick }) => {
                 Custom Recipe
               </Link>
               <Link
+                to="/recipes"
+                onClick={() => setIsMenuOpen(false)}
+                className="block px-4 py-2.5 text-sm font-medium text-stone-800 transition hover:bg-stone-50"
+              >
+                Recipe Library
+              </Link>
+              <Link
                 to="/meal-plans"
                 onClick={() => setIsMenuOpen(false)}
                 className="block px-4 py-2.5 text-sm font-medium text-stone-800 transition hover:bg-stone-50"

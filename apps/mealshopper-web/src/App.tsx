@@ -7,6 +7,7 @@ import { MealPlansPage } from './pages/MealPlansPage';
 import { CustomRecipePage } from './pages/CustomRecipePage';
 import { MealPlanRecipesPage } from './pages/MealPlanRecipesPage';
 import { MealPlanShoppingListPage } from './pages/MealPlanShoppingListPage';
+import { RecipesPage } from './pages/RecipesPage';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
       <Route path="/plan" element={<RequireAuth><MealPlanningPage /></RequireAuth>} />
       <Route path="/custom-recipe" element={<RequireAuth><CustomRecipePage /></RequireAuth>} />
       <Route path="/meal-plans" element={<RequireAuth><MealPlansPage /></RequireAuth>} />
+      <Route path="/recipes" element={<RequireAuth><RecipesPage /></RequireAuth>} />
       <Route path="/recipes/:recipeId" element={<RequireAuth><MealPlanRecipesPage /></RequireAuth>} />
       <Route path="/meal-plans/:mealPlanId/shopping-list" element={<RequireAuth><MealPlanShoppingListPage /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
