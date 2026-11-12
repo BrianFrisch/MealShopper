@@ -63,6 +63,7 @@ export interface MealPlanRecipeDto {
   image_url: string | null;
   ingredients: StoredRecipeIngredientDto[];
   directions: string[];
+  rating: number;
   created_at: string;
 }
 

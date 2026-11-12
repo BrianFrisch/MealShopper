@@ -15,6 +15,7 @@ RETURNS TABLE (
     image_url TEXT,
     ingredients JSONB,
     directions JSONB,
+    rating INTEGER,
     created_at TIMESTAMPTZ
 )
 LANGUAGE SQL
@@ -23,7 +24,7 @@ AS $$
     SELECT
         ur.user_id, ur.recipe_id, ur.associated_at, ur.created_at,
         r.title, r.description, r.protein_subtype, r.cuisine, r.image_url,
-        r.ingredients, r.directions, r.created_at
+        r.ingredients, r.directions, ur.rating, r.created_at
     FROM user_recipe AS ur
     INNER JOIN recipe AS r ON r.recipe_id = ur.recipe_id
     WHERE ur.user_id = p_user_id

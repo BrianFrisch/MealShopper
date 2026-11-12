@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ChefHat, Loader2 } from 'lucide-react';
 import { Header } from '../components/Header';
 import { LoginModal } from '../components/LoginModal';
+import { RecipeRating } from '../components/RecipeRating';
 import { authApi } from '../services/authApi';
 import { mealPlanApi, type RecipePageDto } from '../services/mealPlanApi';
 
@@ -137,9 +138,12 @@ export const RecipesPage = () => {
                         <ChefHat aria-hidden="true" className="h-5 w-5" />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <Link to={`/recipes/${recipe.recipe_id}`} state={{ fromRecipeLibrary: true }} className="break-words font-bold text-[#1E7538] hover:underline">
-                          {recipe.title}
-                        </Link>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link to={`/recipes/${recipe.recipe_id}`} state={{ fromRecipeLibrary: true }} className="break-words font-bold text-[#1E7538] hover:underline">
+                            {recipe.title}
+                          </Link>
+                          <RecipeRating rating={recipe.rating} />
+                        </div>
                         {recipe.description && <p className="mt-1 text-sm text-stone-600">{recipe.description}</p>}
                       </div>
                       <button

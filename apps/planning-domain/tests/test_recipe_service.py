@@ -43,7 +43,7 @@ class FakeConnection:
             assert args[0] == self.next_recipe_id
             return self.fetchrow_result
         assert "fn_get_recipe" in query
-        assert len(args) == 1
+        assert len(args) in (1, 2)
         assert args[0] == self.next_recipe_id
         return self.fetchrow_result
 
@@ -136,6 +136,30 @@ async def test_get_recipe_deserializes_json_fields() -> None:
     assert recipe["image_url"] == "https://example.com/chicken.jpg"
     assert recipe["ingredients"][0]["name"] == "Chicken"
     assert recipe["directions"] == ["Cook chicken."]
+    assert recipe["rating"] == 0
+
+
+@pytest.mark.asyncio
+async def test_get_recipe_maps_rating_field() -> None:
+    connection = FakeConnection()
+    connection.fetchrow_result = {
+        "recipe_id": connection.next_recipe_id,
+        "title": "Herb chicken",
+        "description": "Chicken with herbs",
+        "protein_subtype": "Chicken",
+        "cuisine": "Mediterranean",
+        "image_url": "https://example.com/chicken.jpg",
+        "ingredients": "[]",
+        "directions": "[]",
+        "rating": 4,
+        "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+    }
+    service = RecipeService("unused", pool=FakePool(connection))  # type: ignore[arg-type]
+
+    recipe = await service.get_recipe(connection.next_recipe_id)
+
+    assert recipe is not None
+    assert recipe["rating"] == 4
 
 
 @pytest.mark.asyncio

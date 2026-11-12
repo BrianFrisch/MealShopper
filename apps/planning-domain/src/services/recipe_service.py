@@ -22,6 +22,7 @@ class StoredRecipe(TypedDict):
     image_url: str | None
     ingredients: list[dict[str, Any]]
     directions: list[str]
+    rating: int
     created_at: str
 
 
@@ -126,10 +127,13 @@ class RecipeService(BaseDatabaseService):
                 recipe_id,
             )
 
-    async def get_recipe(self, recipe_id: UUID) -> StoredRecipe | None:
+    async def get_recipe(self, recipe_id: UUID, user_id: UUID | None = None) -> StoredRecipe | None:
         pool = self._require_pool()
         async with pool.acquire() as connection:
-            row = await connection.fetchrow("SELECT * FROM fn_get_recipe($1);", recipe_id)
+            if user_id is not None:
+                row = await connection.fetchrow("SELECT * FROM fn_get_recipe($1, $2);", recipe_id, user_id)
+            else:
+                row = await connection.fetchrow("SELECT * FROM fn_get_recipe($1);", recipe_id)
         return self._to_stored_recipe(row) if row is not None else None
 
     async def get_recipe_for_user(
@@ -141,7 +145,7 @@ class RecipeService(BaseDatabaseService):
         async with pool.acquire() as connection:
             row = await connection.fetchrow(
                 """
-                SELECT r.*
+                SELECT r.*, ur.rating
                 FROM recipe AS r
                 INNER JOIN user_recipe AS ur ON ur.recipe_id = r.recipe_id
                 WHERE r.recipe_id = $1
@@ -204,6 +208,7 @@ class RecipeService(BaseDatabaseService):
             "image_url": row.get("image_url"),
             "ingredients": ingredients,
             "directions": directions,
+            "rating": int(row.get("rating", 0) or 0),
             "created_at": row["created_at"].isoformat(),
         }
 

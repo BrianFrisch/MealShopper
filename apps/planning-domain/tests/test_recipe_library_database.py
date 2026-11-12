@@ -27,6 +27,7 @@ async def test_user_recipe_page_in_postgres() -> None:
                 );
                 CREATE TEMP TABLE user_recipe (
                     user_id UUID NOT NULL, recipe_id UUID NOT NULL,
+                    rating INTEGER NOT NULL DEFAULT 0,
                     associated_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL,
                     PRIMARY KEY (user_id, recipe_id)
                 );

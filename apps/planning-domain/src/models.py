@@ -46,6 +46,7 @@ class PlannedMeal(BaseModel):
     servings: int
     ingredients: List[RecipeIngredient]
     instructions: List[str]
+    rating: int = 0
 
 
 class MissingIngredient(BaseModel):

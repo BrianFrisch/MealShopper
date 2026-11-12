@@ -15,6 +15,7 @@ ALTER TABLE recipe
     DROP COLUMN IF EXISTS meal_plan_id,
     DROP COLUMN IF EXISTS source_meal_id,
     DROP COLUMN IF EXISTS recipe_data,
+    DROP COLUMN IF EXISTS rating,
     ADD COLUMN IF NOT EXISTS title VARCHAR(200) NOT NULL DEFAULT '',
     ADD COLUMN IF NOT EXISTS description TEXT,
     ADD COLUMN IF NOT EXISTS protein_subtype VARCHAR(50),
@@ -26,10 +27,14 @@ ALTER TABLE recipe
 CREATE TABLE IF NOT EXISTS user_recipe (
     user_id UUID NOT NULL,
     recipe_id UUID NOT NULL REFERENCES recipe (recipe_id) ON DELETE CASCADE,
+    rating INTEGER NOT NULL DEFAULT 0 CHECK (rating >= 0 AND rating <= 5),
     associated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (user_id, recipe_id)
 );
+
+ALTER TABLE user_recipe
+    ADD COLUMN IF NOT EXISTS rating INTEGER NOT NULL DEFAULT 0 CHECK (rating >= 0 AND rating <= 5);
 
 CREATE INDEX IF NOT EXISTS ix_user_recipe_recipe_id ON user_recipe (recipe_id);
 CREATE INDEX IF NOT EXISTS ix_user_recipe_user_created ON user_recipe (user_id, created_at DESC, recipe_id DESC);

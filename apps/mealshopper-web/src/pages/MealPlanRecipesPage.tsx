@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, ChefHat, Loader2, Printer } from 'lucide-react';
 import { Header } from '../components/Header';
 import { LoginModal } from '../components/LoginModal';
+import { RecipeRating } from '../components/RecipeRating';
 import { authApi } from '../services/authApi';
 import { mealPlanApi, type MealPlanRecipeDto } from '../services/mealPlanApi';
 
@@ -142,9 +143,12 @@ export const MealPlanRecipesPage = () => {
                       <ChefHat aria-hidden="true" className="h-5 w-5" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <h2 className="mt-0.5 break-words text-xl font-bold text-stone-900">
-                        {recipe.title}
-                      </h2>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h2 className="mt-0.5 break-words text-xl font-bold text-stone-900">
+                          {recipe.title}
+                        </h2>
+                        <RecipeRating rating={recipe.rating} size="md" />
+                      </div>
                       {(recipe.cuisine || recipe.protein_subtype) && (
                         <p className="mt-1 text-sm text-stone-500">
                           {[recipe.cuisine, recipe.protein_subtype].filter(Boolean).join(' · ')}
