@@ -13,6 +13,8 @@ export const RecipesPage = () => {
   const [result, setResult] = useState<RecipePageDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [removingRecipeId, setRemovingRecipeId] = useState<string | null>(null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [reloadCount, setReloadCount] = useState(0);
 
@@ -47,7 +49,32 @@ export const RecipesPage = () => {
   const changePage = (nextPage: number) => {
     setIsLoading(true);
     setErrorMessage(null);
+    setActionError(null);
     setPage(nextPage);
+  };
+
+  const handleRemoveRecipe = async (recipeId: string) => {
+    const token = authApi.getToken();
+    if (!token) {
+      setActionError('Please sign in to manage your recipes.');
+      setIsLoginOpen(true);
+      return;
+    }
+
+    setRemovingRecipeId(recipeId);
+    setActionError(null);
+    try {
+      await mealPlanApi.removeUserRecipe(recipeId, token);
+      if (result && result.recipes.length === 1 && page > 0) {
+        setPage(page - 1);
+      } else {
+        setReloadCount(count => count + 1);
+      }
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Unable to remove recipe.');
+    } finally {
+      setRemovingRecipeId(null);
+    }
   };
 
   return (
@@ -87,6 +114,14 @@ export const RecipesPage = () => {
             </div>
           ) : result && (
             <>
+              {actionError && (
+                <div role="alert" className="mb-4 flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                  <span>{actionError}</span>
+                  <button type="button" onClick={() => setActionError(null)} className="font-semibold text-rose-800 underline">
+                    Dismiss
+                  </button>
+                </div>
+              )}
               <p className="border-b border-stone-200 pb-4 text-sm font-semibold text-stone-700">
                 {result.total_count} {result.total_count === 1 ? 'recipe' : 'recipes'}
               </p>
@@ -109,11 +144,19 @@ export const RecipesPage = () => {
                       </div>
                       <button
                         type="button"
-                        disabled
-                        aria-label={`Remove ${recipe.title} (coming soon)`}
-                        className="shrink-0 rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-400"
+                        disabled={removingRecipeId === recipe.recipe_id}
+                        onClick={() => { void handleRemoveRecipe(recipe.recipe_id); }}
+                        aria-label={`Remove ${recipe.title}`}
+                        className="shrink-0 rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 disabled:cursor-wait disabled:opacity-50"
                       >
-                        Remove
+                        {removingRecipeId === recipe.recipe_id ? (
+                          <span className="flex items-center gap-1.5">
+                            <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-stone-500" />
+                            Removing...
+                          </span>
+                        ) : (
+                          'Remove'
+                        )}
                       </button>
                     </li>
                   ))}

@@ -42,3 +42,21 @@ async def get_recipe_by_id(
             detail=f"Recipe {recipe_id} not found.",
         )
     return dict(recipe)
+
+
+@router.delete("/{recipe_id}")
+async def remove_user_recipe(
+    recipe_id: UUID,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    recipes: RecipeService = Depends(get_recipe_service),
+) -> dict[str, str]:
+    if isinstance(recipes, DependsType) or recipes is None:
+        recipes = get_recipe_service()
+
+    user_id = resolve_request_user_id(x_user_id)
+    await recipes.remove_user_recipe(user_id, recipe_id)
+    return {
+        "status": "removed",
+        "recipe_id": str(recipe_id),
+    }
+

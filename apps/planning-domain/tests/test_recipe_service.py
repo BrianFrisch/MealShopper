@@ -635,3 +635,38 @@ def test_list_user_recipes_http_validation_and_header(monkeypatch: pytest.Monkey
     assert response.status_code == 200
     assert response.json() == {"recipes": [], "total_count": 11}
     assert calls == [(user_id, 10, 10)]
+
+
+@pytest.mark.asyncio
+async def test_remove_user_recipe_calls_stored_procedure() -> None:
+    connection = FakeConnection()
+    service = RecipeService("unused", pool=FakePool(connection))  # type: ignore[arg-type]
+    user_id = UUID("207d2de7-919d-4f48-b6f2-4a475ae96426")
+    recipe_id = UUID("8b8e74c3-b048-4b9d-810c-2bd756c62810")
+
+    await service.remove_user_recipe(user_id, recipe_id)
+
+    assert connection.execute_calls == [
+        ("CALL sp_remove_user_recipe($1, $2);", (user_id, recipe_id))
+    ]
+
+
+def test_remove_user_recipe_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    user_id = UUID("207d2de7-919d-4f48-b6f2-4a475ae96426")
+    recipe_id = UUID("8b8e74c3-b048-4b9d-810c-2bd756c62810")
+    calls: list[tuple[UUID, UUID]] = []
+
+    class StubRecipeService:
+        async def remove_user_recipe(self, requested_user_id: UUID, requested_recipe_id: UUID) -> None:
+            calls.append((requested_user_id, requested_recipe_id))
+
+    monkeypatch.setattr(main, "recipe_service", StubRecipeService())
+    client = TestClient(main.app)
+    assert client.delete(f"/v1/planner/recipes/{recipe_id}").status_code == 401
+    assert client.delete(f"/v1/planner/recipes/{recipe_id}", headers={"X-User-Id": "invalid"}).status_code == 400
+
+    response = client.delete(f"/v1/planner/recipes/{recipe_id}", headers={"X-User-Id": str(user_id)})
+    assert response.status_code == 200
+    assert response.json() == {"status": "removed", "recipe_id": str(recipe_id)}
+    assert calls == [(user_id, recipe_id)]
+

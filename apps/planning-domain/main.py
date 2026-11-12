@@ -42,6 +42,7 @@ from src.api.routers.planner import generate_plan, router as planner_router
 from src.api.routers.recipes import (
     get_recipe_by_id,
     list_user_recipes,
+    remove_user_recipe,
     router as recipes_router,
 )
 from src.api.routers.shopping_list import (
@@ -132,6 +133,7 @@ __all__ = [
     "get_meal_plan_by_id",
     "list_user_recipes",
     "get_recipe_by_id",
+    "remove_user_recipe",
     "list_recipes_for_meal_plan",
     "get_meal_plan_shopping_list",
     "update_meal_plan_ingredient_purchase",

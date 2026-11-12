@@ -117,6 +117,15 @@ class RecipeService(BaseDatabaseService):
                 recipe_id,
             )
 
+    async def remove_user_recipe(self, user_id: UUID, recipe_id: UUID) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as connection:
+            await connection.execute(
+                "CALL sp_remove_user_recipe($1, $2);",
+                user_id,
+                recipe_id,
+            )
+
     async def get_recipe(self, recipe_id: UUID) -> StoredRecipe | None:
         pool = self._require_pool()
         async with pool.acquire() as connection:
@@ -143,11 +152,11 @@ class RecipeService(BaseDatabaseService):
             )
         return self._to_stored_recipe(row) if row is not None else None
 
-    async def get_recipes_for_user(self, user_id: UUID) -> list[StoredRecipe]:
-        pool = self._require_pool()
-        async with pool.acquire() as connection:
-            rows = await connection.fetch("SELECT * FROM fn_get_recipes_for_user($1);", user_id)
-        return [self._to_stored_recipe(row) for row in rows]
+    # async def get_recipes_for_user(self, user_id: UUID) -> list[StoredRecipe]:
+    #     pool = self._require_pool()
+    #     async with pool.acquire() as connection:
+    #         rows = await connection.fetch("SELECT * FROM fn_get_recipes_for_user($1);", user_id)
+    #     return [self._to_stored_recipe(row) for row in rows]
 
     async def get_user_recipe_page(
         self, user_id: UUID, start_index: int, page_size: int,

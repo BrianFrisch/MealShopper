@@ -80,6 +80,13 @@ export const mealPlanApi = {
     return response.data;
   },
 
+  async removeUserRecipe(recipeId: string, token: string): Promise<void> {
+    await apiClient.delete(
+      `/v1/planner/recipes/${encodeURIComponent(recipeId)}`,
+      authorizationHeaders(token)
+    );
+  },
+
   async getMealPlans(token: string): Promise<MealPlanRecordDto[]> {
     const response = await apiClient.get<MealPlanRecordDto[]>(
       '/v1/planner/meal-plans',
