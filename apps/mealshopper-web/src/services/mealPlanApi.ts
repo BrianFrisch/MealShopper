@@ -65,6 +65,7 @@ export interface MealPlanRecipeDto {
   directions: string[];
   rating: number;
   created_at: string;
+  tags: string[];
 }
 
 export interface RecipePageDto {

@@ -1,3 +1,5 @@
+DROP FUNCTION IF EXISTS fn_get_recipes_for_meal_plan(UUID);
+
 CREATE OR REPLACE FUNCTION fn_get_recipes_for_meal_plan(p_meal_plan_id UUID)
 RETURNS TABLE (
     recipe_id UUID,
@@ -9,7 +11,8 @@ RETURNS TABLE (
     ingredients JSONB,
     directions JSONB,
     rating INTEGER,
-    created_at TIMESTAMPTZ
+    created_at TIMESTAMPTZ,
+    tags TEXT[]
 )
 LANGUAGE SQL
 STABLE
@@ -24,7 +27,13 @@ AS $$
         r.ingredients,
         r.directions,
         COALESCE(ur.rating, 0) AS rating,
-        r.created_at
+        r.created_at,
+        ARRAY(
+            SELECT urt.tag::TEXT
+            FROM user_recipe_tag AS urt
+            WHERE urt.user_id = mp.user_id AND urt.recipe_id = r.recipe_id
+            ORDER BY urt.created_at ASC, urt.tag ASC
+        ) AS tags
     FROM recipe AS r
     INNER JOIN meal_plan_recipe AS mpr ON mpr.recipe_id = r.recipe_id
     INNER JOIN meal_plan AS mp ON mp.meal_plan_id = mpr.meal_plan_id

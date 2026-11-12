@@ -47,6 +47,11 @@ class PlannedMeal(BaseModel):
     ingredients: List[RecipeIngredient]
     instructions: List[str]
     rating: int = 0
+    tags: List[str] = Field(default_factory=list)
+
+
+class AddRecipeTagsRequest(BaseModel):
+    tags: List[str] = Field(..., min_length=1)
 
 
 class MissingIngredient(BaseModel):
@@ -197,4 +202,3 @@ class UpdateRecipeRatingRequest(BaseModel):
         description="Rating from 0 to 5",
         validation_alias=AliasChoices("rating", "Rating"),
     )
-

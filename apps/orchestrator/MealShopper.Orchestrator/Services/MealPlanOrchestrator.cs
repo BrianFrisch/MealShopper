@@ -968,7 +968,8 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
                 ThumbnailUrl = null,
                 IngredientsWithDeals = ingredientsWithDeals,
                 PantryIngredients = pantryIngredients,
-                Instructions = meal.Instructions ?? []
+                Instructions = meal.Instructions ?? [],
+                Tags = meal.Tags ?? []
             });
         }
 

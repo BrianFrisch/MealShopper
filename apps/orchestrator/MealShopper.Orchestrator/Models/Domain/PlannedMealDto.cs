@@ -64,4 +64,10 @@ public class PlannedMealDto
     /// </summary>
     [JsonPropertyName("instructions")]
     public List<string> Instructions { get; set; } = [];
+
+    /// <summary>
+    /// User or category tags associated with this recipe / meal.
+    /// </summary>
+    [JsonPropertyName("tags")]
+    public List<string> Tags { get; set; } = [];
 }

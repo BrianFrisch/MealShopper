@@ -4,6 +4,7 @@ from typing import Any, TypedDict
 from uuid import UUID, uuid4
 
 from src.models import MealPlanResponse, PlannedMeal
+from src.recipe_tags import automatic_recipe_tags
 from src.services.base import BaseDatabaseService, DatabaseConnection, DatabasePool
 from src.services.meal_plan_service import MealPlanService, StoredMealPlan
 from src.services.shopping_list_service import ShoppingListService, StoredMealPlanIngredient
@@ -24,6 +25,7 @@ class StoredRecipe(TypedDict):
     directions: list[str]
     rating: int
     created_at: str
+    tags: list[str]
 
 
 class RecipeService(BaseDatabaseService):
@@ -85,29 +87,55 @@ class RecipeService(BaseDatabaseService):
                         user_id,
                         recipe_id,
                     )
+                    await self._add_recipe_tags(
+                        connection, user_id, recipe_id,
+                        automatic_recipe_tags(meal.protein_subtype, meal.cuisine),
+                    )
                     meal.meal_id = str(recipe_id)
 
     async def create_recipe(
         self,
         meal: PlannedMeal,
+        user_id: UUID | None = None,
     ) -> UUID:
         pool = self._require_pool()
         candidate_recipe_id = uuid4()
         async with pool.acquire() as connection:
-            recipe_id = await connection.fetchval(
-                "CALL sp_create_recipe($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb);",
-                candidate_recipe_id,
-                meal.recipe_name[:200],
-                meal.description,
-                meal.protein_subtype,
-                meal.cuisine,
-                meal.image_url,
-                json.dumps([ing.model_dump(mode="json") for ing in meal.ingredients]),
-                json.dumps(meal.instructions),
-            )
-        if recipe_id is None:
-            raise RuntimeError(f"Database did not return an ID for recipe {meal.meal_id}.")
+            async with connection.transaction():
+                recipe_id = await connection.fetchval(
+                    "CALL sp_create_recipe($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb);",
+                    candidate_recipe_id,
+                    meal.recipe_name[:200],
+                    meal.description,
+                    meal.protein_subtype,
+                    meal.cuisine,
+                    meal.image_url,
+                    json.dumps([ing.model_dump(mode="json") for ing in meal.ingredients]),
+                    json.dumps(meal.instructions),
+                )
+                if recipe_id is None:
+                    raise RuntimeError(f"Database did not return an ID for recipe {meal.meal_id}.")
+                if user_id is not None:
+                    await connection.execute("CALL sp_associate_user_recipe($1, $2);", user_id, recipe_id)
+                    await self._add_recipe_tags(
+                        connection, user_id, recipe_id,
+                        automatic_recipe_tags(meal.protein_subtype, meal.cuisine),
+                    )
         return recipe_id
+
+    @staticmethod
+    async def _add_recipe_tags(
+        connection: DatabaseConnection, user_id: UUID, recipe_id: UUID, tags: list[str],
+    ) -> None:
+        await connection.execute(
+            "CALL sp_add_user_recipe_tags($1, $2, $3::text[]);",
+            user_id, recipe_id, tags,
+        )
+
+    async def add_recipe_tags(self, user_id: UUID, recipe_id: UUID, tags: list[str]) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as connection:
+            await self._add_recipe_tags(connection, user_id, recipe_id, tags)
 
     async def associate_user_with_recipe(self, user_id: UUID, recipe_id: UUID) -> None:
         pool = self._require_pool()
@@ -162,7 +190,13 @@ class RecipeService(BaseDatabaseService):
         async with pool.acquire() as connection:
             row = await connection.fetchrow(
                 """
-                SELECT r.*, ur.rating
+                SELECT r.*, ur.rating,
+                    ARRAY(
+                        SELECT urt.tag::TEXT
+                        FROM user_recipe_tag AS urt
+                        WHERE urt.user_id = $2 AND urt.recipe_id = $1
+                        ORDER BY urt.created_at ASC, urt.tag ASC
+                    ) AS tags
                 FROM recipe AS r
                 INNER JOIN user_recipe AS ur ON ur.recipe_id = r.recipe_id
                 WHERE r.recipe_id = $1
@@ -173,11 +207,11 @@ class RecipeService(BaseDatabaseService):
             )
         return self._to_stored_recipe(row) if row is not None else None
 
-    # async def get_recipes_for_user(self, user_id: UUID) -> list[StoredRecipe]:
-    #     pool = self._require_pool()
-    #     async with pool.acquire() as connection:
-    #         rows = await connection.fetch("SELECT * FROM fn_get_recipes_for_user($1);", user_id)
-    #     return [self._to_stored_recipe(row) for row in rows]
+    async def get_recipes_for_user(self, user_id: UUID) -> list[StoredRecipe]:
+        pool = self._require_pool()
+        async with pool.acquire() as connection:
+            rows = await connection.fetch("SELECT * FROM fn_get_recipes_for_user($1);", user_id)
+        return [self._to_stored_recipe(row) for row in rows]
 
     async def get_user_recipe_page(
         self, user_id: UUID, start_index: int, page_size: int,
@@ -216,6 +250,14 @@ class RecipeService(BaseDatabaseService):
         if isinstance(directions, str):
             directions = json.loads(directions)
 
+        tags = row.get("tags")
+        if tags is None:
+            tags = []
+        elif isinstance(tags, str):
+            tags = json.loads(tags)
+        else:
+            tags = list(tags)
+
         return {
             "recipe_id": str(row["recipe_id"]),
             "title": row["title"],
@@ -226,7 +268,10 @@ class RecipeService(BaseDatabaseService):
             "ingredients": ingredients,
             "directions": directions,
             "rating": int(row.get("rating", 0) or 0),
-            "created_at": row["created_at"].isoformat(),
+            "created_at": row["created_at"].isoformat()
+            if hasattr(row["created_at"], "isoformat")
+            else str(row["created_at"]),
+            "tags": tags,
         }
 
     # ---- Meal Plan Delegations (Backwards Compatibility) ----

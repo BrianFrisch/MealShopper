@@ -1,3 +1,5 @@
+DROP FUNCTION IF EXISTS fn_get_user_recipe_page(UUID, INTEGER, INTEGER);
+
 CREATE OR REPLACE FUNCTION fn_get_user_recipe_page(
     p_user_id UUID,
     p_start_index INTEGER,
@@ -16,7 +18,8 @@ RETURNS TABLE (
     ingredients JSONB,
     directions JSONB,
     rating INTEGER,
-    created_at TIMESTAMPTZ
+    created_at TIMESTAMPTZ,
+    tags TEXT[]
 )
 LANGUAGE SQL
 STABLE
@@ -24,7 +27,13 @@ AS $$
     SELECT
         ur.user_id, ur.recipe_id, ur.associated_at, ur.created_at,
         r.title, r.description, r.protein_subtype, r.cuisine, r.image_url,
-        r.ingredients, r.directions, ur.rating, r.created_at
+        r.ingredients, r.directions, ur.rating, r.created_at,
+        ARRAY(
+            SELECT urt.tag::TEXT
+            FROM user_recipe_tag AS urt
+            WHERE urt.user_id = ur.user_id AND urt.recipe_id = ur.recipe_id
+            ORDER BY urt.created_at ASC, urt.tag ASC
+        ) AS tags
     FROM user_recipe AS ur
     INNER JOIN recipe AS r ON r.recipe_id = ur.recipe_id
     WHERE ur.user_id = p_user_id

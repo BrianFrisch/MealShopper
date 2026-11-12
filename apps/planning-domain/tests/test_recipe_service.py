@@ -104,9 +104,90 @@ async def test_persist_meal_plan_saves_and_associates_each_recipe() -> None:
     )
     assert recipe_args[6:8] == ("[]", '["Cook chicken."]')
 
-    assert len(connection.execute_calls) == 1
+    assert len(connection.execute_calls) == 2
     assert "CALL sp_associate_user_recipe" in connection.execute_calls[0][0]
     assert connection.execute_calls[0][1] == (user_id, recipe_args[0])
+    assert connection.execute_calls[1] == (
+        "CALL sp_add_user_recipe_tags($1, $2, $3::text[]);",
+        (user_id, recipe_args[0], ["chicken", "mediterranean"]),
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_recipe_associates_user_and_adds_automatic_tags() -> None:
+    connection = FakeConnection()
+    service = RecipeService("unused", pool=FakePool(connection))  # type: ignore[arg-type]
+    user_id = UUID(int=1)
+    meal = PlannedMeal(
+        meal_id="new", recipe_name="Dinner", description="Dinner",
+        protein_subtype="  EXTRA Long Protein Name! ", cuisine="EXTRA long protein name",
+        estimated_prep_time_minutes=20, servings=2, ingredients=[], instructions=[],
+    )
+
+    recipe_id = await service.create_recipe(meal, user_id)
+
+    assert connection.execute_calls == [
+        ("CALL sp_associate_user_recipe($1, $2);", (user_id, recipe_id)),
+        ("CALL sp_add_user_recipe_tags($1, $2, $3::text[]);", (user_id, recipe_id, ["extralongprotein"])),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_add_recipe_tags_calls_stored_procedure() -> None:
+    connection = FakeConnection()
+    service = RecipeService("unused", pool=FakePool(connection))  # type: ignore[arg-type]
+    user_id, recipe_id = UUID(int=1), UUID(int=2)
+    await service.add_recipe_tags(user_id, recipe_id, ["chicken", "thai"])
+    assert connection.execute_calls == [
+        ("CALL sp_add_user_recipe_tags($1, $2, $3::text[]);", (user_id, recipe_id, ["chicken", "thai"]))
+    ]
+
+
+def test_recipe_tags_endpoint_validates_normalizes_and_checks_ownership(monkeypatch: pytest.MonkeyPatch) -> None:
+    user_id, recipe_id = UUID(int=1), UUID(int=2)
+    calls: list[tuple[UUID, UUID, list[str]]] = []
+
+    class StubRecipeService:
+        async def get_recipe_for_user(self, requested_recipe_id: UUID, requested_user_id: UUID):
+            assert (requested_recipe_id, requested_user_id) == (recipe_id, user_id)
+            return {} if found[0] else None
+
+        async def add_recipe_tags(self, requested_user_id: UUID, requested_recipe_id: UUID, tags: list[str]):
+            calls.append((requested_user_id, requested_recipe_id, tags))
+
+    found = [True]
+    monkeypatch.setattr(main, "recipe_service", StubRecipeService())
+    client = TestClient(main.app)
+    url = f"/v1/planner/recipes/{recipe_id}/tags"
+    headers = {"X-User-Id": str(user_id)}
+    assert client.post(url, json={"tags": ["test"]}).status_code == 401
+    for tags in ([], [" ! \t"], ["a" * 17]):
+        assert client.post(url, headers=headers, json={"tags": tags}).status_code == 422
+    response = client.post(url, headers=headers, json={"tags": ["  CHICKEN & Rice! ", "thai-style", "THAI-STYLE"]})
+    assert response.status_code == 200
+    assert response.json() == {"recipe_id": str(recipe_id), "tags": ["chickenrice", "thai-style"]}
+    assert calls == [(user_id, recipe_id, ["chickenrice", "thai-style"])]
+    found[0] = False
+    assert client.post(url, headers=headers, json={"tags": ["tag"]}).status_code == 404
+    assert len(calls) == 1
+
+
+def test_create_recipe_endpoint_saves_automatic_tags(monkeypatch: pytest.MonkeyPatch) -> None:
+    user_id = UUID(int=1)
+    connection = FakeConnection()
+    service = RecipeService("unused", pool=FakePool(connection))  # type: ignore[arg-type]
+    monkeypatch.setattr(main, "recipe_service", service)
+    client = TestClient(main.app)
+    meal = {
+        "meal_id": "new", "recipe_name": "Dinner", "description": "Dinner",
+        "protein_subtype": "Chicken", "cuisine": "Thai", "estimated_prep_time_minutes": 20,
+        "servings": 2, "ingredients": [], "instructions": [],
+    }
+    assert client.post("/v1/planner/recipes", json=meal).status_code == 401
+    response = client.post("/v1/planner/recipes", headers={"X-User-Id": str(user_id)}, json=meal)
+    assert response.status_code == 201
+    recipe_id = UUID(response.json()["recipe_id"])
+    assert connection.execute_calls[-1][1] == (user_id, recipe_id, ["chicken", "thai"])
 
 
 @pytest.mark.asyncio
@@ -137,6 +218,31 @@ async def test_get_recipe_deserializes_json_fields() -> None:
     assert recipe["ingredients"][0]["name"] == "Chicken"
     assert recipe["directions"] == ["Cook chicken."]
     assert recipe["rating"] == 0
+    assert recipe["tags"] == []
+
+
+@pytest.mark.asyncio
+async def test_get_recipe_maps_tags_field() -> None:
+    connection = FakeConnection()
+    connection.fetchrow_result = {
+        "recipe_id": connection.next_recipe_id,
+        "title": "Herb chicken",
+        "description": "Chicken with herbs",
+        "protein_subtype": "Chicken",
+        "cuisine": "Mediterranean",
+        "image_url": "https://example.com/chicken.jpg",
+        "ingredients": "[]",
+        "directions": "[]",
+        "rating": 4,
+        "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+        "tags": ["chicken", "quick"],
+    }
+    service = RecipeService("unused", pool=FakePool(connection))  # type: ignore[arg-type]
+
+    recipe = await service.get_recipe(connection.next_recipe_id)
+
+    assert recipe is not None
+    assert recipe["tags"] == ["chicken", "quick"]
 
 
 @pytest.mark.asyncio
@@ -183,6 +289,7 @@ async def test_get_recipe_for_user_checks_user_association() -> None:
 
     assert recipe is not None
     assert recipe["recipe_id"] == str(connection.next_recipe_id)
+    assert recipe["tags"] == []
 
 
 @pytest.mark.asyncio
@@ -584,6 +691,7 @@ async def test_get_recipe_by_id_returns_only_recipe_owned_by_request_user(
         "ingredients": [{"name": "Chicken", "quantity": "1 lb"}],
         "directions": ["Cook chicken."],
         "created_at": "2026-01-01T00:00:00+00:00",
+        "tags": ["chicken", "mediterranean"],
     }
 
     class StubRecipeService:
@@ -619,6 +727,7 @@ async def test_get_user_recipe_page_returns_total_even_for_empty_page(has_recipe
         "ingredients": "[]",
         "directions": '["Cook chicken."]',
         "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+        "tags": ["comfort-food"],
     }
 
     async def fetch_page(query: str, *args: Any) -> list[dict[str, Any]]:
@@ -633,6 +742,7 @@ async def test_get_user_recipe_page_returns_total_even_for_empty_page(has_recipe
     assert len(recipes) == int(has_recipe)
     if has_recipe:
         assert recipes[0]["directions"] == ["Cook chicken."]
+        assert recipes[0]["tags"] == ["comfort-food"]
 
 
 def test_list_user_recipes_http_validation_and_header(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -747,5 +857,4 @@ def test_update_recipe_rating_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.status_code == 200
     assert response.json() == {"status": "updated", "recipe_id": str(recipe_id), "rating": 5}
     assert calls == [(user_id, recipe_id, 5)]
-
 

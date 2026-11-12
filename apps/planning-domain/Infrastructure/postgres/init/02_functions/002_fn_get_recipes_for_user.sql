@@ -11,7 +11,8 @@ RETURNS TABLE (
     ingredients JSONB,
     directions JSONB,
     rating INTEGER,
-    created_at TIMESTAMPTZ
+    created_at TIMESTAMPTZ,
+    tags TEXT[]
 )
 LANGUAGE SQL
 STABLE
@@ -26,7 +27,13 @@ AS $$
         r.ingredients,
         r.directions,
         ur.rating,
-        r.created_at
+        r.created_at,
+        ARRAY(
+            SELECT urt.tag::TEXT
+            FROM user_recipe_tag AS urt
+            WHERE urt.user_id = p_user_id AND urt.recipe_id = r.recipe_id
+            ORDER BY urt.created_at ASC, urt.tag ASC
+        ) AS tags
     FROM recipe AS r
     INNER JOIN user_recipe AS ur ON ur.recipe_id = r.recipe_id
     WHERE ur.user_id = p_user_id

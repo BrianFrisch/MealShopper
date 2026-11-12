@@ -30,6 +30,7 @@ export interface RecipeCardDto {
   isKept: boolean;
   mealPlanId?: string;
   mealPlanName?: string;
+  tags?: string[];
 }
 
 export interface MealPlanSynthesisResponse {

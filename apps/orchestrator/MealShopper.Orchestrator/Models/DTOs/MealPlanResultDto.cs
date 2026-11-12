@@ -68,6 +68,11 @@ public class RecipeCardDto
     public List<string> Instructions { get; set; } = [];
 
     public bool IsKept { get; set; }
+
+    /// <summary>
+    /// Tags associated with the recipe.
+    /// </summary>
+    public List<string> Tags { get; set; } = [];
 }
 
 /// <summary>
