@@ -694,3 +694,58 @@ def test_remove_user_recipe_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.json() == {"status": "removed", "recipe_id": str(recipe_id)}
     assert calls == [(user_id, recipe_id)]
 
+
+@pytest.mark.asyncio
+async def test_update_recipe_rating_calls_stored_procedure() -> None:
+    connection = FakeConnection()
+    service = RecipeService("unused", pool=FakePool(connection))  # type: ignore[arg-type]
+    user_id = UUID("207d2de7-919d-4f48-b6f2-4a475ae96426")
+    recipe_id = UUID("8b8e74c3-b048-4b9d-810c-2bd756c62810")
+
+    await service.update_recipe_rating(user_id, recipe_id, 4)
+
+    assert connection.execute_calls == [
+        ("CALL sp_update_recipe_rating($1, $2, $3);", (user_id, recipe_id, 4))
+    ]
+
+    with pytest.raises(ValueError):
+        await service.update_recipe_rating(user_id, recipe_id, -1)
+    with pytest.raises(ValueError):
+        await service.update_recipe_rating(user_id, recipe_id, 6)
+
+
+def test_update_recipe_rating_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    user_id = UUID("207d2de7-919d-4f48-b6f2-4a475ae96426")
+    recipe_id = UUID("8b8e74c3-b048-4b9d-810c-2bd756c62810")
+    calls: list[tuple[UUID, UUID, int]] = []
+
+    class StubRecipeService:
+        async def update_recipe_rating(
+            self, requested_user_id: UUID, requested_recipe_id: UUID, requested_rating: int,
+        ) -> None:
+            calls.append((requested_user_id, requested_recipe_id, requested_rating))
+
+    monkeypatch.setattr(main, "recipe_service", StubRecipeService())
+    client = TestClient(main.app)
+    assert client.put(f"/v1/planner/recipes/{recipe_id}/rating", json={"rating": 3}).status_code == 401
+    assert client.put(
+        f"/v1/planner/recipes/{recipe_id}/rating",
+        headers={"X-User-Id": "invalid"},
+        json={"rating": 3},
+    ).status_code == 400
+    assert client.put(
+        f"/v1/planner/recipes/{recipe_id}/rating",
+        headers={"X-User-Id": str(user_id)},
+        json={"rating": 6},
+    ).status_code == 422
+
+    response = client.put(
+        f"/v1/planner/recipes/{recipe_id}/rating",
+        headers={"X-User-Id": str(user_id)},
+        json={"rating": 5},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"status": "updated", "recipe_id": str(recipe_id), "rating": 5}
+    assert calls == [(user_id, recipe_id, 5)]
+
+

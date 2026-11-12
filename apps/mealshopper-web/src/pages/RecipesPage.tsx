@@ -78,6 +78,28 @@ export const RecipesPage = () => {
     }
   };
 
+  const handleRatingChange = async (recipeId: string, newRating: number) => {
+    const token = authApi.getToken();
+    if (!token) {
+      setActionError('Please sign in to rate recipes.');
+      setIsLoginOpen(true);
+      throw new Error('Not signed in');
+    }
+    try {
+      await mealPlanApi.updateRecipeRating(recipeId, newRating, token);
+      setResult(current => {
+        if (!current) return current;
+        return {
+          ...current,
+          recipes: current.recipes.map(r => (r.recipe_id === recipeId ? { ...r, rating: newRating } : r)),
+        };
+      });
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Unable to update recipe rating.');
+      throw error;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#FDFDF9] pb-12 text-stone-900">
       <Header onUserClick={() => setIsLoginOpen(true)} />
@@ -142,7 +164,11 @@ export const RecipesPage = () => {
                           <Link to={`/recipes/${recipe.recipe_id}`} state={{ fromRecipeLibrary: true }} className="break-words font-bold text-[#1E7538] hover:underline">
                             {recipe.title}
                           </Link>
-                          <RecipeRating rating={recipe.rating} />
+                          <RecipeRating
+                            rating={recipe.rating}
+                            recipeId={recipe.recipe_id}
+                            onRatingChange={newRating => handleRatingChange(recipe.recipe_id, newRating)}
+                          />
                         </div>
                         {recipe.description && <p className="mt-1 text-sm text-stone-600">{recipe.description}</p>}
                       </div>

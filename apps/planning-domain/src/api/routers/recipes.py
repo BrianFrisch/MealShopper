@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.params import Depends as DependsType
 
 from dependencies import get_recipe_service, resolve_request_user_id
+from src.models import UpdateRecipeRatingRequest
 from src.services.recipe_service import RecipeService
 
 router = APIRouter(prefix="/v1/planner/recipes", tags=["Recipes"])
@@ -59,4 +60,25 @@ async def remove_user_recipe(
         "status": "removed",
         "recipe_id": str(recipe_id),
     }
+
+
+@router.put("/{recipe_id}/rating")
+@router.patch("/{recipe_id}/rating")
+async def update_recipe_rating(
+    recipe_id: UUID,
+    request: UpdateRecipeRatingRequest,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    recipes: RecipeService = Depends(get_recipe_service),
+) -> dict[str, object]:
+    if isinstance(recipes, DependsType) or recipes is None:
+        recipes = get_recipe_service()
+
+    user_id = resolve_request_user_id(x_user_id)
+    await recipes.update_recipe_rating(user_id, recipe_id, request.rating)
+    return {
+        "status": "updated",
+        "recipe_id": str(recipe_id),
+        "rating": request.rating,
+    }
+
 

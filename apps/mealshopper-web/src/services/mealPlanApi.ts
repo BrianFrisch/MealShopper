@@ -88,6 +88,14 @@ export const mealPlanApi = {
     );
   },
 
+  async updateRecipeRating(recipeId: string, rating: number, token: string): Promise<void> {
+    await apiClient.put(
+      `/v1/planner/recipes/${encodeURIComponent(recipeId)}/rating`,
+      { rating },
+      authorizationHeaders(token)
+    );
+  },
+
   async getMealPlans(token: string): Promise<MealPlanRecordDto[]> {
     const response = await apiClient.get<MealPlanRecordDto[]>(
       '/v1/planner/meal-plans',

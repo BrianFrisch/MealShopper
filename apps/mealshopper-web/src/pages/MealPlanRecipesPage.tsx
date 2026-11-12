@@ -57,6 +57,23 @@ export const MealPlanRecipesPage = () => {
     };
   }, [recipeId, reloadCount]);
 
+  const handleRatingChange = async (newRating: number) => {
+    if (!recipeId) return;
+    const token = authApi.getToken();
+    if (!token) {
+      setErrorMessage('Please sign in to rate this recipe.');
+      setIsLoginOpen(true);
+      throw new Error('Not signed in');
+    }
+    try {
+      await mealPlanApi.updateRecipeRating(recipeId, newRating, token);
+      setRecipe(current => (current ? { ...current, rating: newRating } : current));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to update recipe rating.');
+      throw error;
+    }
+  };
+
   return (
     <div className="recipe-page min-h-screen bg-[#FDFDF9] pb-12 text-stone-900">
       <div className="print:hidden">
@@ -147,7 +164,12 @@ export const MealPlanRecipesPage = () => {
                         <h2 className="mt-0.5 break-words text-xl font-bold text-stone-900">
                           {recipe.title}
                         </h2>
-                        <RecipeRating rating={recipe.rating} size="md" />
+                        <RecipeRating
+                          rating={recipe.rating}
+                          recipeId={recipe.recipe_id}
+                          size="md"
+                          onRatingChange={handleRatingChange}
+                        />
                       </div>
                       {(recipe.cuisine || recipe.protein_subtype) && (
                         <p className="mt-1 text-sm text-stone-500">

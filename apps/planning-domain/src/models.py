@@ -187,3 +187,14 @@ class AddShoppingListItemRequest(BaseModel):
 class RemoveShoppingListItemResponse(BaseModel):
     status: str
     meal_plan_ingredient_id: str
+
+
+class UpdateRecipeRatingRequest(BaseModel):
+    rating: int = Field(
+        ...,
+        ge=0,
+        le=5,
+        description="Rating from 0 to 5",
+        validation_alias=AliasChoices("rating", "Rating"),
+    )
+

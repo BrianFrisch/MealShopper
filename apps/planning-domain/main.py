@@ -44,6 +44,7 @@ from src.api.routers.recipes import (
     list_user_recipes,
     remove_user_recipe,
     router as recipes_router,
+    update_recipe_rating,
 )
 from src.api.routers.shopping_list import (
     add_meal_plan_shopping_list_item,
@@ -63,6 +64,7 @@ from src.models import (
     RemoveShoppingListItemResponse,
     UpdateIngredientPurchaseRequest,
     UpdateMealPlanNameRequest,
+    UpdateRecipeRatingRequest,
 )
 
 logging.basicConfig(
@@ -134,6 +136,7 @@ __all__ = [
     "list_user_recipes",
     "get_recipe_by_id",
     "remove_user_recipe",
+    "update_recipe_rating",
     "list_recipes_for_meal_plan",
     "get_meal_plan_shopping_list",
     "update_meal_plan_ingredient_purchase",
@@ -163,6 +166,7 @@ __all__ = [
     "RemoveShoppingListItemResponse",
     "UpdateMealPlanNameRequest",
     "UpdateIngredientPurchaseRequest",
+    "UpdateRecipeRatingRequest",
 ]
 
 if __name__ == "__main__":

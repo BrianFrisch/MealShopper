@@ -127,6 +127,23 @@ class RecipeService(BaseDatabaseService):
                 recipe_id,
             )
 
+    async def update_recipe_rating(
+        self,
+        user_id: UUID,
+        recipe_id: UUID,
+        rating: int,
+    ) -> None:
+        if rating < 0 or rating > 5:
+            raise ValueError("Rating must be between 0 and 5.")
+        pool = self._require_pool()
+        async with pool.acquire() as connection:
+            await connection.execute(
+                "CALL sp_update_recipe_rating($1, $2, $3);",
+                user_id,
+                recipe_id,
+                rating,
+            )
+
     async def get_recipe(self, recipe_id: UUID, user_id: UUID | None = None) -> StoredRecipe | None:
         pool = self._require_pool()
         async with pool.acquire() as connection:
