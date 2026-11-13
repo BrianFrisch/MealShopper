@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, ChefHat, Loader2, Printer } from 'lucide-react';
+import axios from 'axios';
 import { Header } from '../components/Header';
 import { LoginModal } from '../components/LoginModal';
 import { RecipeRating } from '../components/RecipeRating';
@@ -23,6 +24,11 @@ export const MealPlanRecipesPage = () => {
   ));
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [reloadCount, setReloadCount] = useState(0);
+  const [isAddingTag, setIsAddingTag] = useState(false);
+  const [newTag, setNewTag] = useState('');
+  const [isSubmittingTag, setIsSubmittingTag] = useState(false);
+  const [deletingTag, setDeletingTag] = useState<string | null>(null);
+  const [tagError, setTagError] = useState<string | null>(null);
 
   useEffect(() => {
     const token = authApi.getToken();
@@ -71,6 +77,69 @@ export const MealPlanRecipesPage = () => {
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to update recipe rating.');
       throw error;
+    }
+  };
+
+  const handleAddTag = async () => {
+    const trimmedTag = newTag.trim();
+    if (!trimmedTag || !recipeId) return;
+
+    const token = authApi.getToken();
+    if (!token) {
+      setTagError('Please sign in to add a tag.');
+      setIsLoginOpen(true);
+      return;
+    }
+
+    setIsSubmittingTag(true);
+    setTagError(null);
+    try {
+      await mealPlanApi.addRecipeTags(recipeId, [trimmedTag], token);
+      const updated = await mealPlanApi.getRecipe(recipeId, token);
+      setRecipe(updated);
+      setNewTag('');
+      setIsAddingTag(false);
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.data?.detail) {
+        setTagError(String(error.response.data.detail));
+      } else {
+        setTagError(error instanceof Error ? error.message : 'Unable to add tag.');
+      }
+    } finally {
+      setIsSubmittingTag(false);
+    }
+  };
+
+  const handleCancelAddTag = () => {
+    setIsAddingTag(false);
+    setNewTag('');
+    setTagError(null);
+  };
+
+  const handleDeleteTag = async (tagToDelete: string) => {
+    if (!recipeId) return;
+
+    const token = authApi.getToken();
+    if (!token) {
+      setTagError('Please sign in to remove a tag.');
+      setIsLoginOpen(true);
+      return;
+    }
+
+    setDeletingTag(tagToDelete);
+    setTagError(null);
+    try {
+      await mealPlanApi.removeRecipeTag(recipeId, tagToDelete, token);
+      const updated = await mealPlanApi.getRecipe(recipeId, token);
+      setRecipe(updated);
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.data?.detail) {
+        setTagError(String(error.response.data.detail));
+      } else {
+        setTagError(error instanceof Error ? error.message : 'Unable to remove tag.');
+      }
+    } finally {
+      setDeletingTag(null);
     }
   };
 
@@ -175,6 +244,85 @@ export const MealPlanRecipesPage = () => {
                         <p className="mt-1 text-sm text-stone-500">
                           {[recipe.cuisine, recipe.protein_subtype].filter(Boolean).join(' · ')}
                         </p>
+                      )}
+
+                      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                        {(recipe.tags ?? []).map(tag => (
+                          <span
+                            key={tag}
+                            className="inline-flex items-center gap-1 rounded-full bg-stone-100 py-0.5 pl-2.5 pr-1 text-xs font-semibold text-stone-700"
+                          >
+                            <span>{tag}</span>
+                            <button
+                              type="button"
+                              onClick={() => { void handleDeleteTag(tag); }}
+                              disabled={deletingTag === tag}
+                              aria-label={`Remove ${tag}`}
+                              title={`Remove ${tag}`}
+                              className="inline-flex h-4 w-4 items-center justify-center rounded-full text-stone-400 hover:bg-stone-200 hover:text-stone-700 disabled:opacity-50 print:hidden text-[10px] font-bold leading-none cursor-pointer"
+                            >
+                              x
+                            </button>
+                          </span>
+                        ))}
+                        {!isAddingTag ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsAddingTag(true);
+                              setTagError(null);
+                            }}
+                            className="inline-flex items-center rounded-full border border-dashed border-stone-300 px-2.5 py-0.5 text-xs font-semibold text-stone-600 transition hover:border-[#1E7538] hover:text-[#1E7538] print:hidden"
+                          >
+                            +Add a tag
+                          </button>
+                        ) : (
+                          <div className="inline-flex items-center gap-1 print:hidden">
+                            <input
+                              type="text"
+                              value={newTag}
+                              onChange={e => setNewTag(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  void handleAddTag();
+                                } else if (e.key === 'Escape') {
+                                  e.preventDefault();
+                                  handleCancelAddTag();
+                                }
+                              }}
+                              placeholder="Tag name"
+                              maxLength={16}
+                              autoFocus
+                              disabled={isSubmittingTag}
+                              aria-label="New tag"
+                              className="h-7 w-28 rounded-md border border-stone-300 px-2 text-xs outline-none focus:border-[#1E7538] focus:ring-1 focus:ring-[#1E7538]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => { void handleAddTag(); }}
+                              disabled={isSubmittingTag || !newTag.trim()}
+                              aria-label="+"
+                              title="Add tag"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-[#1E7538] text-xs font-bold text-white transition hover:bg-green-800 disabled:opacity-50"
+                            >
+                              +
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleCancelAddTag}
+                              disabled={isSubmittingTag}
+                              aria-label="X"
+                              title="Cancel"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-300 bg-white text-xs font-bold text-stone-600 transition hover:bg-stone-100"
+                            >
+                              X
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {tagError && (
+                        <p className="mt-1 text-xs text-rose-600 print:hidden">{tagError}</p>
                       )}
                     </div>
                   </div>

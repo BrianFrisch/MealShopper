@@ -34,6 +34,13 @@ async def test_user_recipe_tags_in_postgres() -> None:
             await connection.execute(procedure_sql.replace(
                 "PROCEDURE sp_add_user_recipe_tags(", "PROCEDURE pg_temp.sp_add_user_recipe_tags(", 1
             ))
+            delete_proc_sql = (init / "03_procedures" / "010_sp_delete_user_recipe_tag.sql").read_text(encoding="utf-8")
+            delete_proc_sql = delete_proc_sql.replace(
+                "PROCEDURE sp_delete_user_recipe_tag(", "PROCEDURE pg_temp.sp_delete_user_recipe_tag(", 1
+            ).replace(
+                "PROCEDURE sp_remove_user_recipe_tag(", "PROCEDURE pg_temp.sp_remove_user_recipe_tag(", 1
+            )
+            await connection.execute(delete_proc_sql)
             user_id, other_user, recipe_id = UUID(int=1), UUID(int=2), UUID(int=3)
             await connection.execute("INSERT INTO user_recipe VALUES ($1, $2)", user_id, recipe_id)
             await connection.execute(
@@ -43,6 +50,15 @@ async def test_user_recipe_tags_in_postgres() -> None:
             rows = await connection.fetch("SELECT tag, created_at FROM user_recipe_tag ORDER BY tag")
             assert {row["tag"] for row in rows} == {"Tag", "tag", "a" * 16}
             assert all(row["created_at"] is not None for row in rows)
+
+            # Test deleting single tag
+            await connection.execute(
+                "CALL pg_temp.sp_delete_user_recipe_tag($1, $2, $3)",
+                user_id, recipe_id, "Tag",
+            )
+            rows_after_delete = await connection.fetch("SELECT tag FROM user_recipe_tag ORDER BY tag")
+            assert {row["tag"] for row in rows_after_delete} == {"tag", "a" * 16}
+
             with pytest.raises(asyncpg.StringDataRightTruncationError):
                 async with connection.transaction():
                     await connection.execute(
@@ -223,6 +239,29 @@ async def test_user_recipe_page_in_postgres() -> None:
             recipe_1 = [item for item in first + second if item["recipe_id"] == str(UUID(int=11))][0]
             assert recipe_1["tags"] == []
             assert other[0]["tags"] == []
+
+            # Verify tag filtering in get_user_recipe_page
+            filtered, filtered_count = await service.get_user_recipe_page(user_id, 0, 10, tag="comfort-food")
+            assert [item["title"] for item in filtered] == ["Recipe 0"]
+            assert filtered_count == 1
+
+            nonexistent, non_count = await service.get_user_recipe_page(user_id, 0, 10, tag="nonexistent")
+            assert nonexistent == []
+            assert non_count == 0
+
+            # Test fn_get_user_recipe_tags
+            fn_tags_path = (
+                Path(__file__).resolve().parents[1] / "Infrastructure" / "postgres" / "init"
+                / "02_functions" / "007_fn_get_user_recipe_tags.sql"
+            )
+            fn_tags_sql = fn_tags_path.read_text(encoding="utf-8").replace(
+                "FUNCTION fn_get_user_recipe_tags(", "FUNCTION pg_temp.fn_get_user_recipe_tags(", 1
+            )
+            await connection.execute(fn_tags_sql)
+            tag_counts = await connection.fetch("SELECT * FROM pg_temp.fn_get_user_recipe_tags($1);", user_id)
+            assert len(tag_counts) == 1
+            assert tag_counts[0]["tag"] == "comfort-food"
+            assert tag_counts[0]["recipe_count"] == 1
     finally:
         await connection.close()
 

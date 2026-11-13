@@ -73,11 +73,28 @@ export interface RecipePageDto {
   total_count: number;
 }
 
+export interface UserRecipeTagDto {
+  tag: string;
+  recipe_count: number;
+}
+
 export const mealPlanApi = {
-  async getUserRecipes(startIndex: number, pageSize: number, token: string): Promise<RecipePageDto> {
+  async getUserRecipes(startIndex: number, pageSize: number, token: string, tag?: string): Promise<RecipePageDto> {
+    const params: Record<string, string | number> = { start_index: startIndex, page_size: pageSize };
+    if (tag) {
+      params.tag = tag;
+    }
     const response = await apiClient.get<RecipePageDto>(
       '/v1/planner/recipes',
-      { ...authorizationHeaders(token), params: { start_index: startIndex, page_size: pageSize } }
+      { ...authorizationHeaders(token), params }
+    );
+    return response.data;
+  },
+
+  async getUserRecipeTags(token: string): Promise<UserRecipeTagDto[]> {
+    const response = await apiClient.get<UserRecipeTagDto[]>(
+      '/v1/planner/recipes/tags',
+      authorizationHeaders(token)
     );
     return response.data;
   },
@@ -95,6 +112,27 @@ export const mealPlanApi = {
       { rating },
       authorizationHeaders(token)
     );
+  },
+
+  async addRecipeTags(recipeId: string, tags: string[], token: string): Promise<{ recipe_id: string; tags: string[] }> {
+    const response = await apiClient.post<{ recipe_id: string; tags: string[] }>(
+      `/v1/planner/recipes/${encodeURIComponent(recipeId)}/tags`,
+      { tags },
+      authorizationHeaders(token)
+    );
+    return response.data;
+  },
+
+  async removeRecipeTag(recipeId: string, tag: string, token: string): Promise<{ status: string; recipe_id: string; tag: string }> {
+    const response = await apiClient.delete<{ status: string; recipe_id: string; tag: string }>(
+      `/v1/planner/recipes/${encodeURIComponent(recipeId)}/tags/${encodeURIComponent(tag)}`,
+      authorizationHeaders(token)
+    );
+    return response.data;
+  },
+
+  async deleteRecipeTag(recipeId: string, tag: string, token: string): Promise<{ status: string; recipe_id: string; tag: string }> {
+    return this.removeRecipeTag(recipeId, tag, token);
   },
 
   async getMealPlans(token: string): Promise<MealPlanRecordDto[]> {

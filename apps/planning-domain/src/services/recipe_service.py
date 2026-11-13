@@ -137,6 +137,19 @@ class RecipeService(BaseDatabaseService):
         async with pool.acquire() as connection:
             await self._add_recipe_tags(connection, user_id, recipe_id, tags)
 
+    async def delete_recipe_tag(self, user_id: UUID, recipe_id: UUID, tag: str) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as connection:
+            await connection.execute(
+                "CALL sp_delete_user_recipe_tag($1, $2, $3);",
+                user_id,
+                recipe_id,
+                tag,
+            )
+
+    async def remove_recipe_tag(self, user_id: UUID, recipe_id: UUID, tag: str) -> None:
+        await self.delete_recipe_tag(user_id, recipe_id, tag)
+
     async def associate_user_with_recipe(self, user_id: UUID, recipe_id: UUID) -> None:
         pool = self._require_pool()
         async with pool.acquire() as connection:
@@ -214,25 +227,58 @@ class RecipeService(BaseDatabaseService):
         return [self._to_stored_recipe(row) for row in rows]
 
     async def get_user_recipe_page(
-        self, user_id: UUID, start_index: int, page_size: int,
+        self, user_id: UUID, start_index: int, page_size: int, tag: str | None = None,
     ) -> tuple[list[StoredRecipe], int]:
         if start_index < 0 or page_size < 1:
             raise ValueError("start_index must be non-negative and page_size must be positive.")
         pool = self._require_pool()
         async with pool.acquire() as connection:
-            rows = await connection.fetch(
-                """
-                SELECT page.*, totals.total_count
-                FROM (SELECT count(*) AS total_count FROM user_recipe WHERE user_id = $1) AS totals
-                LEFT JOIN LATERAL fn_get_user_recipe_page($1, $2, $3) AS page ON TRUE
-                ORDER BY page.user_recipe_created_at DESC, page.recipe_id DESC
-                """,
-                user_id, start_index, page_size,
-            )
+            if tag is not None:
+                rows = await connection.fetch(
+                    """
+                    SELECT page.*, totals.total_count
+                    FROM (
+                        SELECT count(*) AS total_count
+                        FROM user_recipe AS ur
+                        WHERE ur.user_id = $1
+                          AND EXISTS (
+                              SELECT 1
+                              FROM user_recipe_tag AS urt
+                              WHERE urt.user_id = ur.user_id
+                                AND urt.recipe_id = ur.recipe_id
+                                AND urt.tag = $4
+                          )
+                    ) AS totals
+                    LEFT JOIN LATERAL fn_get_user_recipe_page($1, $2, $3, $4) AS page ON TRUE
+                    ORDER BY page.user_recipe_created_at DESC, page.recipe_id DESC
+                    """,
+                    user_id, start_index, page_size, tag,
+                )
+            else:
+                rows = await connection.fetch(
+                    """
+                    SELECT page.*, totals.total_count
+                    FROM (SELECT count(*) AS total_count FROM user_recipe WHERE user_id = $1) AS totals
+                    LEFT JOIN LATERAL fn_get_user_recipe_page($1, $2, $3) AS page ON TRUE
+                    ORDER BY page.user_recipe_created_at DESC, page.recipe_id DESC
+                    """,
+                    user_id, start_index, page_size,
+                )
         return (
             [self._to_stored_recipe(row) for row in rows if row["recipe_id"] is not None],
             rows[0]["total_count"],
         )
+
+    async def get_user_recipe_tags(self, user_id: UUID) -> list[dict[str, Any]]:
+        pool = self._require_pool()
+        async with pool.acquire() as connection:
+            rows = await connection.fetch("SELECT * FROM fn_get_user_recipe_tags($1);", user_id)
+        return [
+            {"tag": row["tag"], "recipe_count": int(row["recipe_count"])}
+            for row in rows
+        ]
+
+    get_recipe_tags_for_user = get_user_recipe_tags
 
     async def get_recipes_for_meal_plan(self, meal_plan_id: UUID) -> list[StoredRecipe]:
         pool = self._require_pool()

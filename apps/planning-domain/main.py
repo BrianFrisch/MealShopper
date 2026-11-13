@@ -40,8 +40,12 @@ from src.api.routers.meal_plans import (
 )
 from src.api.routers.planner import generate_plan, router as planner_router
 from src.api.routers.recipes import (
+    delete_recipe_tag,
     get_recipe_by_id,
+    get_user_recipe_tags,
+    list_user_recipe_tags,
     list_user_recipes,
+    remove_recipe_tag,
     remove_user_recipe,
     router as recipes_router,
     update_recipe_rating,

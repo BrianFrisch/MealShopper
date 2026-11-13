@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChefHat, Loader2 } from 'lucide-react';
+import { ChefHat, ChevronDown, Loader2 } from 'lucide-react';
 import { Header } from '../components/Header';
 import { LoginModal } from '../components/LoginModal';
 import { RecipeRating } from '../components/RecipeRating';
 import { authApi } from '../services/authApi';
-import { mealPlanApi, type RecipePageDto } from '../services/mealPlanApi';
+import { mealPlanApi, type RecipePageDto, type UserRecipeTagDto } from '../services/mealPlanApi';
 
 const PAGE_SIZE = 10;
+const VISIBLE_TAG_LIMIT = 4;
 
 export const RecipesPage = () => {
   const [page, setPage] = useState(0);
   const [result, setResult] = useState<RecipePageDto | null>(null);
+  const [tags, setTags] = useState<UserRecipeTagDto[]>([]);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [isTagsExpanded, setIsTagsExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -21,15 +25,19 @@ export const RecipesPage = () => {
 
   useEffect(() => {
     let cancelled = false;
-    const loadRecipes = async () => {
+    const loadData = async () => {
       try {
         const token = authApi.getToken();
         if (!token) {
           throw new Error('Please sign in to view your recipes.');
         }
-        const data = await mealPlanApi.getUserRecipes(page * PAGE_SIZE, PAGE_SIZE, token);
+        const [recipesData, tagsData] = await Promise.all([
+          mealPlanApi.getUserRecipes(page * PAGE_SIZE, PAGE_SIZE, token, selectedTag || undefined),
+          mealPlanApi.getUserRecipeTags(token).catch(() => []),
+        ]);
         if (!cancelled) {
-          setResult(data);
+          setResult(recipesData);
+          setTags([...tagsData].sort((a, b) => b.recipe_count - a.recipe_count || a.tag.localeCompare(b.tag)));
           setErrorMessage(null);
         }
       } catch (error) {
@@ -43,15 +51,23 @@ export const RecipesPage = () => {
         }
       }
     };
-    void loadRecipes();
+    void loadData();
     return () => { cancelled = true; };
-  }, [page, reloadCount]);
+  }, [page, reloadCount, selectedTag]);
 
   const changePage = (nextPage: number) => {
     setIsLoading(true);
     setErrorMessage(null);
     setActionError(null);
     setPage(nextPage);
+  };
+
+  const handleSelectTag = (tag: string | null) => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    setActionError(null);
+    setPage(0);
+    setSelectedTag(current => (current === tag ? null : tag));
   };
 
   const handleRemoveRecipe = async (recipeId: string) => {
@@ -145,13 +161,121 @@ export const RecipesPage = () => {
                   </button>
                 </div>
               )}
-              <p className="border-b border-stone-200 pb-4 text-sm font-semibold text-stone-700">
-                {result.total_count} {result.total_count === 1 ? 'recipe' : 'recipes'}
-              </p>
+              {tags.length > 0 && (
+                <div className="mb-5 rounded-xl border border-stone-200 bg-stone-50/70 p-3 sm:p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="mr-1 text-xs font-bold uppercase tracking-wider text-stone-500">
+                      Filter by Tag:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectTag(null)}
+                      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold transition ${
+                        selectedTag === null
+                          ? 'bg-[#1E7538] text-white shadow-xs'
+                          : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-100'
+                      }`}
+                    >
+                      All
+                    </button>
+                    {tags.slice(0, VISIBLE_TAG_LIMIT).map(item => (
+                      <button
+                        key={item.tag}
+                        type="button"
+                        onClick={() => handleSelectTag(item.tag)}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition ${
+                          selectedTag === item.tag
+                            ? 'bg-[#1E7538] text-white shadow-xs'
+                            : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-100'
+                        }`}
+                      >
+                        <span>{item.tag}</span>
+                        <span
+                          className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                            selectedTag === item.tag
+                              ? 'bg-green-800 text-white'
+                              : 'bg-stone-100 text-stone-500'
+                          }`}
+                        >
+                          {item.recipe_count}
+                        </span>
+                      </button>
+                    ))}
+                    {tags.length > VISIBLE_TAG_LIMIT && (
+                      <button
+                        type="button"
+                        onClick={() => setIsTagsExpanded(!isTagsExpanded)}
+                        aria-expanded={isTagsExpanded}
+                        className="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-2.5 py-1 text-xs font-semibold text-stone-600 transition hover:bg-stone-100"
+                      >
+                        <span>{isTagsExpanded ? 'Show less' : `+${tags.length - VISIBLE_TAG_LIMIT} more`}</span>
+                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isTagsExpanded ? 'rotate-180' : ''}`} />
+                      </button>
+                    )}
+                  </div>
+                  {isTagsExpanded && tags.length > VISIBLE_TAG_LIMIT && (
+                    <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-stone-200/80 pt-2.5">
+                      {tags.slice(VISIBLE_TAG_LIMIT).map(item => (
+                        <button
+                          key={item.tag}
+                          type="button"
+                          onClick={() => handleSelectTag(item.tag)}
+                          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition ${
+                            selectedTag === item.tag
+                              ? 'bg-[#1E7538] text-white shadow-xs'
+                              : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-100'
+                          }`}
+                        >
+                          <span>{item.tag}</span>
+                          <span
+                            className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                              selectedTag === item.tag
+                                ? 'bg-green-800 text-white'
+                                : 'bg-stone-100 text-stone-500'
+                            }`}
+                          >
+                            {item.recipe_count}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="flex items-center justify-between border-b border-stone-200 pb-4 text-sm font-semibold text-stone-700">
+                <span>
+                  {result.total_count} {result.total_count === 1 ? 'recipe' : 'recipes'}
+                  {selectedTag && <span className="ml-1 text-xs font-normal text-stone-500">(tagged with "{selectedTag}")</span>}
+                </span>
+                {selectedTag && (
+                  <button
+                    type="button"
+                    onClick={() => handleSelectTag(null)}
+                    className="text-xs font-semibold text-[#1E7538] underline hover:text-green-800"
+                  >
+                    Clear filter
+                  </button>
+                )}
+              </div>
               {result.recipes.length === 0 ? (
-                <p className="py-8 text-center text-sm text-stone-600">
-                  {result.total_count === 0 ? 'You have no saved recipes yet.' : 'No recipes on this page.'}
-                </p>
+                <div className="py-8 text-center text-sm text-stone-600">
+                  <p>
+                    {selectedTag
+                      ? `No recipes found with tag "${selectedTag}".`
+                      : result.total_count === 0
+                        ? 'You have no saved recipes yet.'
+                        : 'No recipes on this page.'}
+                  </p>
+                  {selectedTag && (
+                    <button
+                      type="button"
+                      onClick={() => handleSelectTag(null)}
+                      className="mt-2 text-xs font-semibold text-[#1E7538] underline hover:text-green-800"
+                    >
+                      View all recipes
+                    </button>
+                  )}
+                </div>
               ) : (
                 <ul className="divide-y divide-stone-200">
                   {result.recipes.map(recipe => (
@@ -171,6 +295,22 @@ export const RecipesPage = () => {
                           />
                         </div>
                         {recipe.description && <p className="mt-1 text-sm text-stone-600">{recipe.description}</p>}
+                        {recipe.tags && recipe.tags.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                            {recipe.tags.map(t => (
+                              <span
+                                key={t}
+                                className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                                  selectedTag === t
+                                    ? 'bg-green-100 font-semibold text-green-900'
+                                    : 'bg-stone-100 text-stone-600'
+                                }`}
+                              >
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <button
                         type="button"

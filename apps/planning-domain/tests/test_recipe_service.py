@@ -143,6 +143,17 @@ async def test_add_recipe_tags_calls_stored_procedure() -> None:
     ]
 
 
+@pytest.mark.asyncio
+async def test_delete_recipe_tag_calls_stored_procedure() -> None:
+    connection = FakeConnection()
+    service = RecipeService("unused", pool=FakePool(connection))  # type: ignore[arg-type]
+    user_id, recipe_id = UUID(int=1), UUID(int=2)
+    await service.delete_recipe_tag(user_id, recipe_id, "chicken")
+    assert connection.execute_calls == [
+        ("CALL sp_delete_user_recipe_tag($1, $2, $3);", (user_id, recipe_id, "chicken"))
+    ]
+
+
 def test_recipe_tags_endpoint_validates_normalizes_and_checks_ownership(monkeypatch: pytest.MonkeyPatch) -> None:
     user_id, recipe_id = UUID(int=1), UUID(int=2)
     calls: list[tuple[UUID, UUID, list[str]]] = []
@@ -169,6 +180,38 @@ def test_recipe_tags_endpoint_validates_normalizes_and_checks_ownership(monkeypa
     assert calls == [(user_id, recipe_id, ["chickenrice", "thai-style"])]
     found[0] = False
     assert client.post(url, headers=headers, json={"tags": ["tag"]}).status_code == 404
+    assert len(calls) == 1
+
+
+def test_delete_recipe_tag_endpoint_validates_normalizes_and_checks_ownership(monkeypatch: pytest.MonkeyPatch) -> None:
+    user_id, recipe_id = UUID(int=1), UUID(int=2)
+    calls: list[tuple[UUID, UUID, str]] = []
+
+    class StubRecipeService:
+        async def get_recipe_for_user(self, requested_recipe_id: UUID, requested_user_id: UUID):
+            assert (requested_recipe_id, requested_user_id) == (recipe_id, user_id)
+            return {} if found[0] else None
+
+        async def delete_recipe_tag(self, requested_user_id: UUID, requested_recipe_id: UUID, tag: str):
+            calls.append((requested_user_id, requested_recipe_id, tag))
+
+    found = [True]
+    monkeypatch.setattr(main, "recipe_service", StubRecipeService())
+    client = TestClient(main.app)
+    headers = {"X-User-Id": str(user_id)}
+    base_url = f"/v1/planner/recipes/{recipe_id}/tags"
+
+    assert client.delete(f"{base_url}/test").status_code == 401
+    for bad_tag in ("!@#$", "a" * 17):
+        assert client.delete(f"{base_url}/{bad_tag}", headers=headers).status_code == 422
+
+    response = client.delete(f"{base_url}/THAI-STYLE", headers=headers)
+    assert response.status_code == 200
+    assert response.json() == {"status": "removed", "recipe_id": str(recipe_id), "tag": "thai-style"}
+    assert calls == [(user_id, recipe_id, "thai-style")]
+
+    found[0] = False
+    assert client.delete(f"{base_url}/thai-style", headers=headers).status_code == 404
     assert len(calls) == 1
 
 
@@ -769,6 +812,71 @@ def test_list_user_recipes_http_validation_and_header(monkeypatch: pytest.Monkey
     assert response.status_code == 200
     assert response.json() == {"recipes": [], "total_count": 11}
     assert calls == [(user_id, 10, 10)]
+
+
+def test_list_user_recipes_with_tag_filter(monkeypatch: pytest.MonkeyPatch) -> None:
+    user_id = UUID("207d2de7-919d-4f48-b6f2-4a475ae96426")
+    calls: list[tuple[UUID, int, int, str | None]] = []
+
+    class StubRecipeService:
+        async def get_user_recipe_page(
+            self, requested_user_id: UUID, start_index: int, page_size: int, tag: str | None = None,
+        ) -> tuple[list[dict[str, Any]], int]:
+            calls.append((requested_user_id, start_index, page_size, tag))
+            return [], 3
+
+    monkeypatch.setattr(main, "recipe_service", StubRecipeService())
+    client = TestClient(main.app)
+    response = client.get(
+        "/v1/planner/recipes",
+        headers={"X-User-Id": str(user_id)},
+        params={"start_index": 0, "page_size": 10, "tag": " Chicken & Rice! "},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"recipes": [], "total_count": 3}
+    assert calls == [(user_id, 0, 10, "chickenrice")]
+
+
+@pytest.mark.asyncio
+async def test_get_user_recipe_tags_calls_database_function() -> None:
+    connection = FakeConnection()
+    connection.fetch_results = [
+        {"tag": "chicken", "recipe_count": 5},
+        {"tag": "thai", "recipe_count": 2},
+    ]
+
+    async def fetch(query: str, *args: Any) -> list[dict[str, Any]]:
+        assert "fn_get_user_recipe_tags" in query
+        assert args == (UUID(int=1),)
+        return connection.fetch_results
+
+    connection.fetch = fetch
+    service = RecipeService("unused", pool=FakePool(connection))  # type: ignore[arg-type]
+    tags = await service.get_user_recipe_tags(UUID(int=1))
+    assert tags == [
+        {"tag": "chicken", "recipe_count": 5},
+        {"tag": "thai", "recipe_count": 2},
+    ]
+
+
+def test_list_user_recipe_tags_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    user_id = UUID("207d2de7-919d-4f48-b6f2-4a475ae96426")
+    calls: list[UUID] = []
+
+    class StubRecipeService:
+        async def get_user_recipe_tags(self, requested_user_id: UUID) -> list[dict[str, Any]]:
+            calls.append(requested_user_id)
+            return [{"tag": "chicken", "recipe_count": 4}]
+
+    monkeypatch.setattr(main, "recipe_service", StubRecipeService())
+    client = TestClient(main.app)
+    assert client.get("/v1/planner/recipes/tags").status_code == 401
+    assert client.get("/v1/planner/recipes/tags", headers={"X-User-Id": "invalid"}).status_code == 400
+
+    response = client.get("/v1/planner/recipes/tags", headers={"X-User-Id": str(user_id)})
+    assert response.status_code == 200
+    assert response.json() == [{"tag": "chicken", "recipe_count": 4}]
+    assert calls == [user_id]
 
 
 @pytest.mark.asyncio

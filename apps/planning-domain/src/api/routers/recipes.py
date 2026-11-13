@@ -29,6 +29,7 @@ async def create_recipe(
 async def list_user_recipes(
     start_index: int = Query(default=0, ge=0),
     page_size: int = Query(default=10, ge=1, le=100),
+    tag: Optional[str] = Query(default=None),
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     recipes: RecipeService = Depends(get_recipe_service),
 ) -> dict[str, object]:
@@ -36,8 +37,32 @@ async def list_user_recipes(
         recipes = get_recipe_service()
 
     user_id = resolve_request_user_id(x_user_id)
-    recipes_page, total_count = await recipes.get_user_recipe_page(user_id, start_index, page_size)
+    if tag:
+        normalized_tag = normalize_recipe_tag(tag)
+        recipes_page, total_count = await recipes.get_user_recipe_page(
+            user_id, start_index, page_size, tag=normalized_tag
+        )
+    else:
+        recipes_page, total_count = await recipes.get_user_recipe_page(
+            user_id, start_index, page_size
+        )
     return {"recipes": recipes_page, "total_count": total_count}
+
+
+@router.get("/tags")
+@router.get("/tags/", include_in_schema=False)
+async def list_user_recipe_tags(
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    recipes: RecipeService = Depends(get_recipe_service),
+) -> list[dict[str, object]]:
+    if isinstance(recipes, DependsType) or recipes is None:
+        recipes = get_recipe_service()
+
+    user_id = resolve_request_user_id(x_user_id)
+    return await recipes.get_user_recipe_tags(user_id)
+
+
+get_user_recipe_tags = list_user_recipe_tags
 
 
 @router.get("/{recipe_id}")
@@ -97,6 +122,35 @@ async def add_recipe_tags(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Recipe {recipe_id} not found.")
     await recipes.add_recipe_tags(user_id, recipe_id, tags)
     return {"recipe_id": str(recipe_id), "tags": tags}
+
+
+@router.delete("/{recipe_id}/tags/{tag}")
+async def remove_recipe_tag(
+    recipe_id: UUID,
+    tag: str,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    recipes: RecipeService = Depends(get_recipe_service),
+) -> dict[str, str]:
+    if isinstance(recipes, DependsType):
+        recipes = get_recipe_service()
+    user_id = resolve_request_user_id(x_user_id)
+    normalized_tag = normalize_recipe_tag(tag)
+    if not normalized_tag or len(normalized_tag) > 16:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Normalized tag must contain between 1 and 16 characters.",
+        )
+    if await recipes.get_recipe_for_user(recipe_id, user_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Recipe {recipe_id} not found.")
+    await recipes.delete_recipe_tag(user_id, recipe_id, normalized_tag)
+    return {
+        "status": "removed",
+        "recipe_id": str(recipe_id),
+        "tag": normalized_tag,
+    }
+
+
+delete_recipe_tag = remove_recipe_tag
 
 
 @router.put("/{recipe_id}/rating")

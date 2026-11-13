@@ -1,9 +1,12 @@
 DROP FUNCTION IF EXISTS fn_get_user_recipe_page(UUID, INTEGER, INTEGER);
+DROP FUNCTION IF EXISTS fn_get_user_recipe_page(UUID, INTEGER, INTEGER, VARCHAR(16));
+DROP FUNCTION IF EXISTS fn_get_user_recipe_page(UUID, INTEGER, INTEGER, TEXT);
 
 CREATE OR REPLACE FUNCTION fn_get_user_recipe_page(
     p_user_id UUID,
     p_start_index INTEGER,
-    p_page_size INTEGER
+    p_page_size INTEGER,
+    p_tag VARCHAR(16) DEFAULT NULL
 )
 RETURNS TABLE (
     user_id UUID,
@@ -37,6 +40,16 @@ AS $$
     FROM user_recipe AS ur
     INNER JOIN recipe AS r ON r.recipe_id = ur.recipe_id
     WHERE ur.user_id = p_user_id
+      AND (
+          p_tag IS NULL
+          OR EXISTS (
+              SELECT 1
+              FROM user_recipe_tag AS urt_filter
+              WHERE urt_filter.user_id = ur.user_id
+                AND urt_filter.recipe_id = ur.recipe_id
+                AND urt_filter.tag = p_tag
+          )
+      )
     ORDER BY ur.created_at DESC, ur.recipe_id DESC
     OFFSET p_start_index LIMIT p_page_size;
 $$;
