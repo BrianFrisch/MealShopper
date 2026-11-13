@@ -9,6 +9,9 @@ namespace MealShopper.Orchestrator.Clients;
 /// </summary>
 public interface IShopperClient
 {
+    Task<ProgressiveCacheResponse> GetProgressiveCacheAsync(IReadOnlyList<string> storeIds, CancellationToken ct = default);
+    Task<ProgressiveLoadResponse> LoadProgressiveStoreAsync(string storeId, CancellationToken ct = default);
+
     /// <summary>
     /// Fetches all active deals for a specific store.
     /// </summary>

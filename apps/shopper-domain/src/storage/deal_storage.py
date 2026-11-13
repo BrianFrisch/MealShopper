@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 from typing import Any, Optional
+from uuid import uuid4
 
 import redis.asyncio as redis
 
@@ -92,6 +93,7 @@ class PartitionedDealStorage:
             "primary": primary_deals,
             "secondary": secondary_deals,
         }
+        generation = uuid4().hex
 
         # Calculate Redis TTL matching flyer expiry
         valid_to_utc = (
@@ -119,6 +121,7 @@ class PartitionedDealStorage:
                 "tier": bucket_name,
                 "valid_from": valid_from.isoformat(),
                 "valid_to": valid_to.isoformat(),
+                "generation": generation,
                 "deals": bucket_deals,
             }
             serialized = json.dumps(payload, default=str)
@@ -310,6 +313,46 @@ class PartitionedDealStorage:
     ) -> list[dict[str, Any]]:
         results = await self.get_deals_for_flyers([str(flyer_id)], tier=tier)
         return results.get(str(flyer_id), [])
+
+    async def get_complete_primary_deals(self, flyer_id: str) -> Optional[list[dict[str, Any]]]:
+        """Return primary deals only when both current flyer partitions are complete."""
+        tiers = ("primary", "secondary")
+        payloads = await self.redis.mget([f"deals:flyer:{flyer_id}:{tier}" for tier in tiers])
+        parsed: list[dict[str, Any]] = []
+        for tier, raw in zip(tiers, payloads):
+            if raw is None:
+                path = Path(self.base_storage_dir) / get_circular_cycle_key() / f"{flyer_id}-{tier}.json"
+                if path.exists():
+                    raw = path.read_text(encoding="utf-8")
+            if raw is None:
+                return None
+            try:
+                data = json.loads(raw)
+                valid_from = datetime.fromisoformat(data["valid_from"])
+                valid_to = datetime.fromisoformat(data["valid_to"])
+                if valid_from.tzinfo is None:
+                    valid_from = valid_from.replace(tzinfo=timezone.utc)
+                if valid_to.tzinfo is None:
+                    valid_to = valid_to.replace(tzinfo=timezone.utc)
+                if (
+                    data.get("flyer_id") != flyer_id
+                    or data.get("tier") != tier
+                    or not isinstance(data.get("deals"), list)
+                    or not all(isinstance(deal, dict) for deal in data["deals"])
+                    or not valid_from <= datetime.now(timezone.utc) < valid_to
+                ):
+                    return None
+                parsed.append(data)
+            except (ValueError, TypeError, KeyError, AttributeError):
+                logger.warning("Invalid cached %s partition for flyer %s", tier, flyer_id)
+                return None
+        if (
+            parsed[0].get("generation") != parsed[1].get("generation")
+            or parsed[0]["valid_from"] != parsed[1]["valid_from"]
+            or parsed[0]["valid_to"] != parsed[1]["valid_to"]
+        ):
+            return None
+        return parsed[0]["deals"]
 
     async def get_deals_for_flyers(
         self,

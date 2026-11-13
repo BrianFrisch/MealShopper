@@ -292,6 +292,16 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             // 1. Discover Stores
             var stores = await DiscoverStoresStageAsync(job, ct);
 
+            if (job.GetPayload<MealPlanDiscoveryRequest>()?.StoresOnly == true)
+            {
+                await _jobStateStore.CompleteJobAsync(
+                    jobId,
+                    new DiscoveryResultDto { Stores = stores, Deals = [] },
+                    stageDescription: stores.Count == 0 ? "No stores found within search radius." : "Stores discovered successfully.",
+                    cancellationToken: ct);
+                return;
+            }
+
             if (stores.Count == 0)
             {
                 _logger.LogInformation("No stores found within search radius for Job {JobId}. Completing discovery workflow gracefully.", jobId);
@@ -662,34 +672,7 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             {
                 var rawDeals = await _shopperClient.GetDealsForStoreAsync(store.Id, store.PostalCode, store.Name, ct);
 
-                // Deduplicate deals per-store so each physical store retains its own inventory.
-                storeDeals = rawDeals
-                    .GroupBy(d => !string.IsNullOrWhiteSpace(d.CleanName)
-                        ? d.CleanName.Trim().ToLowerInvariant()
-                        : d.ItemName.Trim().ToLowerInvariant())
-                    .Where(g => !string.IsNullOrWhiteSpace(g.Key))
-                    .Select(g =>
-                    {
-                        var best = g.OrderBy(d => d.DealPrice).ThenByDescending(d => d.ValueScore).First();
-                        return new DealItemDto
-                        {
-                            DealId = $"{best.DealId}",
-                            StoreId = store.Id,
-                            StoreName = store.Name,
-                            ItemName = best.ItemName,
-                            CleanName = best.CleanName,
-                            NormalizedCategory = best.NormalizedCategory,
-                            PrimaryIngredient = best.PrimaryIngredient,
-                            ProteinSubtype = best.ProteinSubtype,
-                            ImageUrl = best.ImageUrl,
-                            DealPrice = best.DealPrice,
-                            OriginalPrice = best.OriginalPrice,
-                            Currency = best.Currency,
-                            Unit = best.Unit,
-                            ValueScore = best.ValueScore
-                        };
-                    })
-                    .ToList();
+                storeDeals = StoreDealMapper.Map(store, rawDeals);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {

@@ -350,6 +350,7 @@ class TraderJoesAdapter(BaseDealAdapter):
         query: str,
         variables: Optional[dict[str, Any]] = None,
         operation_name: str = "SearchProducts",
+        strict: bool = False,
     ) -> dict[str, Any]:
         """
         Executes a GraphQL query against Trader Joe's GraphQL API endpoint
@@ -402,19 +403,29 @@ class TraderJoesAdapter(BaseDealAdapter):
 
             if not isinstance(data, dict):
                 logger.warning("Trader Joe's GraphQL returned unexpected non-dict payload: %s", type(data))
+                if strict:
+                    raise ValueError("Invalid GraphQL response")
                 return {}
             if "errors" in data and not data.get("data"):
                 logger.error("Trader Joe's GraphQL returned errors: %s", data["errors"])
+                if strict:
+                    raise ValueError("GraphQL request failed")
                 return {}
+            if strict and data.get("errors"):
+                raise ValueError("GraphQL response was incomplete")
             return data
 
         try:
             return await trader_joes_circuit_breaker.call(_do_request)
         except CircuitBreakerOpenException as cbe:
             logger.warning("Trader Joe's circuit breaker active: %s", cbe)
+            if strict:
+                raise
             return {}
         except Exception as exc:
             logger.error("Error executing Trader Joe's GraphQL query: %s", exc)
+            if strict:
+                raise
             return {}
 
     # --- BaseDealAdapter Template Method Hooks ---
@@ -443,7 +454,7 @@ class TraderJoesAdapter(BaseDealAdapter):
         flyer_id = kwargs.get("flyer_id") or f"tj-fearless-flyer-{store_code}"
         return flyer_id, default_valid_from, default_valid_to
 
-    async def fetch_raw_items(self, flyer_id: Any) -> list[dict[str, Any]]:
+    async def fetch_raw_items(self, flyer_id: Any, **kwargs: Any) -> list[dict[str, Any]]:
         """
         Fetches raw promotional item dictionaries for the Fearless Flyer via GraphQL.
         Extracts both What's New and Limited Time Fearless Flyer items.
@@ -456,7 +467,8 @@ class TraderJoesAdapter(BaseDealAdapter):
 
         use_search = bool(self.default_search)
 
-        while current_page <= self.max_pages:
+        page_limit = 100 if kwargs.get("strict") else self.max_pages
+        while current_page <= page_limit:
             variables: dict[str, Any] = {
                 "storeCode": store_code,
                 "pageSize": page_size,
@@ -477,10 +489,13 @@ class TraderJoesAdapter(BaseDealAdapter):
                 query=query_to_run,
                 variables=variables,
                 operation_name=op_name,
+                **({"strict": True} if kwargs.get("strict") else {}),
             )
 
             data = res.get("data") if isinstance(res, dict) else None
             if not isinstance(data, dict):
+                if kwargs.get("strict"):
+                    raise ValueError("Invalid GraphQL data")
                 break
 
             items_to_process: list[dict[str, Any]] = []
@@ -495,6 +510,8 @@ class TraderJoesAdapter(BaseDealAdapter):
                         items_to_process.extend(raw_items)
                     page_info = products_data.get("page_info") or {}
                     total_pages = int(page_info.get("total_pages") or 1)
+                elif kwargs.get("strict"):
+                    raise ValueError("Invalid GraphQL products data")
             else:
                 # FearlessFlyerProducts dual-query payload (newProducts + limitedTime)
                 for key in ("newProducts", "limitedTime"):
@@ -507,6 +524,11 @@ class TraderJoesAdapter(BaseDealAdapter):
                         sub_pages = int(page_info.get("total_pages") or 1)
                         if sub_pages > total_pages:
                             total_pages = sub_pages
+                    elif kwargs.get("strict"):
+                        raise ValueError("Incomplete GraphQL products data")
+
+            if kwargs.get("strict") and total_pages > page_limit:
+                raise ValueError("GraphQL result exceeds the page limit")
 
             if not items_to_process:
                 break

@@ -8,9 +8,9 @@ export interface Address {
 export interface MealPlanDiscoveryRequest {
   address: Address;
   searchRadiusMiles: number;
-  maxStores: number;
   cuisines: string[];
   avoidIngredients: string[];
+  storesOnly?: boolean;
 }
 
 export interface StoreDto {
@@ -69,6 +69,12 @@ export interface DiscoveryResultDto {
 }
 
 export type DiscoveryJobResult = DiscoveryResultDto;
+
+export interface StoreDealCacheResult {
+  store_id: string;
+  status: 'cached' | 'missing' | 'error';
+  deals: Deal[];
+}
 
 export interface TaskStatusResponse<T> {
   jobId: string;

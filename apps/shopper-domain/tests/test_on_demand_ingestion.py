@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timezone, timedelta
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -332,6 +333,117 @@ def test_get_store_deals_endpoint():
 
         app.dependency_overrides.clear()
     print("test_get_store_deals_endpoint passed!")
+
+
+@pytest.mark.anyio
+async def test_complete_cache_requires_matching_current_partitions(tmp_path, monkeypatch):
+    redis = MockRedis()
+    storage = PartitionedDealStorage(redis_client=redis, base_storage_dir=str(tmp_path))  # type: ignore
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("PERSIST_DEALS_TO_DISK", "false")
+    await storage.save_deals(flyer_id="flyer", deals=[], valid_from=now - timedelta(minutes=1), valid_to=now + timedelta(days=1))
+    assert await storage.get_complete_primary_deals("flyer") == []
+
+    secondary_key = "deals:flyer:flyer:secondary"
+    secondary = json.loads(redis._store[secondary_key])
+    del redis._store[secondary_key]
+    assert await storage.get_complete_primary_deals("flyer") is None
+    secondary["generation"] = "different"
+    redis._store[secondary_key] = json.dumps(secondary)
+    assert await storage.get_complete_primary_deals("flyer") is None
+
+    secondary["generation"] = json.loads(redis._store["deals:flyer:flyer:primary"])["generation"]
+    secondary["valid_to"] = (now - timedelta(seconds=1)).isoformat()
+    redis._store[secondary_key] = json.dumps(secondary)
+    assert await storage.get_complete_primary_deals("flyer") is None
+
+    redis._store[secondary_key] = "[]"
+    assert await storage.get_complete_primary_deals("flyer") is None
+
+
+@pytest.mark.anyio
+async def test_flipp_strict_fetch_surfaces_upstream_errors(monkeypatch):
+    from src.ingestion.adapters import flipp_adapter
+
+    class DirectBreaker:
+        async def call(self, operation):
+            return await operation()
+
+    monkeypatch.setattr(flipp_adapter, "flipp_circuit_breaker", DirectBreaker())
+    transport = httpx.MockTransport(lambda request: httpx.Response(503, request=request))
+    async with httpx.AsyncClient(transport=transport) as client:
+        adapter = flipp_adapter.FlippAdapter(client=client)
+        with pytest.raises(httpx.HTTPStatusError):
+            await adapter.fetch_flyers_by_postal_code("90260", strict=True)
+        with pytest.raises(httpx.HTTPStatusError):
+            await adapter.fetch_promotions_for_flyer("123", strict=True)
+
+
+def test_progressive_cache_does_not_ingest_and_loads_empty_result(tmp_path):
+    redis = MockRedis()
+    storage = PartitionedDealStorage(redis_client=redis, base_storage_dir=str(tmp_path))  # type: ignore
+    adapter = MockAdapter(deals=[])
+    factory = DealAdapterFactory()
+    factory.register_adapter("empty_chain", adapter)
+
+    class StoreRepo:
+        async def get_store_context(self, store_id: str) -> Optional[Store]:
+            return Store(
+                id=store_id, name="Empty", street="123 Main St", city="Lawndale",
+                state="CA", zip_code="90260", latitude=33.89, longitude=-118.35,
+                chain_id="empty_chain",
+            )
+
+    app.dependency_overrides[get_deal_storage] = lambda: storage
+    app.dependency_overrides[get_deal_adapter_factory] = lambda: factory
+    app.dependency_overrides[get_store_repository] = lambda: StoreRepo()
+    try:
+        client = TestClient(app)
+        first = client.post("/v1/deals/progressive/cache", json={"store_ids": ["store-empty"]})
+        assert first.status_code == 200
+        assert first.json()["stores"][0]["status"] == "missing"
+        assert adapter.called_with == []
+
+        loaded = client.post("/v1/deals/progressive/stores/store-empty")
+        assert loaded.status_code == 200
+        assert loaded.json()["deals"] == []
+        assert len(adapter.called_with) == 1
+
+        cached = client.post("/v1/deals/progressive/cache", json={"store_ids": ["store-empty"]})
+        assert cached.json()["stores"][0]["status"] == "cached"
+        assert cached.json()["stores"][0]["deals"] == []
+        assert len(adapter.called_with) == 1
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_progressive_load_reports_ingestion_failure(tmp_path):
+    class BrokenAdapter(MockAdapter):
+        async def get_normalized_deals(self, *args: Any, **kwargs: Any) -> Any:
+            raise RuntimeError("upstream unavailable")
+
+    class StoreRepo:
+        async def get_store_context(self, store_id: str) -> Optional[Store]:
+            return Store(
+                id=store_id, name="Broken", street="123 Main St", city="Lawndale",
+                state="CA", zip_code="90260", latitude=33.89, longitude=-118.35,
+                chain_id="broken",
+            )
+
+    redis = MockRedis()
+    storage = PartitionedDealStorage(redis_client=redis, base_storage_dir=str(tmp_path))  # type: ignore
+    factory = DealAdapterFactory()
+    factory.register_adapter("broken", BrokenAdapter())
+    app.dependency_overrides[get_deal_storage] = lambda: storage
+    app.dependency_overrides[get_deal_adapter_factory] = lambda: factory
+    app.dependency_overrides[get_store_repository] = lambda: StoreRepo()
+    try:
+        client = TestClient(app)
+        assert client.post("/v1/deals/progressive/stores/broken-store").status_code == 502
+        response = client.post("/v1/deals/progressive/cache", json={"store_ids": ["broken-store"]})
+        assert response.json()["stores"][0]["status"] == "missing"
+    finally:
+        app.dependency_overrides.clear()
 
 
 if __name__ == "__main__":

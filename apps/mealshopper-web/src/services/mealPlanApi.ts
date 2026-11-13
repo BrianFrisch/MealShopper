@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { AUTH_REQUIRED_EVENT } from './authApi';
-import type { MealPlanDiscoveryRequest, DiscoveryJobResult, StoreDto, TaskStatusResponse } from '../types/discovery';
+import type { Deal, MealPlanDiscoveryRequest, DiscoveryJobResult, StoreDealCacheResult, StoreDto, TaskStatusResponse } from '../types/discovery';
 import type { MealPlanSynthesisRequest, MealPlanSynthesisResponse } from '../types/mealPlan';
 
 const apiClient = axios.create({
@@ -312,6 +312,23 @@ export const mealPlanApi = {
       authorizationHeaders(token)
     );
     return response.data;
+  },
+
+  async getDiscoveryCache(jobId: string, token: string, signal: AbortSignal): Promise<StoreDealCacheResult[]> {
+    const response = await apiClient.get<{ stores: StoreDealCacheResult[] }>(
+      `/v1/meal-plans/discovery/${encodeURIComponent(jobId)}/cache`,
+      { ...authorizationHeaders(token), signal }
+    );
+    return response.data.stores;
+  },
+
+  async loadStoreDeals(jobId: string, storeId: string, token: string, signal: AbortSignal): Promise<Deal[]> {
+    const response = await apiClient.post<{ deals: Deal[] }>(
+      `/v1/meal-plans/discovery/${encodeURIComponent(jobId)}/stores/${encodeURIComponent(storeId)}/deals`,
+      null,
+      { ...authorizationHeaders(token), signal }
+    );
+    return response.data.deals;
   },
 
   async startGeneration(

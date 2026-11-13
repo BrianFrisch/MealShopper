@@ -20,6 +20,8 @@ public class MealPlanDiscoveryRequest : IValidatableObject
     /// </summary>
     public int SearchRadiusMiles { get; set; } = 5;
 
+    /// <summary>Return stores without fetching deals for progressive discovery clients.</summary>
+    public bool StoresOnly { get; set; }
 
     public virtual IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {

@@ -27,6 +27,22 @@ public class ShopperClient : IShopperClient
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    public async Task<ProgressiveCacheResponse> GetProgressiveCacheAsync(IReadOnlyList<string> storeIds, CancellationToken ct = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync("v1/deals/progressive/cache", new { store_ids = storeIds }, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ProgressiveCacheResponse>(JsonOptions, ct)
+            ?? throw new InvalidOperationException("Shopper returned an empty cache response.");
+    }
+
+    public async Task<ProgressiveLoadResponse> LoadProgressiveStoreAsync(string storeId, CancellationToken ct = default)
+    {
+        using var response = await _httpClient.PostAsync($"v1/deals/progressive/stores/{Uri.EscapeDataString(storeId)}", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ProgressiveLoadResponse>(JsonOptions, ct)
+            ?? throw new InvalidOperationException("Shopper returned an empty deal response.");
+    }
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<DealItemDto>> GetDealsForStoreAsync(
         string storeId,

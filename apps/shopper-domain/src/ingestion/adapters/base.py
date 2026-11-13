@@ -75,7 +75,7 @@ class BaseDealAdapter(ABC):
         pass
 
     @abstractmethod
-    async def fetch_raw_items(self, flyer_id: Any) -> list[dict[str, Any]]:
+    async def fetch_raw_items(self, flyer_id: Any, **kwargs: Any) -> list[dict[str, Any]]:
         """
         Fetch raw promotional item dictionaries for a given flyer ID.
         """
@@ -170,7 +170,7 @@ class BaseDealAdapter(ABC):
         valid_from = valid_from or default_valid_from
         valid_to = valid_to or default_valid_to
 
-        raw_items = await self.fetch_raw_items(flyer_id)
+        raw_items = await self.fetch_raw_items(flyer_id, **({"strict": True} if kwargs.get("strict") else {}))
         if not raw_items:
             logger.warning("No raw items found for flyer_id=%s", flyer_id)
             return valid_from, valid_to, []

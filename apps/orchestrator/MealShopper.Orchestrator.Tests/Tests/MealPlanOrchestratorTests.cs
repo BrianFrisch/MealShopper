@@ -652,6 +652,37 @@ public class MealPlanOrchestratorTests
     #region ProcessDiscoveryJobAsync Tests
 
     [Fact]
+    public async Task ProcessDiscoveryJobAsync_StoresOnly_CompletesWithoutFetchingDeals()
+    {
+        var jobs = new InMemoryJobTracker();
+        var shopper = new Mock<IShopperClient>();
+        shopper.Setup(s => s.DiscoverStoresAsync(It.IsAny<double>(), It.IsAny<double>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<StoreDto> { new() { Id = "store-1", Name = "Store" } });
+        var orchestrator = new MealPlanOrchestrator(
+            shopper.Object, Mock.Of<IPlannerClient>(), Mock.Of<IPlanningClient>(), jobs,
+            NullLogger<MealPlanOrchestrator>.Instance, Mock.Of<IGeocodingService>());
+        var id = Guid.NewGuid();
+        await jobs.CreateJobAsync(new JobRecord
+        {
+            JobId = id,
+            JobType = JobType.StoreDiscovery,
+            RequestPayloadJson = System.Text.Json.JsonSerializer.Serialize(new MealPlanDiscoveryRequest
+            {
+                StoresOnly = true,
+                Address = new AddressDto { Latitude = 33.9, Longitude = -118.3 }
+            })
+        });
+
+        await orchestrator.ProcessDiscoveryJobAsync(id);
+
+        var job = await jobs.GetJobAsync(id);
+        job!.Status.Should().Be(JobStatus.Completed);
+        job.GetResult<DiscoveryResultDto>()!.Stores.Should().ContainSingle();
+        job.GetResult<DiscoveryResultDto>()!.Deals.Should().BeEmpty();
+        shopper.Verify(s => s.GetDealsForStoreAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task ProcessDiscoveryJobAsync_ProgressesThroughStagesAndCompletesWithoutPlanning()
     {
         // Arrange

@@ -126,6 +126,28 @@ async def test_fetch_flyer_metadata():
 
 
 @pytest.mark.anyio
+async def test_strict_fetch_reads_all_pages_and_rejects_partial_results():
+    def handler(request: httpx.Request) -> httpx.Response:
+        page = json.loads(request.content)["variables"]["currentPage"]
+        return httpx.Response(200, json={"data": {"products": {
+            "items": [{"sku": str(page), "name": "Item"}],
+            "page_info": {"total_pages": 2},
+        }}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        adapter = TraderJoesAdapter(client=client, max_pages=1)
+        assert len(await adapter.fetch_raw_items("34")) == 1
+        assert len(await adapter.fetch_raw_items("34", strict=True)) == 2
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, json={"errors": [{"message": "failed"}]})
+    )) as client:
+        adapter = TraderJoesAdapter(client=client)
+        with pytest.raises(ValueError):
+            await adapter.fetch_raw_items("34", strict=True)
+
+
+@pytest.mark.anyio
 async def test_fetch_raw_items_graphql():
     requested_bodies = []
 

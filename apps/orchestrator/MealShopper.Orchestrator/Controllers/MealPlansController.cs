@@ -115,6 +115,7 @@ public class MealPlansController : ControllerBase
         var job = new JobRecord
         {
             JobId = jobId,
+            UserId = _userContext.UserId,
             JobType = JobType.StoreDiscovery,
             Status = JobStatus.Pending,
             RequestPayloadJson = JsonSerializer.Serialize(request),

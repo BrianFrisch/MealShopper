@@ -111,6 +111,10 @@ class EvaluateTopDealsRequest(BaseModel):
     tier: str = Field(default="primary", description="primary (meat/seafood), secondary, or all")
 
 
+class StoreDealCacheRequest(BaseModel):
+    store_ids: List[str] = Field(min_length=1)
+
+
 class LookupIngredientsRequest(BaseModel):
     store_ids: List[str] = Field(
         default_factory=list,

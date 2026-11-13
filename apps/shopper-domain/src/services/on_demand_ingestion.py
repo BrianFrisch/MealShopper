@@ -27,18 +27,22 @@ async def _find_cached_deals(
     chain: str,
     store_id: str,
     tier: str,
-) -> list[dict[str, Any]]:
+    strict: bool = False,
+) -> list[dict[str, Any]] | None:
     flyer_id = await storage.get_flyer_id_for_postal(postal_code, chain)
     target_ids: list[str] = []
     if flyer_id:
         target_ids.append(flyer_id)
-    if store_id:
+    if store_id and (not strict or not flyer_id):
         target_ids.append(store_id)
     for fid in target_ids:
-        deals = await storage.get_deals_by_flyer_id(fid, tier)
-        if deals:
+        deals = (
+            await storage.get_complete_primary_deals(fid)
+            if strict else await storage.get_deals_by_flyer_id(fid, tier)
+        )
+        if deals is not None and (strict or deals):
             return deals
-    return []
+    return None if strict else []
 
 
 async def ingest_store_on_demand(
@@ -48,6 +52,7 @@ async def ingest_store_on_demand(
     storage: PartitionedDealStorage,
     factory: DealAdapterFactory,
     tier: str = "primary",
+    strict: bool = False,
 ) -> list[dict[str, Any]]:
     clean_chain = chain.strip().lower().replace(" ", "")
     lock_key = f"lock:ingest:{clean_chain}:{postal_code}"
@@ -63,34 +68,43 @@ async def ingest_store_on_demand(
         max_polls = max(50, lock_ttl_seconds * 2)
         for _ in range(max_polls):
             await asyncio.sleep(0.5)
-            cached = await _find_cached_deals(storage, postal_code, chain, store_id, tier)
-            if cached:
+            cached = await _find_cached_deals(storage, postal_code, chain, store_id, tier, strict)
+            if cached is not None and (strict or cached):
                 return cached
             # If lock cleared, worker finished or released
             lock_val = await redis_client.get(lock_key)
             if not lock_val:
                 await asyncio.sleep(0.5)
-                cached = await _find_cached_deals(storage, postal_code, chain, store_id, tier)
-                if cached:
+                cached = await _find_cached_deals(storage, postal_code, chain, store_id, tier, strict)
+                if cached is not None and (strict or cached):
                     return cached
                 break
 
         # Final fallback check before attempting recovery
-        cached = await _find_cached_deals(storage, postal_code, chain, store_id, tier)
-        if cached:
+        cached = await _find_cached_deals(storage, postal_code, chain, store_id, tier, strict)
+        if cached is not None and (strict or cached):
             return cached
 
         # If previous worker crashed or timed out without saving deals, try acquiring the lock to recover
         acquired = await redis_client.set(lock_key, "1", nx=True, ex=lock_ttl_seconds)
         if not acquired:
+            if strict:
+                raise RuntimeError("Deal ingestion is still in progress")
             return []
 
     try:
-        adapter = await factory.get_or_load_adapter(chain)
+        try:
+            adapter = await factory.get_or_load_adapter(chain)
+        except Exception as exc:
+            logger.warning("Unable to load adapter for %s; checking registered adapters: %s", chain, exc)
+            adapter = factory.get_adapter(chain)
     except Exception:
-        adapter = factory.get_adapter(chain)
+        await redis_client.delete(lock_key)
+        raise
     if adapter is None:
         await redis_client.delete(lock_key)
+        if strict:
+            raise RuntimeError(f"No deal adapter available for {chain}")
         return []
 
     # 2. Worker executing the scrape
@@ -99,19 +113,23 @@ async def ingest_store_on_demand(
         flyer_id = None
         meta = None
         try:
-            meta = await adapter.fetch_flyer_metadata(postal_code, chain_id=chain)
+            metadata_options = {"strict": True} if strict else {}
+            meta = await adapter.fetch_flyer_metadata(postal_code, chain_id=chain, **metadata_options)
             if meta and meta[0]:
                 flyer_id = str(meta[0])
         except Exception as exc:
             logger.warning("Error fetching flyer metadata for %s: %s", chain, exc)
+            if strict:
+                raise
 
         valid_from, valid_to, deals = await adapter.get_normalized_deals(
             postal_code=postal_code,
             store_id=store_id,
             merchant_name=chain,
             flyer_metadata=meta,
+            **({"strict": True} if strict else {}),
         )
-        if deals:
+        if deals or strict:
             if not flyer_id:
                 flyer_id = str(store_id)
 
@@ -145,6 +163,8 @@ async def ingest_store_on_demand(
         return []
     except Exception as exc:
         logger.error("On-demand ingestion failed for store %s (%s): %s", store_id, chain, exc, exc_info=True)
+        if strict:
+            raise
         return []
     finally:
         # 3. Always release lock so queued readers can complete immediately

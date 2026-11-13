@@ -95,7 +95,7 @@ class FlippAdapter(BaseDealAdapter):
         return merchant_lower in str(name_candidate).lower()
 
     async def fetch_flyers_by_postal_code(
-        self, postal_code: str, merchant_name: Optional[str] = None
+        self, postal_code: str, merchant_name: Optional[str] = None, *, strict: bool = False
     ) -> list[dict[str, Any]]:
         """
         Fetch active flyers for a given postal code and filter by target merchant.
@@ -120,6 +120,10 @@ class FlippAdapter(BaseDealAdapter):
                 raw = data.get("flyers")
                 if isinstance(raw, list):
                     raw_flyers = [f for f in raw if isinstance(f, dict)]
+                elif strict:
+                    raise ValueError("Invalid flyer response")
+            elif strict:
+                raise ValueError("Invalid flyer response")
 
             for flyer_obj in raw_flyers:
                 if self.is_merchant_match(flyer_obj, target_merchant):
@@ -137,12 +141,16 @@ class FlippAdapter(BaseDealAdapter):
             return await flipp_circuit_breaker.call(_do_request)
         except CircuitBreakerOpenException as cbe:
             logger.warning("Flipp breaker active: %s", cbe)
+            if strict:
+                raise
             return []
         except Exception as exc:
             logger.error("Error fetching flyers for postal_code=%s: %s", postal_code, exc)
+            if strict:
+                raise
             return []
 
-    async def fetch_promotions_for_flyer(self, flyer_id: Any) -> list[dict[str, Any]]:
+    async def fetch_promotions_for_flyer(self, flyer_id: Any, *, strict: bool = False) -> list[dict[str, Any]]:
         """
         Fetch promotional items array for a specific flyer ID.
         """
@@ -170,15 +178,21 @@ class FlippAdapter(BaseDealAdapter):
                 if isinstance(promos_val, list):
                     return promos_val
 
+            if strict:
+                raise ValueError("Invalid flyer items response")
             return []
 
         try:
             return await flipp_circuit_breaker.call(_do_request)
         except CircuitBreakerOpenException as cbe:
             logger.warning("Flipp breaker active: %s", cbe)
+            if strict:
+                raise
             return []
         except Exception as exc:
             logger.error("Error fetching promos for flyer_id=%s: %s", flyer_id, exc)
+            if strict:
+                raise
             return []
 
     def _parse_datetime(self, date_val: Any, default: datetime) -> datetime:
@@ -405,7 +419,9 @@ class FlippAdapter(BaseDealAdapter):
         default_valid_from = now
         default_valid_to = now + timedelta(days=7)
 
-        flyers = await self.fetch_flyers_by_postal_code(postal_code, merchant_name=target_merchant)
+        flyers = await self.fetch_flyers_by_postal_code(
+            postal_code, merchant_name=target_merchant, **({"strict": True} if kwargs.get("strict") else {})
+        )
         if not flyers:
             logger.warning(
                 "No active flyer found for merchant='%s' in postal_code=%s",
@@ -431,11 +447,11 @@ class FlippAdapter(BaseDealAdapter):
         flyer_id = flyer.get("id") or flyer.get("flyer_id")
         return (str(flyer_id) if flyer_id is not None else None), valid_from, valid_to
 
-    async def fetch_raw_items(self, flyer_id: Any) -> list[dict[str, Any]]:
+    async def fetch_raw_items(self, flyer_id: Any, **kwargs: Any) -> list[dict[str, Any]]:
         """
         Calls Flipp /items endpoint for the given flyer ID.
         """
-        return await self.fetch_promotions_for_flyer(flyer_id)
+        return await self.fetch_promotions_for_flyer(flyer_id, **({"strict": True} if kwargs.get("strict") else {}))
 
     def extract_product_name(self, item: dict[str, Any]) -> str:
         """

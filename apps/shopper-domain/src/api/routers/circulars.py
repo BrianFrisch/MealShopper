@@ -1,4 +1,6 @@
 import json
+import asyncio
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,7 +11,7 @@ from dependencies import (
     get_store_repository,
 )
 from geo_service import StoreRepository
-from models import EvaluateTopDealsRequest, StoreCircularIngestRequest
+from models import EvaluateTopDealsRequest, StoreCircularIngestRequest, StoreDealCacheRequest
 from src.ingestion.factory import DealAdapterFactory
 from src.ingestion.models import CoordinatesDto, RegionContextDto, TopDealsResponse
 from src.services.deal_evaluator import deduplicate_and_rank_deals
@@ -17,6 +19,70 @@ from src.services.on_demand_ingestion import ingest_store_on_demand
 from src.storage.deal_storage import PartitionedDealStorage
 
 router = APIRouter(prefix="/v1/deals", tags=["Circulars"])
+logger = logging.getLogger(__name__)
+
+
+async def _progressive_store_cache(
+    store_id: str, storage: PartitionedDealStorage, store_repo: StoreRepository
+) -> Optional[list[dict[str, Any]]]:
+    raw_context = await storage.redis.get(f"deals:store:{store_id}:context")
+    flyer_id = None
+    if raw_context:
+        try:
+            flyer_id = json.loads(raw_context).get("flyer_id")
+        except (ValueError, TypeError, AttributeError):
+            logger.warning("Invalid cached context for store %s", store_id)
+    if not flyer_id:
+        ctx = await store_repo.get_store_context(store_id)
+        if ctx:
+            chain = ctx.chain_id or ctx.adapter_name
+            if ctx.zip_code and chain:
+                flyer_id = await storage.get_flyer_id_for_postal(ctx.zip_code, chain)
+    return await storage.get_complete_primary_deals(str(flyer_id or store_id))
+
+
+@router.post("/progressive/cache")
+async def get_progressive_cache(
+    payload: StoreDealCacheRequest,
+    storage: PartitionedDealStorage = Depends(get_deal_storage),
+    store_repo: StoreRepository = Depends(get_store_repository),
+) -> Dict[str, Any]:
+    async def lookup(store_id: str) -> Dict[str, Any]:
+        try:
+            deals = await _progressive_store_cache(store_id, storage, store_repo)
+            return {"store_id": store_id, "status": "cached" if deals is not None else "missing", "deals": deals or []}
+        except Exception:
+            logger.exception("Cache lookup failed for store %s", store_id)
+            return {"store_id": store_id, "status": "error", "deals": []}
+
+    return {"stores": await asyncio.gather(*(lookup(store_id) for store_id in payload.store_ids))}
+
+
+@router.post("/progressive/stores/{store_id}")
+async def load_progressive_store_deals(
+    store_id: str,
+    storage: PartitionedDealStorage = Depends(get_deal_storage),
+    factory: DealAdapterFactory = Depends(get_deal_adapter_factory),
+    store_repo: StoreRepository = Depends(get_store_repository),
+) -> Dict[str, Any]:
+    cached = await _progressive_store_cache(store_id, storage, store_repo)
+    if cached is not None:
+        return {"store_id": store_id, "deals": cached}
+    ctx = await store_repo.get_store_context(store_id)
+    if not ctx:
+        raise HTTPException(status_code=404, detail="Store not found")
+    chain = ctx.chain_id or ctx.adapter_name
+    if not ctx.zip_code or not chain:
+        raise HTTPException(status_code=422, detail="Store is missing deal source information")
+    try:
+        deals = await ingest_store_on_demand(
+            store_id=store_id, chain=chain, postal_code=ctx.zip_code,
+            storage=storage, factory=factory, tier="primary", strict=True,
+        )
+    except Exception as exc:
+        logger.exception("Deal loading failed for store %s", store_id)
+        raise HTTPException(status_code=502, detail="Unable to load store deals") from exc
+    return {"store_id": store_id, "deals": deals}
 
 
 @router.post("/ingest")

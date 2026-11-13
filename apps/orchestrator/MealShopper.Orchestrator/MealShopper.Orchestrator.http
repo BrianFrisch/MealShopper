@@ -1,6 +1,33 @@
 @MealShopper.Orchestrator_HostAddress = http://localhost:5277
+@Gateway_HostAddress = http://localhost:5247
+@token = replace-with-access-token
+@discoveryJobId = replace-with-discovery-job-id
+@storeId = replace-with-discovered-store-id
 
 GET {{MealShopper.Orchestrator_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+### Start a stores-only discovery and poll the returned job ID at /v1/tasks/{jobId}
+POST {{Gateway_HostAddress}}/v1/meal-plans/discovery
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "address": { "street": "123 Main St", "city": "Los Angeles", "state": "CA", "zipCode": "90007" },
+  "searchRadiusMiles": 5,
+  "storesOnly": true
+}
+
+### Inspect cached deals without starting ingestion
+GET {{Gateway_HostAddress}}/v1/meal-plans/discovery/{{discoveryJobId}}/cache
+Authorization: Bearer {{token}}
+
+### Load or retry deals for a store in that discovery
+POST {{Gateway_HostAddress}}/v1/meal-plans/discovery/{{discoveryJobId}}/stores/{{storeId}}/deals
+Authorization: Bearer {{token}}
+
+### A store not in the discovery returns 404
+POST {{Gateway_HostAddress}}/v1/meal-plans/discovery/{{discoveryJobId}}/stores/unknown/deals
+Authorization: Bearer {{token}}

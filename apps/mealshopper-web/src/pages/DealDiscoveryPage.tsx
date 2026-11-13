@@ -9,6 +9,7 @@ import { authApi } from '../services/authApi';
 import { MapPin, Store as StoreIcon, Loader2, RotateCcw } from 'lucide-react';
 
 type SelectedDealsViewMode = 'collapsed' | 'limited' | 'full';
+type StoreDealStatus = 'checking' | 'missing' | 'loading' | 'loaded' | 'error';
 
 const SUBTYPE_FILTERS: Array<'All' | ProteinSubtype> = [
   'All', 'Beef', 'Chicken', 'Pork', 'Turkey', 'Seafood', 'Lamb'
@@ -71,6 +72,7 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
   const [stageDescription, setStageDescription] = useState<string | null>(null);
   const [discoveredStores, setDiscoveredStores] = useState<Store[]>([]);
   const [discoveredDeals, setDiscoveredDeals] = useState<Deal[]>([]);
+  const [storeDealStates, setStoreDealStates] = useState<Record<string, StoreDealStatus>>({});
   const [selectedDeals, setSelectedDeals] = useState<Deal[]>(() => {
     const storedSelectedDeals = localStorage.getItem(SELECTED_DEALS_STORAGE_KEY);
     return storedSelectedDeals === null ? [] : JSON.parse(storedSelectedDeals) as Deal[];
@@ -80,15 +82,24 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
   const [isSearchHidden, setIsSearchHidden] = useState(false);
   const [selectedDealsViewMode, setSelectedDealsViewMode] = useState<SelectedDealsViewMode>('collapsed');
   const pollIntervalRef = useRef<number | null>(null);
+  const searchVersionRef = useRef(0);
+  const dealAbortRef = useRef<AbortController | null>(null);
+  const activeLoadsRef = useRef<Set<string>>(new Set());
+  const discoveryJobRef = useRef<string | null>(null);
   
   // Auth state
   const [isLoginOpen, setIsLoginOpen] = useState(false);
 
   useEffect(() => {
+    const invalidateSearch = () => {
+      searchVersionRef.current++;
+      dealAbortRef.current?.abort();
+    };
     return () => {
       if (pollIntervalRef.current !== null) {
         clearInterval(pollIntervalRef.current);
       }
+      invalidateSearch();
     };
   }, []);
 
@@ -108,6 +119,73 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
     }
 
     return (deal.store_name || deal.storeName) === store.name;
+  };
+
+  const loadDeals = async (
+    store: Store, jobId: string, token: string, version: number, signal: AbortSignal
+  ) => {
+    const key = getStoreKey(store);
+    if (activeLoadsRef.current.has(key) || signal.aborted) return;
+    activeLoadsRef.current.add(key);
+    setStoreDealStates(current => ({ ...current, [key]: 'loading' }));
+    try {
+      const deals = await mealPlanApi.loadStoreDeals(jobId, key, token, signal);
+      if (searchVersionRef.current !== version || signal.aborted) return;
+      setDiscoveredDeals(current => [...current.filter(deal => !dealBelongsToStore(deal, store)), ...deals]);
+      setStoreDealStates(current => ({ ...current, [key]: 'loaded' }));
+    } catch (err: any) {
+      if (searchVersionRef.current !== version || signal.aborted) return;
+      if (err?.response?.status === 401) {
+        authApi.logout();
+        setIsLoginOpen(true);
+      }
+      setStoreDealStates(current => ({ ...current, [key]: 'error' }));
+    } finally {
+      if (searchVersionRef.current === version) activeLoadsRef.current.delete(key);
+    }
+  };
+
+  const checkCache = async (stores: Store[], jobId: string, token: string, version: number, signal: AbortSignal) => {
+    if (stores.length === 0) return;
+    try {
+      const results = await mealPlanApi.getDiscoveryCache(jobId, token, signal);
+      if (searchVersionRef.current !== version || signal.aborted) return;
+      const byId = new Map(results.map(result => [result.store_id, result]));
+      const uncached = stores.filter(store => byId.get(getStoreKey(store))?.status === 'missing')
+        .sort((a, b) => (a.distance_miles ?? a.distanceMiles ?? Infinity) - (b.distance_miles ?? b.distanceMiles ?? Infinity));
+      const automatic = new Set(uncached.slice(0, 5).map(getStoreKey));
+      const states: Record<string, StoreDealStatus> = {};
+      const cachedDeals: Deal[] = [];
+      for (const store of stores) {
+        const key = getStoreKey(store);
+        const result = byId.get(key);
+        states[key] = result?.status === 'cached' ? 'loaded'
+          : result?.status === 'missing' ? (automatic.has(key) ? 'loading' : 'missing')
+          : 'error';
+        if (result?.status === 'cached') cachedDeals.push(...result.deals);
+      }
+      setDiscoveredDeals(cachedDeals);
+      setStoreDealStates(states);
+      for (const store of uncached.slice(0, 5)) void loadDeals(store, jobId, token, version, signal);
+    } catch (err: any) {
+      if (searchVersionRef.current !== version || signal.aborted) return;
+      if (err?.response?.status === 401) {
+        authApi.logout();
+        setIsLoginOpen(true);
+      }
+      setStoreDealStates(Object.fromEntries(stores.map(store => [getStoreKey(store), 'error'])));
+    }
+  };
+
+  const handleLoadDeals = (store: Store) => {
+    const token = authApi.getToken();
+    const jobId = discoveryJobRef.current;
+    const controller = dealAbortRef.current;
+    if (!token) {
+      setIsLoginOpen(true);
+      return;
+    }
+    if (jobId && controller) void loadDeals(store, jobId, token, searchVersionRef.current, controller.signal);
   };
 
   const getDealStoreKey = (deal: Deal) => (
@@ -161,6 +239,10 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
   };
 
   const handleRestartSearch = () => {
+    searchVersionRef.current++;
+    dealAbortRef.current?.abort();
+    discoveryJobRef.current = null;
+    activeLoadsRef.current.clear();
     if (pollIntervalRef.current !== null) {
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
@@ -168,6 +250,9 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
     setLoading(false);
     setStageDescription(null);
     setIsSearchHidden(false);
+    setDiscoveredStores([]);
+    setDiscoveredDeals([]);
+    setStoreDealStates({});
   };
 
   const handleStartDiscovery = async () => {
@@ -186,11 +271,19 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
       pollIntervalRef.current = null;
     }
 
+    searchVersionRef.current++;
+    const version = searchVersionRef.current;
+    dealAbortRef.current?.abort();
+    const controller = new AbortController();
+    dealAbortRef.current = controller;
+    discoveryJobRef.current = null;
+    activeLoadsRef.current.clear();
     setIsSearchHidden(true);
     setLoading(true);
     setStageDescription('Submitting discovery request...');
     setDiscoveredStores([]);
     setDiscoveredDeals([]);
+    setStoreDealStates({});
     setSelectedDeals([]);
     localStorage.setItem(SELECTED_DEALS_STORAGE_KEY, JSON.stringify([]));
     setExpandedStoreId(null);
@@ -199,29 +292,33 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
       const payload: MealPlanDiscoveryRequest = {
         address: normalizedAddress,
         searchRadiusMiles,
-        maxStores: 2,
         cuisines: [],
-        avoidIngredients: []
+        avoidIngredients: [],
+        storesOnly: true
       };
 
       const { jobId } = await mealPlanApi.startDiscovery(payload, token);
+      if (searchVersionRef.current !== version) return;
+      discoveryJobRef.current = jobId;
 
+      let pollInFlight = false;
       const pollInterval = window.setInterval(async () => {
+        if (pollInFlight) return;
+        pollInFlight = true;
         try {
           const statusRes = await mealPlanApi.pollTaskStatus(jobId, token);
+          if (searchVersionRef.current !== version) return;
           setStageDescription(statusRes.stageDescription || 'Processing flyer deals...');
 
           if (statusRes.status === 'Completed' && statusRes.result) {
             clearInterval(pollInterval);
             pollIntervalRef.current = null;
-            setDiscoveredStores(statusRes.result.stores || []);
-            setDiscoveredDeals(statusRes.result.deals || []);
+            const stores = statusRes.result.stores || [];
+            setDiscoveredStores(stores);
+            setStoreDealStates(Object.fromEntries(stores.map(store => [getStoreKey(store), 'checking'])));
             setLoading(false);
-            setStageDescription(
-              statusRes.stageDescription?.includes('Partial deal results:')
-                ? statusRes.stageDescription
-                : null
-            );
+            setStageDescription(stores.length === 0 ? 'No stores found within search radius.' : null);
+            void checkCache(stores, jobId, token, version, controller.signal);
           } else if (statusRes.status === 'Failed') {
             clearInterval(pollInterval);
             pollIntervalRef.current = null;
@@ -230,6 +327,7 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
             setStageDescription(null);
           }
         } catch (err: any) {
+          if (searchVersionRef.current !== version) return;
           clearInterval(pollInterval);
           pollIntervalRef.current = null;
           setLoading(false);
@@ -239,10 +337,13 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
           } else {
             alert('Unable to check discovery status. Please try again.');
           }
+        } finally {
+          pollInFlight = false;
         }
-      }, 2500);
+      }, 500);
       pollIntervalRef.current = pollInterval;
     } catch (err: any) {
+      if (searchVersionRef.current !== version) return;
       setLoading(false);
       setStageDescription(null);
       if (err?.response?.status === 401) {
@@ -383,7 +484,7 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
               {loading && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-semibold text-[#E66E1D]">
                   <Loader2 className="h-3 w-3 animate-spin" />
-                  Searching Circulars...
+                  Finding stores...
                 </span>
               )}
               {stageDescription && (
@@ -612,15 +713,17 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
                 const isExpanded = expandedStoreId === storeKey;
                 const storeAddress = getStoreAddress(store);
                 const distance = store.distance_miles ?? store.distanceMiles;
+                const dealStatus = storeDealStates[storeKey] || 'checking';
 
                 return (
                   <section key={storeKey} className="rounded-xl sm:rounded-2xl border border-stone-200 bg-white shadow-sm">
-                    <button
-                      type="button"
-                      aria-expanded={isExpanded}
-                      onClick={() => setExpandedStoreId(isExpanded ? null : storeKey)}
-                      className="flex w-full flex-wrap items-center justify-between gap-2 sm:gap-4 rounded-xl sm:rounded-2xl bg-stone-50 px-3 py-2.5 sm:p-4 text-left transition hover:bg-stone-100"
-                    >
+                    <div className="flex items-center justify-between gap-2 sm:gap-4 rounded-xl sm:rounded-2xl bg-stone-50 px-3 py-2.5 sm:p-4">
+                      <button
+                        type="button"
+                        aria-expanded={isExpanded}
+                        onClick={() => setExpandedStoreId(isExpanded ? null : storeKey)}
+                        className="min-w-0 flex-1 text-left"
+                      >
                       <span className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                         <span className="shrink-0 rounded-lg sm:rounded-xl bg-[#1E7538]/10 p-2 text-[#1E7538]">
                           <StoreIcon className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -632,10 +735,30 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
                           </span>
                         </span>
                       </span>
-                      <span className="shrink-0 text-xs font-semibold text-[#E66E1D]">
-                        {storeDeals.length} Deals Found
-                      </span>
-                    </button>
+                      </button>
+                      {dealStatus === 'loaded' ? (
+                        <span className="shrink-0 text-xs font-semibold text-[#E66E1D]">
+                          {storeDeals.length} Deals Found
+                        </span>
+                      ) : dealStatus === 'checking' || dealStatus === 'loading' ? (
+                        <span role="status" className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[#E66E1D]">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          {dealStatus === 'checking' ? 'Checking deals...' : 'Loading deals...'}
+                        </span>
+                      ) : (
+                        <span className="shrink-0 text-right">
+                          {dealStatus === 'error' && <span role="alert" className="mr-2 text-xs text-rose-700">Unable to load deals.</span>}
+                          <button
+                            type="button"
+                            onClick={() => handleLoadDeals(store)}
+                            aria-label={`${dealStatus === 'error' ? 'Retry loading' : 'Load'} deals for ${store.name}`}
+                            className="rounded-full bg-[#E66E1D] px-3 py-1 text-xs font-semibold text-white hover:bg-[#d25f12]"
+                          >
+                            {dealStatus === 'error' ? 'Retry' : 'Load Deals'}
+                          </button>
+                        </span>
+                      )}
+                    </div>
 
                     {isExpanded && (
                       <div className="p-2 sm:p-4">
@@ -712,7 +835,9 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
                           </div>
                         ) : (
                           <p className="py-3 text-xs sm:text-sm italic text-stone-400">
-                            {storeDeals.length === 0
+                            {dealStatus !== 'loaded'
+                              ? 'Deals have not been loaded for this location.'
+                              : storeDeals.length === 0
                               ? 'No promotional circular items retrieved for this location.'
                               : `No ${selectedSubtype} deals found at this store.`}
                           </p>
