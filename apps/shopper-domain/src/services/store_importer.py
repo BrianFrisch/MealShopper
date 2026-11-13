@@ -112,14 +112,14 @@ def parse_geojson_feature(
         props.get("addr:state") or props.get("state") or props.get("addr:province") or ""
     ).strip().upper()
 
-    if not is_matching_state(store_state, target_state):
+    if target_state != "ALL" and not is_matching_state(store_state, target_state):
         logger.info("Skipping store not in target state: %s (target: %s)", store_state, target_state)
         return None
 
     brand = (props.get("brand") or props.get("name") or "").strip()
     target_banner = meta["display_name"].lower()
     if not is_matching_banner(brand, target_banner) and not include_all_brands:
-        logger.info("Skipping store not matching target banner: %s (target: %s)", brand, target_banner)
+        # logger.info("Skipping store not matching target banner: %s (target: %s)", brand, target_banner)
         return None
 
     raw_num = props.get("ref") or props.get("store_number") or props.get("@id")
