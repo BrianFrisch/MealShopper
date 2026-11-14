@@ -63,10 +63,12 @@ def is_matching_state(store_state: str, target_state: str) -> bool:
 
 
 def is_matching_banner(brand: str, target_banner: str) -> bool:
-    brand_lower = brand.lower()
-    if target_banner.lower() not in brand_lower:
+    # Strip apostrophes so "Macey's" matches "Maceys"
+    brand_norm = brand.lower().replace("'", "").replace("’", "")
+    target_norm = target_banner.lower().replace("'", "").replace("’", "")
+    if target_norm not in brand_norm:
         return False
-    if "fuel" in brand_lower or "gas" in brand_lower:
+    if "fuel" in brand_norm or "gas" in brand_norm:
         return False
     return True
 
@@ -99,24 +101,28 @@ def parse_geojson_feature(
     if not geom:
         return None
 
-    coords = geom.get("coordinates", [])
-    if not coords or len(coords) < 2:
+    point = _extract_point_coords(geom)
+    if not point:
         return None
+    lon, lat = float(point[0]), float(point[1])
 
     if props.get("addr:country") and props.get("addr:country").strip().upper() != "US":
         logger.info("Skipping non-US store: %s", props.get("addr:country"))
         return None
 
-    lon, lat = float(coords[0]), float(coords[1])
     store_state = (
         props.get("addr:state") or props.get("state") or props.get("addr:province") or ""
     ).strip().upper()
+
+    # if not store_state:
+    #     logger.info("Store state unspecified, skipping store: %s", store_state)
+    #     return None
 
     if target_state != "ALL" and not is_matching_state(store_state, target_state):
         logger.info("Skipping store not in target state: %s (target: %s)", store_state, target_state)
         return None
 
-    brand = (props.get("brand") or props.get("name") or "").strip()
+    brand = (props.get("brand") or props.get("name") or props.get("operator") or props.get("full_name") or "").strip()
     target_banner = meta["display_name"].lower()
     if not is_matching_banner(brand, target_banner) and not include_all_brands:
         # logger.info("Skipping store not matching target banner: %s (target: %s)", brand, target_banner)
@@ -128,6 +134,10 @@ def parse_geojson_feature(
 
     street, city, postal_code = resolve_address(props)
 
+    if not postal_code:
+        logger.info("Postal code unspecified, skipping store: %s", store_id)
+        return None
+    
     return {
         "store_id": store_id,
         "chain_id": chain_key,
@@ -156,6 +166,39 @@ def deduplicate_stores(stores: Sequence[ParsedStore]) -> List[ParsedStore]:
 
     return list(unique_locations.values())
 
+def _extract_point_coords(geom: Dict[str, Any]) -> Optional[Tuple[float, float]]:
+    """Extract (lon, lat) from Point, LineString, Polygon, or MultiPolygon."""
+    geom_type = geom.get("type")
+    coords = geom.get("coordinates")
+    if not coords:
+        return None
+
+    if geom_type == "Point" and len(coords) >= 2:
+        return float(coords[0]), float(coords[1])
+
+    if geom_type == "LineString" and len(coords) >= 2:
+        # Exclude duplicate closing vertex on closed building rings
+        ring = coords[:-1] if len(coords) > 2 and coords[0] == coords[-1] else coords
+        return (
+            sum(p[0] for p in ring) / len(ring),
+            sum(p[1] for p in ring) / len(ring),
+        )
+
+    if geom_type == "Polygon" and coords[0]:
+        ring = coords[0][:-1] if len(coords[0]) > 2 and coords[0][0] == coords[0][-1] else coords[0]
+        return (
+            sum(p[0] for p in ring) / len(ring),
+            sum(p[1] for p in ring) / len(ring),
+        )
+
+    if geom_type == "MultiPolygon" and coords[0] and coords[0][0]:
+        ring = coords[0][0]
+        return (
+            sum(p[0] for p in ring) / len(ring),
+            sum(p[1] for p in ring) / len(ring),
+        )
+
+    return None
 
 class StoreImportService:
     def __init__(self, db_url: str, chain_service: Optional[GroceryChainService] = None):

@@ -1,0 +1,338 @@
+﻿{
+    "type":  "FeatureCollection",
+    "features":  [
+                     {
+                         "type":  "Feature",
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -111.9729811,
+                                                              41.1966803
+                                                          ]
+                                      },
+                         "properties":  {
+                                            "name":  "Macey\u0027s",
+                                            "shop":  "supermarket",
+                                            "osm_id":  711314834
+                                        }
+                     },
+                     {
+                         "type":  "Feature",
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -112.2961288,
+                                                              40.5493923
+                                                          ]
+                                      },
+                         "properties":  {
+                                            "addr:city":  "Tooele",
+                                            "addr:housenumber":  "972",
+                                            "addr:postcode":  "84074",
+                                            "addr:state":  "UT",
+                                            "addr:street":  "North Main Street",
+                                            "name":  "Macey\u0027s Grocery Store",
+                                            "opening_hours":  "Mo-Th 06:00-23:00, Fr,Sa 06:00-24:00, Su 07:00-22:00",
+                                            "phone":  "+1-435-843-8722",
+                                            "shop":  "supermarket",
+                                            "osm_id":  1784091644
+                                        }
+                     },
+                     {
+                         "type":  "Feature",
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -111.9414387,
+                                                              40.6662487
+                                                          ]
+                                      },
+                         "properties":  {
+                                            "addr:city":  "Taylorsville",
+                                            "addr:country":  "US",
+                                            "addr:housenumber":  "1825",
+                                            "addr:postcode":  "84129",
+                                            "addr:state":  "UT",
+                                            "addr:street":  "West 4700 South",
+                                            "check_date":  "2026-08-18",
+                                            "name":  "Macey\u0027s",
+                                            "opening_hours":  "Mo-Sa 06:00-23:00; Su 07:00-22:00",
+                                            "phone":  "+1-801-964-8424",
+                                            "shop":  "supermarket",
+                                            "source":  "website",
+                                            "website":  "https://www.maceys.com/locations/taylorsville",
+                                            "osm_id":  4209185813
+                                        }
+                     },
+                     {
+                         "type":  "Feature",
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -111.7950378,
+                                                              40.3783356
+                                                          ]
+                                      },
+                         "properties":  {
+                                            "addr:city":  "American Fork",
+                                            "addr:housenumber":  "135",
+                                            "addr:postcode":  "84003",
+                                            "addr:state":  "UT",
+                                            "addr:street":  "East Main Street",
+                                            "name":  "Macey\u0027s",
+                                            "opening_hours":  "Mo-Th 06:00-22:00; Fr-Sa 06:00-23:00; Su 07:00-23:00",
+                                            "phone":  "+1 801-756-1440",
+                                            "shop":  "supermarket",
+                                            "website":  "https://www.maceys.com/locations",
+                                            "osm_id":  10302696082
+                                        }
+                     },
+                     {
+                         "type":  "Feature",
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -111.7758083,
+                                                              39.9773329
+                                                          ]
+                                      },
+                         "properties":  {
+                                            "addr:city":  "Santaquin",
+                                            "addr:housenumber":  "100 N",
+                                            "addr:postcode":  "84655",
+                                            "addr:state":  "UT",
+                                            "addr:street":  "400 East",
+                                            "name":  "Macey\u0027s Supermarket",
+                                            "opening_hours":  "Mo-Sa 06:00-23:00, Su 07:00-22:00",
+                                            "operator":  "Macey\u0027s",
+                                            "payment:cash":  "yes",
+                                            "payment:credit_cards":  "yes",
+                                            "phone":  "+1 801-925-4058",
+                                            "shop":  "supermarket",
+                                            "website":  "https://www.maceys.com/locations/santaquin",
+                                            "osm_id":  12647004117
+                                        }
+                     },
+                     {
+                         "type":  "Feature",
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -111.6515948,
+                                                              40.1241855
+                                                          ]
+                                      },
+                         "properties":  {
+                                            "addr:city":  "Spanish Fork",
+                                            "addr:housenumber":  "187",
+                                            "addr:postcode":  "84660",
+                                            "addr:state":  "UT",
+                                            "addr:street":  "North 200 East Street",
+                                            "brand":  "Macey\u0027s",
+                                            "building":  "yes",
+                                            "name":  "Macey\u0027s",
+                                            "operator":  "Macey\u0027s",
+                                            "shop":  "supermarket",
+                                            "osm_id":  38606137
+                                        }
+                     },
+                     {
+                         "type":  "Feature",
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -111.9757996,
+                                                              40.6948862
+                                                          ]
+                                      },
+                         "properties":  {
+                                            "addr:city":  "West Valley City",
+                                            "addr:housenumber":  "3555",
+                                            "addr:postcode":  "84119",
+                                            "addr:state":  "UT",
+                                            "addr:street":  "West 3500 South",
+                                            "building":  "supermarket",
+                                            "name":  "Macey\u0027s",
+                                            "opening_hours":  "Mo-Sa 06:00-22:00; Su 07:00-22:00",
+                                            "payment:cards":  "yes",
+                                            "payment:cash":  "yes",
+                                            "payment:contactless":  "yes",
+                                            "phone":  "+1-801-963-6870",
+                                            "shop":  "supermarket",
+                                            "website":  "https://www.maceys.com/locations/granger",
+                                            "osm_id":  38657842
+                                        }
+                     },
+                     {
+                         "type":  "Feature",
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -111.7542958,
+                                                              40.3646679
+                                                          ]
+                                      },
+                         "properties":  {
+                                            "addr:city":  "Pleasant Grove",
+                                            "addr:housenumber":  "931",
+                                            "addr:postcode":  "84062",
+                                            "addr:state":  "UT",
+                                            "addr:street":  "West State Street",
+                                            "building":  "yes",
+                                            "name":  "Macey\u0027s",
+                                            "opening_hours":  "Mo-Th 06:00-23:00; Fr-Sa 06:00-24:00; Su 08:00-16:00",
+                                            "phone":  "+1-801-796-6601",
+                                            "shop":  "supermarket",
+                                            "source":  "Yahoo;esri/USA_NAD_Addresses",
+                                            "website":  "https://www.maceys.com/locations/pleasant-grove",
+                                            "osm_id":  80090413
+                                        }
+                     },
+                     {
+                         "type":  "Feature",
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -111.8373491,
+                                                              40.3863669
+                                                          ]
+                                      },
+                         "properties":  {
+                                            "addr:city":  "Lehi",
+                                            "addr:housenumber":  "760",
+                                            "addr:postcode":  "84043",
+                                            "addr:state":  "UT",
+                                            "addr:street":  "East Main Street",
+                                            "building":  "retail",
+                                            "name":  "Macey\u0027s",
+                                            "opening_hours":  "Mo-Th 06:00-23:00; Fr-Sa 06:00-24:00; Su 08:00-20:00",
+                                            "phone":  "+1 801-766-9455",
+                                            "shop":  "supermarket",
+                                            "source":  "survey",
+                                            "osm_id":  81567413
+                                        }
+                     },
+                     {
+                         "type":  "Feature",
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -111.7005159,
+                                                              40.3133885
+                                                          ]
+                                      },
+                         "properties":  {
+                                            "addr:city":  "Orem",
+                                            "addr:housenumber":  "880",
+                                            "addr:postcode":  "84057",
+                                            "addr:state":  "UT",
+                                            "addr:street":  "North State Street",
+                                            "building":  "supermarket",
+                                            "name":  "Macey\u0027s Food and Drug",
+                                            "shop":  "supermarket",
+                                            "source":  "bing, knowledge",
+                                            "osm_id":  92325379
+                                        }
+                     },
+                     {
+                         "type":  "Feature",
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -111.8428286,
+                                                              40.6731389
+                                                          ]
+                                      },
+                         "properties":  {
+                                            "building":  "commercial",
+                                            "name":  "Macey\u0027s",
+                                            "shop":  "supermarket",
+                                            "osm_id":  172589438
+                                        }
+                     },
+                     {
+                         "type":  "Feature",
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -111.8680002,
+                                                              40.6488173
+                                                          ]
+                                      },
+                         "properties":  {
+                                            "building":  "store",
+                                            "name":  "Macey\u0027s",
+                                            "shop":  "supermarket",
+                                            "osm_id":  203524201
+                                        }
+                     },
+                     {
+                         "type":  "Feature",
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -111.9653187,
+                                                              40.6085678
+                                                          ]
+                                      },
+                         "properties":  {
+                                            "addr:city":  "West Jordan",
+                                            "addr:housenumber":  "7859",
+                                            "addr:postcode":  "84088",
+                                            "addr:state":  "UT",
+                                            "addr:street":  "South 3200 West",
+                                            "building":  "supermarket",
+                                            "name":  "Macey\u0027s",
+                                            "shop":  "supermarket",
+                                            "osm_id":  238130784
+                                        }
+                     },
+                     {
+                         "type":  "Feature",
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -111.8316578,
+                                                              41.7089506
+                                                          ]
+                                      },
+                         "properties":  {
+                                            "addr:city":  "Providence",
+                                            "addr:country":  "US",
+                                            "addr:housenumber":  "50",
+                                            "addr:postcode":  "84332",
+                                            "addr:state":  "UT",
+                                            "addr:street":  "North Highway 165",
+                                            "air_conditioning":  "yes",
+                                            "building":  "yes",
+                                            "name":  "Macey\u0027s",
+                                            "opening_hours":  "Mo-Sa 06:00-24:00",
+                                            "shop":  "supermarket",
+                                            "stroller":  "yes",
+                                            "wheelchair":  "yes",
+                                            "osm_id":  493145548
+                                        }
+                     },
+                     {
+                         "type":  "Feature",
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -112.0159807,
+                                                              40.3087776
+                                                          ]
+                                      },
+                         "properties":  {
+                                            "addr:city":  "Eagle Mountain",
+                                            "addr:housenumber":  "1557",
+                                            "addr:postcode":  "84005",
+                                            "addr:state":  "UT",
+                                            "addr:street":  "Eagle Mountain Blvd",
+                                            "building":  "yes",
+                                            "name":  "Macey\u0027s",
+                                            "shop":  "supermarket",
+                                            "osm_id":  1074325122
+                                        }
+                     }
+                 ]
+}
