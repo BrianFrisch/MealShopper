@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Check, Loader2, ShoppingCart, Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, Loader2, Printer, ShoppingCart, Trash2 } from 'lucide-react';
 import { Header } from '../components/Header';
 import { LoginModal } from '../components/LoginModal';
 import { authApi } from '../services/authApi';
@@ -293,7 +293,9 @@ export const MealPlanShoppingListPage = () => {
     return (
       <li
         key={ingredientIds.join(',')}
-        className="flex items-center gap-3 border-t border-stone-100 px-4 py-3 first:border-t-0 sm:px-5"
+        className={`flex items-center gap-3 border-t border-stone-100 px-4 py-3 first:border-t-0 sm:px-5 ${
+          isPurchased ? 'print:hidden' : ''
+        }`}
       >
         <input
           type="checkbox"
@@ -319,7 +321,7 @@ export const MealPlanShoppingListPage = () => {
             disabled={isRemoving}
             onClick={() => { void handleRemoveItem(ingredient); }}
             aria-label={`Remove ${ingredient.ingredient_name}`}
-            className="shrink-0 rounded-md p-1.5 text-stone-400 transition hover:bg-rose-50 hover:text-rose-700 disabled:cursor-wait disabled:opacity-60"
+            className="shrink-0 rounded-md p-1.5 text-stone-400 transition hover:bg-rose-50 hover:text-rose-700 disabled:cursor-wait disabled:opacity-60 print:hidden"
           >
             {isRemoving
               ? <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
@@ -337,7 +339,12 @@ export const MealPlanShoppingListPage = () => {
       [store.city, store.state, store.postal_code || store.zip_code].filter(Boolean).join(', ')
     );
     return (
-      <section key={storeId} className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+      <section
+        key={storeId}
+        className={`overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm ${
+          items.every(item => item.is_purchased) ? 'print:hidden' : ''
+        }`}
+      >
         <h2 className="bg-stone-50 px-4 py-3 sm:px-5">
           <span className="block font-bold text-stone-900">{store?.name ?? storeId}</span>
           {storeAddress && (
@@ -352,7 +359,7 @@ export const MealPlanShoppingListPage = () => {
   };
 
   const addItemForm = (
-    <section className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+    <section className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm print:hidden">
       <h2 className="text-lg font-bold">Add shopping list item</h2>
       <form onSubmit={event => { void handleAddItem(event); }} className="mt-3 grid gap-3 md:grid-cols-[1fr_220px_auto]">
         <input
@@ -387,7 +394,9 @@ export const MealPlanShoppingListPage = () => {
 
   return (
     <div className="min-h-screen bg-[#FDFDF9] pb-12 text-stone-900">
-      <Header onUserClick={() => setIsLoginOpen(true)} />
+      <div className="print:hidden">
+        <Header onUserClick={() => setIsLoginOpen(true)} />
+      </div>
       <LoginModal
         isOpen={isLoginOpen}
         onClose={() => setIsLoginOpen(false)}
@@ -409,13 +418,23 @@ export const MealPlanShoppingListPage = () => {
               {mealPlan?.meal_plan_name ?? 'Shopping List'}
             </h1>
           </div>
-          <Link
-            to="/meal-plans"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#1E7538] underline hover:text-green-800"
-          >
-            <ArrowLeft aria-hidden="true" className="h-4 w-4" />
-            Back to Meal Plans
-          </Link>
+          <div className="flex items-center gap-4 print:hidden">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#1E7538] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-green-800"
+            >
+              <Printer aria-hidden="true" className="h-4 w-4" />
+              Print
+            </button>
+            <Link
+              to="/meal-plans"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#1E7538] underline hover:text-green-800"
+            >
+              <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+              Back to Meal Plans
+            </Link>
+          </div>
         </div>
 
         {isLoading ? (
@@ -467,7 +486,9 @@ export const MealPlanShoppingListPage = () => {
             </div>
 
             {ingredientsByStore.withoutStore.length > 0 && (
-              <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+              <section className={`overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm ${
+                ingredientsByStore.withoutStore.every(item => item.is_purchased) ? 'print:hidden' : ''
+              }`}>
                 <div className="flex items-center gap-2 bg-stone-50 px-4 py-3 sm:px-5">
                   <Check aria-hidden="true" className="h-4 w-4 text-[#1E7538]" />
                   <h2 className="font-bold text-stone-900">Other ingredients</h2>
