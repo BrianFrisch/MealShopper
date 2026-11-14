@@ -358,3 +358,117 @@ async def test_fn_get_recipe_and_meal_plan_recipes_include_tags_in_postgres() ->
             assert set(mp_recipes[0]["tags"]) == {"spicy", "quick"}
     finally:
         await connection.close()
+
+
+@pytest.mark.asyncio
+async def test_backfill_recipe_tags_in_postgres() -> None:
+    database_url = os.getenv("PLANNER_TEST_DATABASE_URL")
+    if not database_url:
+        pytest.skip("Set PLANNER_TEST_DATABASE_URL to run PostgreSQL integration tests.")
+    asyncpg = pytest.importorskip("asyncpg")
+    connection = await asyncpg.connect(database_url)
+    try:
+        async with connection.transaction():
+            await connection.execute("""
+                CREATE TEMP TABLE recipe (
+                    recipe_id UUID PRIMARY KEY,
+                    title VARCHAR(200) NOT NULL,
+                    description TEXT,
+                    protein_subtype VARCHAR(50),
+                    cuisine VARCHAR(50),
+                    image_url TEXT,
+                    ingredients JSONB NOT NULL DEFAULT '[]'::JSONB,
+                    directions JSONB NOT NULL DEFAULT '[]'::JSONB,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                CREATE TEMP TABLE user_recipe (
+                    user_id UUID NOT NULL,
+                    recipe_id UUID NOT NULL REFERENCES recipe (recipe_id) ON DELETE CASCADE,
+                    rating INTEGER NOT NULL DEFAULT 0,
+                    associated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (user_id, recipe_id)
+                );
+                CREATE TEMP TABLE user_recipe_tag (
+                    user_id UUID NOT NULL,
+                    recipe_id UUID NOT NULL,
+                    tag VARCHAR(16) COLLATE "C" NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (user_id, recipe_id, tag),
+                    FOREIGN KEY (user_id, recipe_id)
+                        REFERENCES user_recipe (user_id, recipe_id) ON DELETE CASCADE
+                );
+            """)
+
+            user_id = UUID(int=1)
+            other_user = UUID(int=2)
+
+            # Recipe 1: Has distinct cuisine and protein_subtype
+            r1 = UUID(int=101)
+            # Recipe 2: Has identical normalized protein_subtype and cuisine ('chicken')
+            r2 = UUID(int=102)
+            # Recipe 3: Has special characters and length > 16
+            r3 = UUID(int=103)
+            # Recipe 4: Has null cuisine and protein_subtype
+            r4 = UUID(int=104)
+            # Recipe 5: Already has 'italian' tag in user_recipe_tag
+            r5 = UUID(int=105)
+            # Recipe 6: Not in user_recipe
+            r6 = UUID(int=106)
+
+            await connection.execute("INSERT INTO recipe (recipe_id, title, protein_subtype, cuisine) VALUES ($1, 'R1', 'Chicken', 'Italian')", r1)
+            await connection.execute("INSERT INTO recipe (recipe_id, title, protein_subtype, cuisine) VALUES ($1, 'R2', 'Chicken', 'CHICKEN')", r2)
+            await connection.execute("INSERT INTO recipe (recipe_id, title, protein_subtype, cuisine) VALUES ($1, 'R3', 'Special - Herb & Garlic!', NULL)", r3)
+            await connection.execute("INSERT INTO recipe (recipe_id, title, protein_subtype, cuisine) VALUES ($1, 'R4', NULL, NULL)", r4)
+            await connection.execute("INSERT INTO recipe (recipe_id, title, protein_subtype, cuisine) VALUES ($1, 'R5', NULL, 'Italian')", r5)
+            await connection.execute("INSERT INTO recipe (recipe_id, title, protein_subtype, cuisine) VALUES ($1, 'R6', 'Beef', 'Mexican')", r6)
+
+            await connection.execute("INSERT INTO user_recipe (user_id, recipe_id) VALUES ($1, $2)", user_id, r1)
+            await connection.execute("INSERT INTO user_recipe (user_id, recipe_id) VALUES ($1, $2)", user_id, r2)
+            await connection.execute("INSERT INTO user_recipe (user_id, recipe_id) VALUES ($1, $2)", user_id, r3)
+            await connection.execute("INSERT INTO user_recipe (user_id, recipe_id) VALUES ($1, $2)", user_id, r4)
+            await connection.execute("INSERT INTO user_recipe (user_id, recipe_id) VALUES ($1, $2)", user_id, r5)
+
+            # Pre-populate R5 with 'italian' tag
+            await connection.execute("INSERT INTO user_recipe_tag (user_id, recipe_id, tag) VALUES ($1, $2, 'italian')", user_id, r5)
+
+            # Read backfill script
+            backfill_path = (
+                Path(__file__).resolve().parents[1] / "Infrastructure" / "postgres" / "init"
+                / "04_data" / "001_backfill_recipe_tags.sql"
+            )
+            backfill_sql = backfill_path.read_text(encoding="utf-8")
+
+            # Execute backfill query
+            await connection.execute(backfill_sql)
+
+            # Verify R1 tags
+            r1_tags = await connection.fetch("SELECT tag FROM user_recipe_tag WHERE recipe_id = $1 ORDER BY tag", r1)
+            assert [row["tag"] for row in r1_tags] == ["chicken", "italian"]
+
+            # Verify R2 tags (deduplicated)
+            r2_tags = await connection.fetch("SELECT tag FROM user_recipe_tag WHERE recipe_id = $1 ORDER BY tag", r2)
+            assert [row["tag"] for row in r2_tags] == ["chicken"]
+
+            # Verify R3 tags (normalized and truncated to 16 chars)
+            r3_tags = await connection.fetch("SELECT tag FROM user_recipe_tag WHERE recipe_id = $1 ORDER BY tag", r3)
+            assert [row["tag"] for row in r3_tags] == ["special-herbgarl"]
+
+            # Verify R4 has no tags
+            r4_tags = await connection.fetch("SELECT tag FROM user_recipe_tag WHERE recipe_id = $1 ORDER BY tag", r4)
+            assert [row["tag"] for row in r4_tags] == []
+
+            # Verify R5 retains 'italian' tag without duplication
+            r5_tags = await connection.fetch("SELECT tag FROM user_recipe_tag WHERE recipe_id = $1 ORDER BY tag", r5)
+            assert [row["tag"] for row in r5_tags] == ["italian"]
+
+            # Verify R6 (not in user_recipe) was not tagged
+            r6_tags = await connection.fetch("SELECT tag FROM user_recipe_tag WHERE recipe_id = $1 ORDER BY tag", r6)
+            assert [row["tag"] for row in r6_tags] == []
+
+            # Idempotency check: running the script again does not fail or duplicate rows
+            await connection.execute(backfill_sql)
+            total_tags = await connection.fetchval("SELECT count(*) FROM user_recipe_tag")
+            assert total_tags == 5
+    finally:
+        await connection.close()
