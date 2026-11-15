@@ -3,7 +3,7 @@ RETURNS TABLE (
     chain_id VARCHAR(32),
     display_name VARCHAR(64),
     adapter_name VARCHAR(32),
-    spider_name VARCHAR(64),
+    spider_name VARCHAR,
     flyer_source_type VARCHAR(32),
     is_active BOOLEAN,
     created_at TIMESTAMPTZ,

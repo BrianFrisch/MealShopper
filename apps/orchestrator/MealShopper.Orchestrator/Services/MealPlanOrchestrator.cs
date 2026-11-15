@@ -213,13 +213,11 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
             var stores = await DiscoverStoresStageAsync(job, ct);
 
             // 2. Fetch Deals
-            var candidateStores = stores.Count > 0
-                ? stores
-                : new List<StoreDto>
-                {
-                    new() { Id = "ralphs-90260", Name = "Ralphs", ZipCode = "90260" },
-                    new() { Id = "aldi-90260", Name = "ALDI", ZipCode = "90260" }
-                };
+            if (stores.Count == 0)
+            {
+                throw new DomainException("No stores found within search radius.");
+            }
+            var candidateStores = stores;
 
             var dealFetchResult = await FetchDealsStageAsync(job.JobId, candidateStores, ct);
             var topDeals = dealFetchResult.Deals;
@@ -599,8 +597,8 @@ public class MealPlanOrchestrator : IMealPlanOrchestrator
         
         var payload = job.GetPayload<MealPlanDiscoveryRequest>()!;
         var address = payload.Address;
-        var lat = address.Latitude ?? 33.894893;
-        var lon = address.Longitude ?? -118.362658;
+        double lat;
+        double lon;
 
         if(address.Latitude.HasValue && address.Longitude.HasValue)
         {

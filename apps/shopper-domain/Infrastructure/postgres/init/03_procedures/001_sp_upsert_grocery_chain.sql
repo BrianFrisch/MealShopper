@@ -2,7 +2,7 @@ CREATE OR REPLACE PROCEDURE sp_upsert_grocery_chain(
     p_chain_id VARCHAR(32),
     p_display_name VARCHAR(64),
     p_adapter_name VARCHAR(32),
-    p_spider_name VARCHAR(64) DEFAULT NULL,
+    p_spider_name VARCHAR DEFAULT NULL,
     p_flyer_source_type VARCHAR(32) DEFAULT 'flipp'
 )
 LANGUAGE plpgsql

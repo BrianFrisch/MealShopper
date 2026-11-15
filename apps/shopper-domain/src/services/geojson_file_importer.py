@@ -21,6 +21,16 @@ class GeoJsonFileImporter(StoreImporterBase):
                 f"GeoJSON file source must start with '{GEOJSON_FILE_PREFIX}': {source!r}"
             )
         raw_path = source[len(GEOJSON_FILE_PREFIX):].strip()
+        self.banner_names: tuple[str, ...] = ()
+        separator = raw_path.rfind(":")
+        is_drive_separator = (
+            separator == 1 and raw_path[0].isalpha() and raw_path[2:3] in ("/", "\\")
+        )
+        if separator >= 0 and not is_drive_separator:
+            raw_path, raw_banners = raw_path[:separator].strip(), raw_path[separator + 1:]
+            self.banner_names = tuple(name.strip() for name in raw_banners.split("|"))
+            if any(not any(char.isalnum() for char in name) for name in self.banner_names):
+                raise ValueError("GeoJSON banner names must not be empty")
         if not raw_path:
             raise ValueError("GeoJSON file source is missing a file path")
         # A leading slash (e.g. "/data/x.geojson") still means relative to the working directory.

@@ -2,6 +2,7 @@ from typing import Any, Dict, List
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from src.services.geojson_file_importer import GeoJsonFileImporter
 from src.services.store_importer import (
     ParsedStore,
     StoreImportService,
@@ -72,7 +73,7 @@ class TestStoreImporterHelpers(unittest.TestCase):
         }
         valid_feat: Dict[str, Any] = {
             "id": "node/100",
-            "geometry": {"coordinates": [-118.25, 34.05]},
+            "geometry": {"type": "Point", "coordinates": [-118.25, 34.05]},
             "properties": {
                 "name": "Ralphs",
                 "ref": "00703",
@@ -145,6 +146,70 @@ class TestStoreImporterHelpers(unittest.TestCase):
         deduped = deduplicate_stores(stores)
         self.assertEqual(len(deduped), 1)
         self.assertEqual(deduped[0]["store_number"], "120")
+
+    def test_configured_banner_names(self):
+        meta = {"display_name": "Dan's Fresh Market"}
+        banners = ("Dan's", "Dan's Fresh Market", "Dan's Food Market")
+        feature: Dict[str, Any] = {
+            "id": "w659616864",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [[-111.832821, 40.6251368], [-111.8327371, 40.6250521]],
+            },
+            "properties": {
+                "name": "Dan's",
+                "addr:state": "UT",
+                "addr:city": "Cottonwood Heights",
+                "addr:housenumber": "2065",
+                "addr:street": "East Fort Union Boulevard",
+                "addr:postcode": "84121",
+            },
+        }
+        for name in ("Dan's", "Dans", "Dan\u2019s Food Market", "Dan's Fresh Market"):
+            with self.subTest(name=name):
+                feature["properties"]["name"] = name
+                store = parse_geojson_feature(feature, "dans", meta, "UT", target_banners=banners)
+                self.assertIsNotNone(store)
+                assert store is not None
+                self.assertEqual(store["store_id"], "dans-659616864")
+                self.assertEqual(store["street_address"], "2065 East Fort Union Boulevard")
+
+        for name in ("Dan's Belltown Grocery", "Dan's Gas Station", "Other Market"):
+            with self.subTest(name=name):
+                feature["properties"]["name"] = name
+                self.assertIsNone(parse_geojson_feature(feature, "dans", meta, "UT", target_banners=banners))
+
+        feature["properties"]["name"] = "Dan's"
+        self.assertIsNone(parse_geojson_feature(feature, "dans", meta, "CA", target_banners=banners))
+        self.assertIsNotNone(parse_geojson_feature(feature, "other", meta, "UT", target_banners=banners))
+        feature["properties"]["addr:state"] = "WA"
+        self.assertIsNotNone(parse_geojson_feature(feature, "dans", meta, "WA", target_banners=banners))
+        self.assertIsNone(parse_geojson_feature(feature, "dans", meta, "WA"))
+        feature["properties"]["name"] = "Dan's Fresh Market Extra"
+        self.assertIsNotNone(parse_geojson_feature(feature, "dans", meta, "WA"))
+        self.assertIsNone(parse_geojson_feature(feature, "dans", meta, "WA", target_banners=banners))
+        feature["properties"]["name"] = "Dan's Gas Station"
+        self.assertIsNone(parse_geojson_feature(
+            feature, "dans", meta, "WA", target_banners=("Dan's Gas Station",)
+        ))
+        feature["properties"]["name"] = "Other Market"
+        self.assertIsNotNone(parse_geojson_feature(feature, "dans", meta, "WA", True, target_banners=banners))
+
+    def test_geojson_source_banner_configuration(self):
+        source = "geojsonfile:/data/us_supermarkets.geojson:Dan's|Dan's Fresh Market"
+        importer = GeoJsonFileImporter(source)
+        self.assertEqual(importer.path.as_posix(), "data/us_supermarkets.geojson")
+        self.assertEqual(importer.banner_names, ("Dan's", "Dan's Fresh Market"))
+        self.assertEqual(GeoJsonFileImporter("geojsonfile:/data/stores.geojson").banner_names, ())
+        self.assertEqual(GeoJsonFileImporter(r"geojsonfile:C:\data\stores.geojson").banner_names, ())
+
+        for invalid in (
+            "geojsonfile:/data/stores.geojson:",
+            "geojsonfile:/data/stores.geojson:Dan's|",
+            "geojsonfile:/data/stores.geojson:'",
+        ):
+            with self.subTest(source=invalid), self.assertRaises(ValueError):
+                GeoJsonFileImporter(invalid)
 
 
 class TestStoreImportService(unittest.IsolatedAsyncioTestCase):
@@ -221,7 +286,7 @@ class TestStoreImportService(unittest.IsolatedAsyncioTestCase):
             "features": [
                 {
                     "id": "node/1",
-                    "geometry": {"coordinates": [-118.25, 34.05]},
+                    "geometry": {"type": "Point", "coordinates": [-118.25, 34.05]},
                     "properties": {
                         "name": "ALDI",
                         "ref": "101",
@@ -248,6 +313,33 @@ class TestStoreImportService(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["region"], "CA")
             self.assertEqual(result["imported_count"], 1)
             mock_persist.assert_awaited_once()
+
+    async def test_dans_import_deduplicates_and_persists_aliases(self):
+        service = StoreImportService(db_url="postgresql://mock:5432/mock")
+        meta = {
+            "chain_id": "dans",
+            "display_name": "Dan's Fresh Market",
+            "spider": "geojsonfile:/data/us_supermarkets.geojson:Dan's|Dan's Fresh Market",
+        }
+        feature = {
+            "id": "w659616864",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [[-111.832821, 40.6251368], [-111.8327371, 40.6250521]],
+            },
+            "properties": {"name": "Dan's", "addr:state": "UT"},
+        }
+        with patch.object(service, "get_chain_metadata", new=AsyncMock(return_value=meta)), \
+             patch.object(GeoJsonFileImporter, "fetch_geojson", new=AsyncMock(return_value={"features": [feature, feature]})), \
+             patch.object(service, "_persist_stores", new=AsyncMock()) as persist:
+            result = await service.run_import("dans", "UT")
+
+        self.assertEqual(result["imported_count"], 1)
+        persist.assert_awaited_once()
+        assert persist.await_args is not None
+        stores = persist.await_args.args[2]
+        self.assertEqual(len(stores), 1)
+        self.assertEqual(stores[0]["store_id"], "dans-659616864")
 
 
 if __name__ == "__main__":

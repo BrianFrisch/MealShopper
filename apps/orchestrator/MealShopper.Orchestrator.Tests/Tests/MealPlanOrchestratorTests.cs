@@ -652,6 +652,65 @@ public class MealPlanOrchestratorTests
     #region ProcessDiscoveryJobAsync Tests
 
     [Fact]
+    public async Task ProcessJobAsync_NoStoresFound_DoesNotUseDefaultStores()
+    {
+        var jobs = new InMemoryJobTracker();
+        var shopper = new Mock<IShopperClient>();
+        shopper.Setup(s => s.DiscoverStoresAsync(It.IsAny<double>(), It.IsAny<double>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<StoreDto>());
+        var orchestrator = new MealPlanOrchestrator(
+            shopper.Object, Mock.Of<IPlannerClient>(), Mock.Of<IPlanningClient>(), jobs,
+            NullLogger<MealPlanOrchestrator>.Instance, Mock.Of<IGeocodingService>());
+        var id = Guid.NewGuid();
+        await jobs.CreateJobAsync(new JobRecord
+        {
+            JobId = id,
+            RequestPayload = new CreateMealPlanRequest
+            {
+                Address = new AddressDto { Latitude = 40.7, Longitude = -111.8 }
+            }
+        });
+
+        await orchestrator.ProcessJobAsync(id);
+
+        var job = await jobs.GetJobAsync(id);
+        job!.Status.Should().Be(JobStatus.Failed);
+        job.ErrorMessage.Should().Contain("No stores found");
+        shopper.Verify(s => s.GetDealsForStoreAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessDiscoveryJobAsync_GeocodingFails_ReportsErrorWithoutDiscoveringStores()
+    {
+        var jobs = new InMemoryJobTracker();
+        var shopper = new Mock<IShopperClient>();
+        var geocoder = new Mock<IGeocodingService>();
+        geocoder.Setup(g => g.ResolveCoordinatesAsync(It.IsAny<AddressDto>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DomainException("Address could not be found. Please check the address and try again."));
+        var orchestrator = new MealPlanOrchestrator(
+            shopper.Object, Mock.Of<IPlannerClient>(), Mock.Of<IPlanningClient>(), jobs,
+            NullLogger<MealPlanOrchestrator>.Instance, geocoder.Object);
+        var id = Guid.NewGuid();
+        await jobs.CreateJobAsync(new JobRecord
+        {
+            JobId = id,
+            JobType = JobType.StoreDiscovery,
+            RequestPayloadJson = System.Text.Json.JsonSerializer.Serialize(new MealPlanDiscoveryRequest
+            {
+                StoresOnly = true,
+                Address = new AddressDto { ZipCode = "84105" }
+            })
+        });
+
+        await orchestrator.ProcessDiscoveryJobAsync(id);
+
+        var job = await jobs.GetJobAsync(id);
+        job!.Status.Should().Be(JobStatus.Failed);
+        job.ErrorMessage.Should().Contain("Address could not be found");
+        shopper.Verify(s => s.DiscoverStoresAsync(It.IsAny<double>(), It.IsAny<double>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task ProcessDiscoveryJobAsync_StoresOnly_CompletesWithoutFetchingDeals()
     {
         var jobs = new InMemoryJobTracker();

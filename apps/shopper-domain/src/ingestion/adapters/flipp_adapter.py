@@ -79,12 +79,14 @@ class FlippAdapter(BaseDealAdapter):
 
     def is_merchant_match(self, flyer: dict[str, Any], merchant_name: str) -> bool:
         """
-        Checks whether a flyer dictionary matches the target merchant name or criteria.
+        Checks for a case-insensitive merchant substring match, ignoring apostrophes.
         Subclasses can override this method to customize merchant matching.
         """
         if not flyer or not merchant_name:
             return False
-        merchant_lower = merchant_name.strip().lower()
+        merchant_lower = merchant_name.strip().lower().replace("'", "").replace("\u2019", "")
+        if not merchant_lower:
+            return False
         name_candidate = (
             flyer.get("merchant")
             or flyer.get("merchant_name")
@@ -92,7 +94,8 @@ class FlippAdapter(BaseDealAdapter):
             or flyer.get("flyer_run_id")
             or ""
         )
-        return merchant_lower in str(name_candidate).lower()
+        candidate_lower = str(name_candidate).lower().replace("'", "").replace("\u2019", "")
+        return merchant_lower in candidate_lower
 
     async def fetch_flyers_by_postal_code(
         self, postal_code: str, merchant_name: Optional[str] = None, *, strict: bool = False

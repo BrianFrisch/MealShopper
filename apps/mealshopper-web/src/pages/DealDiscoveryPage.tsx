@@ -325,6 +325,7 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
             alert(`Discovery failed: ${statusRes.errorMessage || 'Unknown error'}`);
             setLoading(false);
             setStageDescription(null);
+            setIsSearchHidden(false);
           }
         } catch (err: any) {
           if (searchVersionRef.current !== version) return;

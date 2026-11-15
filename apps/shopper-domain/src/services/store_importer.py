@@ -14,9 +14,11 @@ except ImportError:
 
 try:
     from src.services.grocery_chain_service import GroceryChainService
+    from src.services.geojson_file_importer import GeoJsonFileImporter
     from src.services.store_importer_factory import create_store_importer
 except ImportError:
     from .grocery_chain_service import GroceryChainService
+    from .geojson_file_importer import GeoJsonFileImporter
     from .store_importer_factory import create_store_importer
 
 logger = logging.getLogger(__name__)
@@ -62,10 +64,13 @@ def is_matching_state(store_state: str, target_state: str) -> bool:
     return store_state.strip().upper() == target_state.strip().upper()
 
 
+def _normalize_banner(banner: str) -> str:
+    return banner.strip().lower().replace("'", "").replace("’", "")
+
+
 def is_matching_banner(brand: str, target_banner: str) -> bool:
-    # Strip apostrophes so "Macey's" matches "Maceys"
-    brand_norm = brand.lower().replace("'", "").replace("’", "")
-    target_norm = target_banner.lower().replace("'", "").replace("’", "")
+    brand_norm = _normalize_banner(brand)
+    target_norm = _normalize_banner(target_banner)
     if target_norm not in brand_norm:
         return False
     if "fuel" in brand_norm or "gas" in brand_norm:
@@ -95,6 +100,8 @@ def parse_geojson_feature(
     meta: Dict[str, str],
     target_state: str,
     include_all_brands: bool = False,
+    *,
+    target_banners: Sequence[str] = (),
 ) -> Optional[ParsedStore]:
     props = feat.get("properties", {})
     geom = feat.get("geometry", {})
@@ -119,12 +126,21 @@ def parse_geojson_feature(
     #     return None
 
     if target_state != "ALL" and not is_matching_state(store_state, target_state):
-        logger.info("Skipping store not in target state: %s (target: %s)", store_state, target_state)
+        # logger.info("Skipping store not in target state: %s (target: %s)", store_state, target_state)
         return None
 
     brand = (props.get("brand") or props.get("name") or props.get("operator") or props.get("full_name") or "").strip()
     target_banner = meta["display_name"].lower()
-    if not is_matching_banner(brand, target_banner) and not include_all_brands:
+    if target_banners:
+        normalized_brand = _normalize_banner(brand)
+        matches_banner = (
+            bool(normalized_brand)
+            and any(normalized_brand == _normalize_banner(name) for name in target_banners)
+            and is_matching_banner(brand, brand)
+        )
+    else:
+        matches_banner = is_matching_banner(brand, target_banner)
+    if not include_all_brands and not matches_banner:
         # logger.info("Skipping store not matching target banner: %s (target: %s)", brand, target_banner)
         return None
 
@@ -238,9 +254,12 @@ class StoreImportService:
         geojson = await importer.fetch_geojson()
 
         features = geojson.get("features", [])
+        target_banners = importer.banner_names if isinstance(importer, GeoJsonFileImporter) else ()
         parsed_stores: List[ParsedStore] = []
         for feat in features:
-            parsed = parse_geojson_feature(feat, chain_key, meta, target_state, include_all_brands)
+            parsed = parse_geojson_feature(
+                feat, chain_key, meta, target_state, include_all_brands, target_banners=target_banners
+            )
             if parsed:
                 parsed_stores.append(parsed)
 

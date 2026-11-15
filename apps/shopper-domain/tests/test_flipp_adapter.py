@@ -13,6 +13,54 @@ from src.ingestion.adapters.flipp_adapter import FlippAdapter
 from src.ingestion.models import NormalizedDealItem
 
 
+@pytest.mark.parametrize(
+    ("merchant_name", "flyer_merchant", "expected"),
+    [
+        ("Macey's", "Maceys", True),
+        ("Macey\u2019s", "Maceys", True),
+        ("Maceys", "Macey's", True),
+        ("Macey's", "Maceys Weekly", True),
+        ("Macey's", "Macy's", False),
+        ("'", "Maceys", False),
+        ("  ", "Maceys", False),
+    ],
+)
+def test_merchant_matching_apostrophes(merchant_name, flyer_merchant, expected):
+    adapter = FlippAdapter()
+    assert adapter.is_merchant_match({"merchant": flyer_merchant}, merchant_name) is expected
+
+
+@pytest.mark.anyio
+async def test_maceys_deals_use_display_name_with_apostrophe(monkeypatch):
+    class MockGroceryChainService:
+        async def get_chain_metadata(self, chain_id):
+            assert chain_id == "maceys"
+            return {"display_name": "Macey's"}
+
+    monkeypatch.setattr(
+        "src.ingestion.adapters.flipp_adapter.GroceryChainService", MockGroceryChainService
+    )
+
+    def mock_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/flyers"):
+            return httpx.Response(200, json=[
+                {"id": 8226052, "merchant": "Maceys"},
+                {"id": 123, "merchant": "Other Store"},
+            ])
+        if request.url.path.endswith("/flyers/8226052"):
+            return httpx.Response(200, json={"items": [
+                {"id": 1, "name": "Apples", "current_price": 1.99}
+            ]})
+        return httpx.Response(404)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(mock_handler)) as client:
+        adapter = FlippAdapter(client=client)
+        _, _, deals = await adapter.get_normalized_deals("84108", "maceys-1", merchant_name="maceys")
+
+    assert len(deals) == 1
+    assert deals[0].item_name == "Apples"
+
+
 @pytest.mark.anyio
 async def test_flipp_adapter():
     def mock_handler(request: httpx.Request) -> httpx.Response:
