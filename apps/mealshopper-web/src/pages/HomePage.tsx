@@ -193,7 +193,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLoginSuccess }) => {
                 </button>
               </form>
 
-              <div className="mt-6 pt-4 border-t border-stone-100 text-center">
+              {/* <div className="mt-6 pt-4 border-t border-stone-100 text-center">
                 <button
                   type="button"
                   onClick={() => navigate('/discover')}
@@ -201,7 +201,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLoginSuccess }) => {
                 >
                   Continue as Guest to Deal Finder &rarr;
                 </button>
-              </div>
+              </div> */}
             </div>
           </div>
         </div>
