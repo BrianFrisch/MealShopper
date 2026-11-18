@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { Header } from '../components/Header';
 import { LoginModal } from '../components/LoginModal';
 import { DealImageTooltip } from '../components/DealImageTooltip';
-import type { Address, MealPlanDiscoveryRequest, Store, Deal, ProteinSubtype } from '../types/discovery';
+import type { MealPlanDiscoveryRequest, Store, Deal, ProteinSubtype } from '../types/discovery';
 import { mealPlanApi } from '../services/mealPlanApi';
 import { authApi } from '../services/authApi';
-import { MapPin, Store as StoreIcon, Loader2, RotateCcw } from 'lucide-react';
+import { parseAddress } from '../utils/addressParser';
+import { MapPin, Store as StoreIcon, Loader2, RotateCcw, Locate } from 'lucide-react';
 
 type SelectedDealsViewMode = 'collapsed' | 'limited' | 'full';
 type StoreDealStatus = 'checking' | 'missing' | 'loading' | 'loaded' | 'error';
@@ -27,35 +28,34 @@ const SELECTED_DEALS_STORAGE_KEY = 'mealshopper_selected_deals';
 const USER_ADDRESS_STORAGE_KEY = 'mealshopper_user_address';
 const MAX_SELECTED_DEALS = 7;
 
-const DEFAULT_ADDRESS: Address = {
-  street: '123 Main St',
-  city: 'Los Angeles',
-  state: 'CA',
-  zipCode: '90007'
-};
+const DEFAULT_ADDRESS_INPUT = '123 Main St, Los Angeles, CA 90007';
 
-const normalizeAddress = (addr: Address): Address => ({
-  street: addr.street.trim(),
-  city: addr.city.trim(),
-  state: addr.state.trim(),
-  zipCode: addr.zipCode.trim(),
-});
-
-const readStoredAddress = (): Address => {
+const readStoredAddress = (): string => {
   try {
     const storedAddress = localStorage.getItem(USER_ADDRESS_STORAGE_KEY);
-    if (storedAddress === null) {
-      return DEFAULT_ADDRESS;
+    if (!storedAddress) {
+      return DEFAULT_ADDRESS_INPUT;
     }
-    const parsedAddress = JSON.parse(storedAddress) as Partial<Address>;
-    return normalizeAddress({
-      street: typeof parsedAddress.street === 'string' ? parsedAddress.street : DEFAULT_ADDRESS.street,
-      city: typeof parsedAddress.city === 'string' ? parsedAddress.city : DEFAULT_ADDRESS.city,
-      state: typeof parsedAddress.state === 'string' ? parsedAddress.state : DEFAULT_ADDRESS.state,
-      zipCode: typeof parsedAddress.zipCode === 'string' ? parsedAddress.zipCode : DEFAULT_ADDRESS.zipCode,
-    });
+    try {
+      const parsedAddress = JSON.parse(storedAddress);
+      if (typeof parsedAddress === 'string') {
+        return parsedAddress;
+      }
+      if (parsedAddress && typeof parsedAddress === 'object') {
+        const street = typeof parsedAddress.street === 'string' ? parsedAddress.street.trim() : '';
+        const city = typeof parsedAddress.city === 'string' ? parsedAddress.city.trim() : '';
+        const state = typeof parsedAddress.state === 'string' ? parsedAddress.state.trim() : '';
+        const zip = typeof parsedAddress.zipCode === 'string' ? parsedAddress.zipCode.trim() : '';
+        const cityStateZip = [city, state ? `${state} ${zip}`.trim() : zip].filter(Boolean).join(', ');
+        const full = [street, cityStateZip].filter(Boolean).join(', ');
+        return full || DEFAULT_ADDRESS_INPUT;
+      }
+    } catch {
+      return storedAddress.trim() || DEFAULT_ADDRESS_INPUT;
+    }
+    return DEFAULT_ADDRESS_INPUT;
   } catch {
-    return DEFAULT_ADDRESS;
+    return DEFAULT_ADDRESS_INPUT;
   }
 };
 
@@ -65,7 +65,10 @@ interface DealDiscoveryPageProps {
 
 export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedToPlan }) => {
   const navigate = useNavigate();
-  const [address, setAddress] = useState<Address>(readStoredAddress);
+  const [addressInput, setAddressInput] = useState<string>(readStoredAddress);
+  const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const [searchRadiusMiles, setSearchRadiusMiles] = useState(5);
 
   const [loading, setLoading] = useState(false);
@@ -253,12 +256,88 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
     setDiscoveredStores([]);
     setDiscoveredDeals([]);
     setStoreDealStates({});
+    setCoordinates(null);
+    setLocationError(null);
+  };
+
+  const handleGetCurrentLocation = () => {
+    if (!('geolocation' in navigator)) {
+      setLocationError('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setIsLocating(true);
+    setLocationError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setCoordinates({ latitude, longitude });
+
+        try {
+          const res = await fetch(
+            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            const state = data.principalSubdivisionCode
+              ? data.principalSubdivisionCode.replace(/^US-/, '')
+              : data.principalSubdivision || '';
+            const city = data.city || data.locality || '';
+            const zip = data.postcode || '';
+            const formatted = [city, state ? `${state} ${zip}`.trim() : zip].filter(Boolean).join(', ');
+            if (formatted) {
+              setAddressInput(formatted);
+              setIsLocating(false);
+              return;
+            }
+          }
+        } catch {
+          // Ignore reverse geocode failures, fall back to coordinate string
+        }
+
+        setAddressInput(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+        setIsLocating(false);
+      },
+      (error) => {
+        setIsLocating(false);
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setLocationError('Location permission denied. Please allow location access or type your address.');
+            break;
+          case error.POSITION_UNAVAILABLE:
+            setLocationError('Location unavailable. Please enter your address or postal code.');
+            break;
+          case error.TIMEOUT:
+            setLocationError('Location request timed out. Please try again or enter your address.');
+            break;
+          default:
+            setLocationError('Could not determine your location. Please enter an address.');
+            break;
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
   };
 
   const handleStartDiscovery = async () => {
-    const normalizedAddress = normalizeAddress(address);
-    setAddress(normalizedAddress);
-    localStorage.setItem(USER_ADDRESS_STORAGE_KEY, JSON.stringify(normalizedAddress));
+    const trimmedAddress = addressInput.trim();
+    const parsedAddress = parseAddress(
+      coordinates
+        ? { street: '', city: '', state: '', zipCode: '', ...coordinates }
+        : trimmedAddress
+    );
+    const hasCoords = Boolean(coordinates?.latitude && coordinates?.longitude) || Boolean(parsedAddress.latitude && parsedAddress.longitude);
+    const hasZip = Boolean(parsedAddress.zipCode);
+    const hasCityAndState = Boolean(parsedAddress.city && parsedAddress.state);
+
+    if (!hasCoords && !hasZip && !hasCityAndState) {
+      alert('Please enter a valid postal code (e.g. 90007), an address with city and state, or use your current location.');
+      return;
+    }
+
+    setAddressInput(trimmedAddress);
+    localStorage.setItem(USER_ADDRESS_STORAGE_KEY, trimmedAddress);
 
     const token = authApi.getToken();
     if (!token) {
@@ -290,7 +369,13 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
 
     try {
       const payload: MealPlanDiscoveryRequest = {
-        address: normalizedAddress,
+        address: coordinates
+          ? {
+              ...parsedAddress,
+              latitude: coordinates.latitude,
+              longitude: coordinates.longitude,
+            }
+          : trimmedAddress,
         searchRadiusMiles,
         cuisines: [],
         avoidIngredients: [],
@@ -403,45 +488,46 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
 
                 <div className="space-y-2.5 sm:space-y-3.5">
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-stone-500 mb-1">Street Address</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+                        Address or Postal Code
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleGetCurrentLocation}
+                        disabled={isLocating}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#1E7538] hover:text-[#165a2b] transition disabled:opacity-50 cursor-pointer"
+                        title="Use my current location from browser"
+                      >
+                        {isLocating ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <span>Locating...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Locate className="w-3 h-3" />
+                            <span>Use my location</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                     <input 
                       type="text" 
-                      value={address.street}
-                      onChange={e => setAddress({ ...address, street: e.target.value })}
+                      value={addressInput}
+                      onChange={e => {
+                        setAddressInput(e.target.value);
+                        setCoordinates(null);
+                        setLocationError(null);
+                      }}
+                      placeholder="e.g. 90007 or 123 Main St, Los Angeles, CA"
                       className="w-full px-2.5 py-1.5 sm:px-3 sm:py-2 text-sm border border-stone-200 rounded-lg focus:ring-2 focus:ring-[#1E7538] outline-none"
                     />
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                    <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-stone-500 mb-1">City</label>
-                      <input 
-                        type="text" 
-                        value={address.city}
-                        onChange={e => setAddress({ ...address, city: e.target.value })}
-                        className="w-full px-2.5 py-1.5 sm:px-3 sm:py-2 text-sm border border-stone-200 rounded-lg focus:ring-2 focus:ring-[#1E7538] outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-stone-500 mb-1">State</label>
-                      <input 
-                        type="text" 
-                        value={address.state}
-                        onChange={e => setAddress({ ...address, state: e.target.value })}
-                        className="w-full px-2.5 py-1.5 sm:px-3 sm:py-2 text-sm border border-stone-200 rounded-lg focus:ring-2 focus:ring-[#1E7538] outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-stone-500 mb-1">Zip Code</label>
-                      <input 
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="postal-code"
-                        value={address.zipCode}
-                        onChange={e => setAddress({ ...address, zipCode: e.target.value })}
-                        className="w-full px-2.5 py-1.5 sm:px-3 sm:py-2 text-sm border border-stone-200 rounded-lg focus:ring-2 focus:ring-[#1E7538] outline-none"
-                      />
-                    </div>
+                    {locationError && (
+                      <p className="mt-1 text-[11px] text-red-600 font-medium">
+                        {locationError}
+                      </p>
+                    )}
                   </div>
 
                   <div className="pt-1">
@@ -479,7 +565,7 @@ export const DealDiscoveryPage: React.FC<DealDiscoveryPageProps> = ({ onProceedT
               <span>
                 Within <strong className="font-semibold text-stone-900">{searchRadiusMiles} mi</strong> of{' '}
                 <strong className="font-semibold text-stone-900">
-                  {address.street}, {address.city}, {address.state} {address.zipCode}
+                  {addressInput}
                 </strong>
               </span>
               {loading && (

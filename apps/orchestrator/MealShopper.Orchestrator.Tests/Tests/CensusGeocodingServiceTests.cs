@@ -173,4 +173,96 @@ public class CensusGeocodingServiceTests
         result.Should().Be((40.7, -111.8));
         _handler.CapturedRequests.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task StreetCityStateWithoutZip_ResolvesExactCoordinates()
+    {
+        _handler.CustomHandler = _ => Json("""{"result":{"addressMatches":[{"coordinates":{"x":-118.24,"y":34.05}}]}}""");
+        var address = new AddressDto
+        {
+            Street = "123 Main St",
+            City = "Los Angeles",
+            State = "CA",
+            ZipCode = null
+        };
+
+        var result = await CreateService().ResolveCoordinatesAsync(address);
+
+        result.Should().Be((34.05, -118.24));
+        _handler.CapturedRequests.Should().ContainSingle();
+        _handler.CapturedRequests[0].RequestUri!.Query.Should().Contain("street=123%20Main%20St");
+        _handler.CapturedRequests[0].RequestUri!.Query.Should().Contain("city=Los%20Angeles");
+        _handler.CapturedRequests[0].RequestUri!.Query.Should().Contain("state=CA");
+        _handler.CapturedRequests[0].RequestUri!.Query.Should().Contain("zip=");
+    }
+
+    [Fact]
+    public void AddressDto_Validation_SucceedsWithCityAndStateOnly()
+    {
+        var address = new AddressDto
+        {
+            Street = "123 Main St",
+            City = "Los Angeles",
+            State = "CA"
+        };
+
+        var context = new System.ComponentModel.DataAnnotations.ValidationContext(address);
+        var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        var isValid = System.ComponentModel.DataAnnotations.Validator.TryValidateObject(address, context, results, true);
+
+        isValid.Should().BeTrue();
+        results.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void AddressDto_Validation_SucceedsWithZipOnly()
+    {
+        var address = new AddressDto
+        {
+            ZipCode = "90007"
+        };
+
+        var context = new System.ComponentModel.DataAnnotations.ValidationContext(address);
+        var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        var isValid = System.ComponentModel.DataAnnotations.Validator.TryValidateObject(address, context, results, true);
+
+        isValid.Should().BeTrue();
+        results.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void AddressDto_Validation_FailsWithoutZipOrCityState()
+    {
+        var address = new AddressDto
+        {
+            Street = "123 Main St"
+        };
+
+        var context = new System.ComponentModel.DataAnnotations.ValidationContext(address);
+        var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        var isValid = System.ComponentModel.DataAnnotations.Validator.TryValidateObject(address, context, results, true);
+
+        isValid.Should().BeFalse();
+        results.Should().ContainSingle()
+            .Which.ErrorMessage.Should().Contain("Either a valid ZipCode, or City and State");
+    }
+
+    [Fact]
+    public void AddressDto_Validation_FailsWithInvalidZipFormat()
+    {
+        var address = new AddressDto
+        {
+            City = "Los Angeles",
+            State = "CA",
+            ZipCode = "123"
+        };
+
+        var context = new System.ComponentModel.DataAnnotations.ValidationContext(address);
+        var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        var isValid = System.ComponentModel.DataAnnotations.Validator.TryValidateObject(address, context, results, true);
+
+        isValid.Should().BeFalse();
+        results.Should().ContainSingle()
+            .Which.ErrorMessage.Should().Contain("ZipCode must be a valid 5-digit or 9-digit");
+    }
 }

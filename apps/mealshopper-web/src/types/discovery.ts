@@ -1,12 +1,14 @@
 export interface Address {
-  street: string;
-  city: string;
-  state: string;
-  zipCode: string;
+  street?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface MealPlanDiscoveryRequest {
-  address: Address;
+  address: Address | string;
   searchRadiusMiles: number;
   cuisines: string[];
   avoidIngredients: string[];

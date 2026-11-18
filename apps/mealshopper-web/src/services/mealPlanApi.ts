@@ -1,7 +1,10 @@
 import axios from 'axios';
 import { AUTH_REQUIRED_EVENT } from './authApi';
-import type { Deal, MealPlanDiscoveryRequest, DiscoveryJobResult, StoreDealCacheResult, StoreDto, TaskStatusResponse } from '../types/discovery';
+import type { Address, Deal, MealPlanDiscoveryRequest, DiscoveryJobResult, StoreDealCacheResult, StoreDto, TaskStatusResponse } from '../types/discovery';
 import type { MealPlanSynthesisRequest, MealPlanSynthesisResponse } from '../types/mealPlan';
+import { parseAddress } from '../utils/addressParser';
+
+export { parseAddress };
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_GATEWAY_URL
@@ -298,9 +301,15 @@ export const mealPlanApi = {
   },
 
   async startDiscovery(request: MealPlanDiscoveryRequest, token: string): Promise<{ jobId: string }> {
+    const parsedAddress: Address = parseAddress(request.address);
+    const payload = {
+      ...request,
+      address: parsedAddress,
+    };
+
     const response = await apiClient.post<{ jobId: string }>(
       '/v1/meal-plans/discovery',
-      request,
+      payload,
       authorizationHeaders(token)
     );
     return response.data;
